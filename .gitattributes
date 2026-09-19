@@ -6,3 +6,10 @@
 *.exe binary
 *.png binary
 *.zip binary
+
+# Bundled source data (third_party/source-data/).  `.CT` has no NUL byte in its
+# first 8 KB, so `text=auto` classified it as text and silently rewrote CRLF to
+# LF in the index -- shrinking the stored blob from 1,028,727 to 1,010,589 bytes
+# and corrupting the data.  Both are opaque inputs: mark them binary.
+*.CT binary
+*.xlsx binary
