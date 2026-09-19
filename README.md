@@ -29,7 +29,8 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   fallback (`--python-crypto`, ~32 s per pass).
 * **GUI (Tkinter) and CLI** — no third-party dependencies.
 * **Stamped builds** — `build.ps1` bakes the commit tail, source path, build
-  time and language into the app, so every copy can say exactly what it is.
+  time and language into the app, so every copy can say exactly what it is. A
+  build packages in about a minute; add `-Test` to gate it on the suite.
 * **Verified write pipeline** — quiescence double-read, game-process gate,
   checksum recompute, plaintext backup + manifest, staged decryption check
   before install, post-write check with automatic rollback, and a durable
@@ -246,29 +247,38 @@ the tail round-trips and a byte-identical restore is reported as `true`.
 ## Build
 
 ```powershell
-# Release: stamp build identity, run the tests, build the single-file exe,
+# Release: stamp build identity, build the single-file exe,
 # smoke-test it in a fresh folder, then zip it -> dist/
+# (the unit-test suite is NOT part of this: pass -Test to include it)
 powershell -File .\build.ps1
 
+# Same, but verify first -- use this before releasing a changelog entry
+powershell -File .\build.ps1 -Test
+
 # Drop older dist/ artifacts first (only Nioh3AccessoryEditor* entries)
-powershell -File .\build.ps1 -Clean
+powershell -File .\build.ps1 -Clean -Test
 
 # Only refresh the build identity of the working tree (no dist, no zip)
-powershell -File .\build.ps1 -Configuration Debug -SkipTests
+powershell -File .\build.ps1 -Configuration Debug
 
-# Only this test module, e.g. while iterating on the CLI
+# Only this test module, e.g. while iterating on the CLI (-TestPattern implies -Test)
 powershell -File .\build.ps1 -Configuration Debug -TestPattern test_cli.py
 
 # Faster iteration / custom interpreter
-powershell -File .\build.ps1 -SkipTests -SkipZip -Python D:\Python310\python.exe
+powershell -File .\build.ps1 -SkipZip -Python D:\Python310\python.exe
 ```
 
 `build.ps1` resolves the interpreter, reads the git facts, generates the build
-identity, runs the suite, stages a runnable tree under `dist\`, and smoke-tests
-that staged copy (it must report the frozen commit, not whatever git says now).
-Parameters: `-Python`, `-Configuration Release|Debug`, `-OutputDirectory`,
-`-SkipTests`, `-SkipZip`, `-PureCryptoTests`, `-Clean`, `-Quiet`. It works on
-Windows PowerShell 5.1 and PowerShell 7+.
+identity, stages a runnable tree under `dist\`, and smoke-tests that staged copy
+(it must report the frozen commit, not whatever git says now). The unit-test
+suite is **opt-in**: a default build is a packaging build and skips it, because
+the suite takes minutes and none of the packaging steps depend on it — the final
+report always states `单元测试 : 已运行 / 未运行`, so a build log can never be
+mistaken for a verified one. Parameters: `-Python`, `-Configuration
+Release|Debug`, `-OutputDirectory`, `-PyInstallerPython`, `-Test`, `-TestPattern`
+(implies `-Test`), `-PureCryptoTests` (implies `-Test`), `-SkipZip`, `-Clean`,
+`-Quiet`, plus the legacy `-SkipTests` (now a no-op, since skipping is the
+default). It works on Windows PowerShell 5.1 and PowerShell 7+.
 
 > `build.ps1` is saved as UTF-8 **with BOM** on purpose: Windows PowerShell
 > reads a BOM-less script with the ANSI code page (GBK on zh-CN), which would

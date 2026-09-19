@@ -9,14 +9,19 @@
       2. read the git facts (commit id, branch, dirty state),
       3. generate the build identity -- nioh3_accessory_editor/_buildinfo.py,
          BUILD-INFO.json and BUILD-INFO.txt -- via tools/make_build_info.py,
-      4. run the unit-test suite (python tools/run_tests.py),
-      5. build app-payload.zip -- the parameter configuration, affix catalogue,
+      4. build app-payload.zip -- the parameter configuration, affix catalogue,
          bundled crypto helper and original source data,
-      6. build a SINGLE-FILE executable (PyInstaller onefile) that embeds the
+      5. build a SINGLE-FILE executable (PyInstaller onefile) that embeds the
          payload, so the release contains no .py files whatsoever,
-      7. smoke-test that exe in a fresh directory: it must unpack the payload
+      6. smoke-test that exe in a fresh directory: it must unpack the payload
          next to itself and report the frozen build identity,
-      8. verify the shipped tree has no Python sources, then zip the exe.
+      7. verify the shipped tree has no Python sources, then zip the exe.
+
+    The unit-test suite is NOT part of a default build: it takes minutes and the
+    packaging steps are independent of it.  Pass -Test to run it (or -TestPattern
+    to run one module), which is what a release build should do.  The version
+    report at the end always states whether the tests ran, so a build log cannot
+    be mistaken for a verified one.
 
     The version information always reports these four facts:
       * commit   -- the LAST 8 characters of the git commit id (project rule),
@@ -30,8 +35,8 @@
     ordinary user-editable files, and a file the user changed is never
     overwritten by a later build.
 
-    Debug configuration generates the build identity and runs the tests, but
-    does not build the executable.
+    Debug configuration generates the build identity only: no executable -- and,
+    like every configuration, no tests unless -Test is given.
 
     NOTE: this file is UTF-8 **with BOM** on purpose. Windows PowerShell reads
     a BOM-less script using the ANSI code page (GBK on zh-CN), which would
@@ -52,18 +57,25 @@
     environment <root>\.build-venv, created and populated automatically when it
     is missing (PyInstaller is the only build-time dependency).
 
+.PARAMETER Test
+    Run the unit-test suite (python tools/run_tests.py) before packaging.  Off by
+    default: the suite takes minutes and the packaging steps do not depend on it.
+    Use it for a release build, where a green suite is the point.
+
 .PARAMETER SkipTests
-    Do not run the unit-test suite.
+    Legacy switch, kept so existing commands keep working.  Tests are already
+    skipped unless -Test is given, so this is now a no-op.
 
 .PARAMETER TestPattern
-    Only run test modules matching this filename pattern (e.g. test_cli.py),
-    which keeps the gate verifiable while iterating on one subsystem.
+    Only run test modules matching this filename pattern (e.g. test_cli.py).
+    Implies -Test, so it keeps the suite verifiable while iterating on one
+    subsystem without paying for the whole run.
 
 .PARAMETER SkipZip
     Build the executable but do not create the .zip archive.
 
 .PARAMETER PureCryptoTests
-    Also run the slow full-file pure-Python crypto round trip.
+    Also run the slow full-file pure-Python crypto round trip.  Implies -Test.
 
 .PARAMETER Clean
     Remove previous Nioh3AccessoryEditor* artifacts from the output directory
@@ -75,18 +87,22 @@
 
 .EXAMPLE
     powershell -File .\build.ps1
-    Full Release build: stamp, test, payload, single-file exe, verify, zip.
+    Release build: stamp, payload, single-file exe, verify, zip (tests skipped).
 
 .EXAMPLE
-    powershell -File .\build.ps1 -Configuration Debug -SkipTests
-    Only refresh the build identity of the working tree.
+    powershell -File .\build.ps1 -Test
+    Release build that runs the whole suite first -- use this before releasing.
+
+.EXAMPLE
+    powershell -File .\build.ps1 -Configuration Debug -TestPattern test_cli.py
+    Refresh the build identity and run only the CLI tests.
 
 .EXAMPLE
     powershell -File .\build.ps1 -Clean -SkipZip
     Rebuild the exe after deleting older artifacts, without zipping.
 
 .EXAMPLE
-    powershell -File .\build.ps1 -Clean
+    powershell -File .\build.ps1 -Clean -Test
     Release build that first drops older dist artifacts.
 #>
 [CmdletBinding()]
@@ -96,6 +112,7 @@ param(
     [string]$Configuration = 'Release',
     [string]$OutputDirectory,
     [string]$PyInstallerPython,
+    [switch]$Test,
     [switch]$SkipTests,
     [string]$TestPattern,
     [switch]$SkipZip,
@@ -426,22 +443,32 @@ function Invoke-Build {
         throw '构建信息缺少语言字段'
     }
 
-    # 4. Tests ---------------------------------------------------------------
-    if ($SkipTests) {
-        Write-Step '跳过单元测试 (-SkipTests)'
-    } else {
-        Write-Step '运行单元测试 (tools/run_tests.py)'
+    # 4. Tests (opt-in: -Test) ----------------------------------------------
+    # Deliberately not part of a default build: the suite takes minutes and the
+    # packaging steps below do not depend on it.  -TestPattern/-PureCryptoTests
+    # imply -Test, so asking for test-related output always runs tests.
+    $script:TestsRan = $false
+    $runTests = [bool]($Test -or $TestPattern -or $PureCryptoTests)
+    if ($runTests) {
+        $label = if ($TestPattern) { "（仅 $TestPattern）" } else { '' }
+        Write-Step "运行单元测试 (tools/run_tests.py)$label"
         $testArguments = @($testScript)
         if ($TestPattern) { $testArguments += @('-p', $TestPattern) }
         if ($PureCryptoTests) { $testArguments += '--pure-crypto' }
         Invoke-PythonStep -Arguments $testArguments
+        $script:TestsRan = $true
+    } else {
+        Write-Step '跳过单元测试（默认；需要时加 -Test）'
+        if ($SkipTests) {
+            Write-Note '-SkipTests 现在是空操作：不写它也已经是默认行为'
+        }
     }
 
     # 5. Single-file executable (Release only) ------------------------------
     $script:ExePath = $null
     $script:ZipPath = $null
     if ($Configuration -eq 'Debug') {
-        Write-Step 'Debug 配置：只刷新构建信息并跑测试（不生成 exe）'
+        Write-Step 'Debug 配置：只刷新构建信息（不生成 exe）'
     } else {
         if ($Clean -and (Test-Path -LiteralPath $distRoot -PathType Container)) {
             Write-Step "清理旧的发行产物 $distRoot"
@@ -583,6 +610,11 @@ function Invoke-Build {
     }
     Write-Host "完整 commit: $commitFull"
     Write-Host "构建信息  : $buildInfoJson"
+    if ($script:TestsRan) {
+        Write-Host '单元测试  : 已运行（tools/run_tests.py）' -ForegroundColor Green
+    } else {
+        Write-Host '单元测试  : 未运行（默认跳过；发版前请加 -Test）' -ForegroundColor Yellow
+    }
     Write-Host ''
     Write-Host '仅供测试学习用，不要用于联机影响游戏平衡。' -ForegroundColor Yellow
 }

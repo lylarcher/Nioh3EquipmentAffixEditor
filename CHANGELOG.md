@@ -79,6 +79,12 @@
 
 ### 变更
 
+* **`build.ps1` 默认不再跑单元测试**：整套测试要 4 分钟，而打包各步骤并不依赖它，
+  每次打 exe 都等一遍没有必要。现在测试是**可选**的：加 `-Test` 才跑（`-TestPattern`
+  与 `-PureCryptoTests` 隐含 `-Test`）；`-SkipTests` 保留但已成空操作，旧命令不会报错。
+  为避免「没跑测试的构建被误当成已验证」，构建结束的版本报告会明确打印
+  `单元测试  : 已运行 / 未运行（默认跳过；发版前请加 -Test）`，发版流程用
+  `build.ps1 -Clean -Test` 即可。
 * `tools/build_affix_db.py`：默认来源改为仓库内的 `third_party/source-data/`
   副本（保留旧路径作为回退），新增 `resolve_source()` 与找不到文件时的路径提示。
 * 游戏进程门禁统一为一处实现：`editor.commit_save` 改为调用

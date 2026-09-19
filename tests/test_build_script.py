@@ -1,13 +1,16 @@
 """Build-script contract tests.
 
 ``build.ps1`` cannot be unit-tested like Python code, so the parts that matter
-are pinned down statically and through the one helper it calls out to.  Two
+are pinned down statically and through the one helper it calls out to.  Three
 properties are load-bearing:
 
 * a failing step must abort the build -- verified live by the script itself
   through ``tools/check_build_gate.py``, and here through that helper's own
   contract, plus a regression guard against re-introducing the Windows
   PowerShell 5.1 ``$LASTEXITCODE`` pitfall that made the gate silently pass;
+* the unit-test suite must stay opt-in (``-Test``), because running it on every
+  packaging build costs minutes and the packaging steps do not depend on it --
+  while a build that skipped it must still say so in its version report;
 * the file must keep its UTF-8 BOM, otherwise Windows PowerShell reads it as
   GBK and the Chinese messages break the parser.
 """
@@ -98,9 +101,25 @@ class ScriptContractTests(unittest.TestCase):
 
     def test_declares_the_documented_parameters(self) -> None:
         for parameter in ("$Python", "$Configuration", "$OutputDirectory",
-                          "$PyInstallerPython", "$SkipTests", "$TestPattern",
-                          "$SkipZip", "$PureCryptoTests", "$Clean", "$Quiet"):
+                          "$PyInstallerPython", "$Test", "$SkipTests",
+                          "$TestPattern", "$SkipZip", "$PureCryptoTests",
+                          "$Clean", "$Quiet"):
             self.assertIn(parameter, self.source, parameter)
+
+    def test_unit_tests_are_opt_in(self) -> None:
+        """A build must be fast by default: only -Test (or friends) runs them."""
+        self.assertIn("$runTests = [bool]($Test -or $TestPattern -or $PureCryptoTests)",
+                      self.source)
+        self.assertIn("if ($runTests) {", self.source)
+        self.assertIn("Invoke-PythonStep -Arguments $testArguments", self.source)
+        # The legacy switch must stay accepted, but only as a documented no-op.
+        self.assertIn("-SkipTests 现在是空操作", self.source)
+
+    def test_reports_whether_the_tests_ran(self) -> None:
+        """A build log must not be mistakable for a verified one."""
+        self.assertIn("$script:TestsRan", self.source)
+        self.assertIn("单元测试  : 已运行", self.source)
+        self.assertIn("单元测试  : 未运行", self.source)
 
     def test_clean_only_removes_its_own_artifacts(self) -> None:
         self.assertIn("Nioh3AccessoryEditor*", self.source)
