@@ -392,6 +392,43 @@ class BackupAndWriteTests(TempDirTestCase):
         # The uncovered tail must survive byte-for-byte from the original file.
         self.assertEqual(target.read_bytes()[-8:], original_tail)
 
+    def test_write_can_force_the_uncovered_tail(self) -> None:
+        """A restore writes the tail explicitly; the crypto step zeroes it."""
+        target, crypto = self._make_save()
+        wanted = bytes.fromhex("1122334455667788")
+        expected = capture_quiescent_save_fingerprints(target)
+        write_encrypted_save(target, self.plain, crypto=crypto,
+                             expected_fingerprints=expected, tail=wanted)
+        self.assertEqual(target.read_bytes()[-8:], wanted)
+
+    def test_write_rejects_a_tail_of_the_wrong_length(self) -> None:
+        target, crypto = self._make_save()
+        expected = capture_related_save_fingerprints(target)
+        with self.assertRaises(SaveError) as caught:
+            write_encrypted_save(target, self.plain, crypto=crypto,
+                                 expected_fingerprints=expected, tail=b"\x00")
+        self.assertIn("尾字节长度", str(caught.exception))
+
+    def test_reference_tool_zeroes_the_uncovered_tail(self) -> None:
+        """Pins the measured behaviour the writer compensates for.
+
+        If a future tool preserves the tail instead, this test fails and the
+        comments in ``savefile.write_encrypted_save`` / ``editor.restore_backup``
+        (and the restore's tail policy) need revisiting.
+        """
+        crypto = SaveCrypto(support.EXE_PATH)
+        source = self.root / "tail-source.bin"
+        data = bytearray(self.plain)
+        data[-8:] = b"\x11\x22\x33\x44\x55\x66\x77\x88"
+        source.write_bytes(bytes(data))
+        encrypted = self.root / "tail-encrypted.bin"
+        crypto.encrypt(source, encrypted)
+        self.assertEqual(encrypted.read_bytes()[-8:], bytes(8),
+                         "参考工具已改为保留尾字节——请重新评估恢复时的尾字节策略")
+        decrypted = self.root / "tail-decrypted.bin"
+        crypto.decrypt(encrypted, decrypted)
+        self.assertEqual(decrypted.read_bytes()[-8:], bytes(8))
+
     def test_write_rejects_a_stale_fingerprint(self) -> None:
         target, crypto = self._make_save()
         expected = capture_quiescent_save_fingerprints(target)

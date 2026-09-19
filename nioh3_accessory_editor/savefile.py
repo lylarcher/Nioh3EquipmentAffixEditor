@@ -33,11 +33,13 @@ from . import paths
 
 __all__ = [
     "BACKUP_MANIFEST_SCHEMA",
+    "BACKUP_PLAIN_PATTERN",
     "BACKUP_SUBDIRECTORY_NAME",
     "GAME_PROCESS_NAMES",
     "SAVE_QUIESCENCE_SECONDS",
     "SAVE_SCHEMA_PROFILE",
     "SAVE_WRITE_REQUIREMENT",
+    "BackupEntry",
     "SaveCrypto",
     "SaveError",
     "SaveFileFingerprint",
@@ -49,12 +51,15 @@ __all__ = [
     "decrypt_save_to_bytes",
     "default_crypto_tool",
     "discover_save_paths",
+    "list_backups",
+    "read_backup_plaintext",
     "require_game_not_running",
     "restore_save_from_bytes",
     "running_game_processes",
     "save_root_directory",
     "save_slot_index_from_path",
     "sha256_file",
+    "validate_user_save_bytes",
     "write_encrypted_save",
 ]
 
@@ -526,6 +531,133 @@ def create_backup(
     return backup_dir
 
 
+#: ``SAVEDATA-<created_at>-plain.bin`` as written by :func:`create_backup`.
+BACKUP_PLAIN_PATTERN = re.compile(
+    r"^SAVEDATA-(?P<created>\d{8}-\d{6}-[0-9a-f]+)-plain\.bin$")
+
+
+@dataclass(frozen=True)
+class BackupEntry:
+    """One plaintext backup found on disk, with its integrity verdict."""
+
+    plain_path: Path
+    created_at: str
+    plain_size: int
+    plain_sha256: str
+    expected_sha256: str = ""
+    original_save_sha256: str = ""
+    account_id: int | None = None
+    slot_index: int | None = None
+    manifest_path: Path | None = None
+
+    @property
+    def integrity_ok(self) -> bool:
+        """True when the file still matches the hash recorded beside it."""
+        return not self.expected_sha256 or self.expected_sha256 == self.plain_sha256
+
+    @property
+    def when(self) -> str:
+        """``YYYY-mm-dd HH:MM:SS`` when the name carries a timestamp."""
+        match = re.match(r"^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})",
+                         self.created_at)
+        if match is None:
+            return self.created_at
+        year, month, day, hour, minute, second = match.groups()
+        return f"{year}-{month}-{day} {hour}:{minute}:{second}"
+
+    def describe(self) -> str:
+        state = "" if self.integrity_ok else "  ⚠ 校验不符"
+        size = f"{self.plain_size / 1024 / 1024:.1f} MB"
+        return f"{self.when}  {size}{state}"
+
+
+def list_backups(save_path: Path, state_root: Path) -> tuple[BackupEntry, ...]:
+    """Every plaintext backup for one save, newest first.
+
+    A backup without a readable manifest is still listed (with
+    ``integrity_ok=False``): refusing to show it would hide the only copy a user
+    has, and the restore path re-checks the bytes anyway.
+    """
+    directory = backup_directory_for(save_path, state_root)
+    if not directory.is_dir():
+        return ()
+
+    manifest_path = directory / "backup-manifest.json"
+    manifest: dict[str, object] = {}
+    if manifest_path.is_file():
+        try:
+            loaded = json.loads(manifest_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                manifest = loaded
+        except (OSError, ValueError):
+            manifest = {}
+
+    entries: list[BackupEntry] = []
+    for path in sorted(directory.glob("*-plain.bin")):
+        if not path.is_file():
+            continue
+        match = BACKUP_PLAIN_PATTERN.match(path.name)
+        created = match.group("created") if match else path.stem
+        expected = ""
+        recorded = manifest.get("plain_backup")
+        if isinstance(recorded, str) and recorded == path.name:
+            expected = str(manifest.get("plain_backup_sha256") or "")
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        entries.append(BackupEntry(
+            plain_path=path,
+            created_at=created,
+            plain_size=size,
+            plain_sha256=sha256_file(path),
+            expected_sha256=expected,
+            original_save_sha256=str(manifest.get("main_save_sha256") or ""),
+            account_id=_optional_int(manifest.get("steam_account_id")),
+            slot_index=_optional_int(manifest.get("save_slot_index")),
+            manifest_path=manifest_path if manifest else None,
+        ))
+    entries.sort(key=lambda entry: (entry.created_at, entry.plain_path.name),
+                 reverse=True)
+    return tuple(entries)
+
+
+def _optional_int(value: object) -> int | None:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+
+
+def validate_user_save_bytes(data: bytes, *, what: str = "存档数据") -> bytes:
+    """Require a decrypted USR save (magic + exact size), else raise."""
+    if not data.startswith(b"RNNUSR"):
+        raise SaveError(
+            f"{what}不是有效的仁王3 存档（缺少 RNNUSR 魔数）。"
+            "请确认选择的是 USR 存档而非系统存档。"
+        )
+    if len(data) != py_crypto.USER_SAVE_SIZE:
+        raise SaveError(
+            f"{what}大小异常：期望 {py_crypto.USER_SAVE_SIZE:#x} 字节，"
+            f"实际 {len(data):#x} 字节"
+        )
+    return data
+
+
+def read_backup_plaintext(entry: BackupEntry) -> bytes:
+    """Read and validate one plaintext backup, refusing a corrupted copy."""
+    try:
+        data = entry.plain_path.read_bytes()
+    except OSError as error:
+        raise SaveError(f"无法读取备份文件 {entry.plain_path}: {error}") from error
+    if not entry.integrity_ok:
+        raise SaveError(
+            f"备份文件已损坏或与清单记录不一致，拒绝用它恢复：\n{entry.plain_path}\n"
+            f"期望 SHA-256 {entry.expected_sha256}\n实际 SHA-256 {entry.plain_sha256}"
+        )
+    return validate_user_save_bytes(data, what=f"备份 {entry.plain_path.name} ")
+
+
 def restore_save_from_bytes(save_path: Path, original: bytes) -> None:
     """Durably write ``original`` bytes back to ``save_path`` (rollback)."""
     with tempfile.TemporaryDirectory(prefix="nioh3-accessory-restore-") as directory:
@@ -546,17 +678,7 @@ def decrypt_save_to_bytes(save_path: Path, crypto: SaveCrypto) -> bytes:
         decrypted_path = Path(directory) / "decrypted.bin"
         crypto.decrypt(save_path, decrypted_path)
         data = decrypted_path.read_bytes()
-    if not data.startswith(b"RNNUSR"):
-        raise SaveError(
-            "解密结果不是有效的仁王3 存档（缺少 RNNUSR 魔数）。"
-            "请确认选择的是 USR 存档而非系统存档。"
-        )
-    if len(data) != py_crypto.USER_SAVE_SIZE:
-        raise SaveError(
-            f"解密结果大小异常：期望 {py_crypto.USER_SAVE_SIZE:#x} 字节，"
-            f"实际 {len(data):#x} 字节"
-        )
-    return data
+    return validate_user_save_bytes(data, what="解密结果")
 
 
 def _verify_encrypted_file(
@@ -586,19 +708,34 @@ def write_encrypted_save(
     crypto: SaveCrypto,
     expected_fingerprints: tuple[SaveFileFingerprint, ...],
     verify: bool = True,
+    tail: bytes | None = None,
 ) -> str:
     """Atomically replace the main save with the re-encrypted data.
 
-    Flow: encrypt to a staging file -> verify the staged ciphertext decrypts
-    back to ``decrypted_bytes`` -> re-check the quiescence fingerprints ->
-    atomically replace -> verify the installed file, rolling back the original
-    bytes if the check fails.  Returns the new file's SHA-256.
+    Flow: encrypt to a staging file -> force the trailing bytes -> verify the
+    staged ciphertext decrypts back to ``decrypted_bytes`` -> re-check the
+    quiescence fingerprints -> atomically replace -> verify the installed file,
+    rolling back the original bytes if the check fails.  Returns the new file's
+    SHA-256.
+
+    The final :data:`UNCOVERED_TAIL_BYTES` bytes are not covered by the crypto
+    stream, and **the reference tool zeroes them on encryption** (the pure-Python
+    backend keeps them, so the two backends disagree).  They are therefore always
+    written explicitly:
+
+    * ``tail=None`` -- a normal edit: keep whatever the game last wrote there.
+    * ``tail=b"..."`` -- a **restore**: write the tail recorded in the backup, so
+      the file comes back exactly as it was.
     """
     if not decrypted_bytes.startswith(b"RNNUSR"):
         raise SaveError("内部错误：待写入数据不是有效的解密存档 (RNNUSR)")
     if len(decrypted_bytes) != py_crypto.USER_SAVE_SIZE:
         raise SaveError(
             f"内部错误：待写入数据大小 {len(decrypted_bytes):#x} 不是标准存档大小"
+        )
+    if tail is not None and len(tail) != UNCOVERED_TAIL_BYTES:
+        raise SaveError(
+            f"内部错误：尾字节长度 {len(tail)} != {UNCOVERED_TAIL_BYTES}"
         )
 
     current = capture_quiescent_save_fingerprints(save_path)
@@ -608,8 +745,14 @@ def write_encrypted_save(
             "请回到标题界面停留片刻后重试。"
         )
 
-    # Keep the original bytes for the trailing-8 contract and for rollback.
+    # Keep the original bytes for rollback (and for the trailing-8 contract).
     original_encrypted = save_path.read_bytes()
+
+    if tail is None:
+        if len(original_encrypted) == len(decrypted_bytes):
+            tail = original_encrypted[-UNCOVERED_TAIL_BYTES:]
+        else:  # pragma: no cover - defensive: unexpected on-disk size
+            tail = decrypted_bytes[-UNCOVERED_TAIL_BYTES:]
 
     with tempfile.TemporaryDirectory(prefix="nioh3-accessory-write-") as directory:
         work = Path(directory)
@@ -618,12 +761,9 @@ def write_encrypted_save(
         plain_path.write_bytes(decrypted_bytes)
         crypto.encrypt(plain_path, enc_path)
 
-        # The crypto routine leaves the final 8 bytes untouched; preserve them
-        # from the current on-disk file so the uncovered tail stays identical.
-        if len(original_encrypted) == len(decrypted_bytes):
-            with enc_path.open("r+b") as handle:
-                handle.seek(-UNCOVERED_TAIL_BYTES, os.SEEK_END)
-                handle.write(original_encrypted[-UNCOVERED_TAIL_BYTES:])
+        with enc_path.open("r+b") as handle:
+            handle.seek(-UNCOVERED_TAIL_BYTES, os.SEEK_END)
+            handle.write(tail)
 
         if verify:
             _verify_encrypted_file(enc_path, decrypted_bytes, crypto, work)

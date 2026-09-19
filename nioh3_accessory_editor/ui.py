@@ -30,14 +30,19 @@ from .editor import (
     commit_save,
     discover_saves,
     list_accessories,
+    list_backups,
     open_save,
+    restore_backup,
     save_checksum_is_valid,
 )
 from .paths import resource_root
 from .records import EFFECT_COUNT, EMPTY_EFFECT_ID, EffectSlot
 from .savefile import (
     SAVE_WRITE_REQUIREMENT,
+    BackupEntry,
     SaveCrypto,
+    SaveError,
+    backup_directory_for,
     create_backup,
     running_game_processes,
     save_root_directory,
@@ -176,6 +181,7 @@ class AccessoryEditorApp(tk.Tk):
         ttk.Button(top, text="刷新", command=self.refresh_saves).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="读取饰品", command=self.load_accessories).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="备份存档", command=self.backup_save).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="恢复备份", command=self.restore_save).pack(side=tk.LEFT, padx=2)
 
         mid = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
         mid.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
@@ -343,6 +349,41 @@ class AccessoryEditorApp(tk.Tk):
         elif tag == "backup" and isinstance(value, str):
             self._status(f"备份完成：{value}")
             messagebox.showinfo("备份完成", f"已备份到：\n{value}")
+        elif tag == "restored" and isinstance(value, dict):
+            self._status(f"已恢复备份，SHA-256 {value.get('new_sha256', '')}")
+            matches = value.get("matches_original_save")
+            note = ""
+            if matches is True:
+                note = "\n\n校验：与备份时记录的原文件 SHA-256 完全一致。"
+            elif matches is False:
+                note = ("\n\n注意：与备份时记录的原文件 SHA-256 不一致"
+                        "（可能仅存档尾 8 字节不同）。")
+            messagebox.showinfo(
+                "恢复完成",
+                f"已用备份覆盖存档：\n{value.get('restored_from')}\n\n"
+                f"恢复前的存档已另存到：\n{value.get('safety_backup_dir')}"
+                + note + "\n\n请在游戏中加载该存档确认。",
+            )
+            self._invalidate_loaded_save()
+        elif tag == "restore_dry_run" and isinstance(value, dict):
+            self._status("恢复演练完成（未写入）")
+            messagebox.showinfo(
+                "恢复演练",
+                "未写入任何文件。\n\n"
+                f"将恢复自：{value.get('restored_from')}",
+            )
+
+    def _invalidate_loaded_save(self) -> None:
+        """The file changed underneath us: force a re-read before any write."""
+        self.decrypted = None
+        self.accessory_views = []
+        self.selected_accessory = None
+        self.checksum_ok = False
+        self.tree.delete(*self.tree.get_children())
+        for combo in self.slot_combos:
+            combo.set("")
+        for label in self.slot_labels:
+            label.set("")
 
     def _on_worker_error(self, error: Exception) -> None:
         self._status("操作失败")
@@ -530,6 +571,130 @@ class AccessoryEditorApp(tk.Tk):
         def worker() -> tuple[str, str]:
             return "backup", str(create_backup(save.path, state_root=self.state_root,
                                                crypto=crypto))
+
+        self._run_worker(worker)
+
+    # ------------------------------------------------------------- restore
+
+    def restore_save(self) -> None:
+        """Pick a plaintext backup and put it back into the save file."""
+        if self.selected_save is None:
+            messagebox.showwarning("提示", "请先选择存档")
+            return
+        save = self.selected_save
+        try:
+            entries = list_backups(save.path, self.state_root)
+        except (SaveError, ValueError) as error:
+            messagebox.showinfo(
+                "无法定位备份目录",
+                f"该存档路径无法对应到备份目录：\n{save.path}\n\n{error}",
+            )
+            return
+        if not entries:
+            messagebox.showinfo(
+                "没有可用备份",
+                "该存档还没有备份。\n\n"
+                f"备份目录：\n{self._backup_directory_hint(save.path)}\n\n"
+                "写入存档前会自动备份，也可以用「备份存档」先手动备份一份。",
+            )
+            return
+        chosen = self._choose_backup_dialog(entries)
+        if chosen is None:
+            return
+        self._restore_selected_backup(save, chosen)
+
+    def _backup_directory_hint(self, save_path: Path) -> str:
+        """The backup directory for a save, or an explanation when unknowable.
+
+        The path shape (``<state root>/account-<id>/slot-<NN>``) needs the Steam
+        account id from the save path, which a hand-copied file elsewhere on disk
+        does not carry.
+        """
+        try:
+            return str(backup_directory_for(save_path, self.state_root))
+        except (SaveError, ValueError):
+            return ("（无法从该路径识别账号/栏位；可在 config/editor.json 中"
+                    "用 backup_root 指定备份目录）")
+
+    def _choose_backup_dialog(self, entries: tuple[BackupEntry, ...]) -> BackupEntry | None:
+        """Modal list of backups (newest first); returns the picked entry."""
+        dialog = tk.Toplevel(self)
+        dialog.title("选择要恢复的备份")
+        dialog.transient(self)
+        dialog.geometry("720x360")
+        ttk.Label(
+            dialog,
+            text=("选择一个备份恢复。备份是解密后的明文，恢复时会重新加密写回存档；\n"
+                  "恢复前会自动把当前存档另存一份，因此恢复本身也可以撤销。"),
+            justify=tk.LEFT,
+        ).pack(anchor=tk.W, padx=10, pady=(10, 4))
+
+        frame = ttk.Frame(dialog)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10)
+        listbox = tk.Listbox(frame, height=10, activestyle="dotbox")
+        scrollbar = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=listbox.yview)
+        listbox.configure(yscrollcommand=scrollbar.set)
+        listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        for index, entry in enumerate(entries, start=1):
+            note = "" if entry.integrity_ok else "  ⚠ 校验不符"
+            listbox.insert(tk.END, f"{index:>3}. {entry.when}   "
+                                   f"{entry.plain_size / 1024 / 1024:.1f} MB{note}")
+        listbox.selection_set(0)
+        listbox.see(0)
+
+        ttk.Label(dialog, text=f"备份目录：{entries[0].plain_path.parent}",
+                  foreground="#666666", wraplength=680,
+                  justify=tk.LEFT).pack(anchor=tk.W, padx=10, pady=(4, 0))
+        chosen: list[BackupEntry] = []
+
+        def accept() -> None:
+            selection = listbox.curselection()
+            if not selection:
+                return
+            chosen.append(entries[selection[0]])
+            dialog.destroy()
+
+        buttons = ttk.Frame(dialog, padding=(10, 8))
+        buttons.pack(fill=tk.X)
+        ttk.Button(buttons, text="恢复此备份", command=accept).pack(side=tk.RIGHT)
+        ttk.Button(buttons, text="取消", command=dialog.destroy).pack(side=tk.RIGHT, padx=6)
+        listbox.bind("<Double-Button-1>", lambda _event: accept())
+        dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
+
+        dialog.grab_set()
+        self.wait_window(dialog)
+        return chosen[0] if chosen else None
+
+    def _restore_selected_backup(self, save: SaveDescriptor, entry: BackupEntry) -> None:
+        running = running_game_processes()
+        warning = ""
+        if entry.slot_index is not None and entry.slot_index != save.slot_index:
+            warning += (f"\n\n⚠ 该备份来自栏位 {entry.slot_index:02d}，"
+                        f"当前存档是栏位 {save.slot_index:02d}——请确认内容无误。")
+        if running:
+            warning += ("\n\n⚠ 检测到游戏正在运行（" + "、".join(running) + "）。\n"
+                        "若你正处于游戏内的存档中，恢复的内容会被游戏下次保存覆盖。")
+        if not messagebox.askyesno(
+            "确认恢复",
+            f"将用以下备份覆盖当前存档：\n{entry.plain_path}\n"
+            f"备份时间：{entry.when}\n\n"
+            + SAVE_WRITE_REQUIREMENT + "\n\n"
+            "（当前存档会先自动备份一份，可再恢复回来。）\n\n"
+            + DISCLAIMER + warning + "\n\n确认继续吗？",
+        ):
+            return
+
+        dry_run = bool(self.dry_run_var.get())
+        verify = bool(self.verify_var.get())
+        crypto = self.crypto
+
+        def worker() -> tuple[str, dict]:
+            result = restore_backup(
+                save, entry, crypto=crypto, state_root=self.state_root,
+                dry_run=dry_run, verify=verify, allow_game_running=True,
+            )
+            return ("restore_dry_run" if result.get("dry_run") else "restored"), result
 
         self._run_worker(worker)
 

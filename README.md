@@ -1,10 +1,10 @@
 # Nioh3AccessoryEditor
 
-A Python accessory (楗板搧) affix editor for **Nioh 3 (PC)** that writes edits
-**directly into the save file** so they persist across sessions 鈥?not a
+A Python accessory (饰品) affix editor for **Nioh 3 (PC)** that writes edits
+**directly into the save file** so they persist across sessions — not a
 memory-only trainer.
 
-> **浠呬緵娴嬭瘯瀛︿範鐢紝涓嶈鐢ㄤ簬鑱旀満褰卞搷娓告垙骞宠　銆?*
+> **仅供测试学习用，不要用于联机影响游戏平衡。**
 > Nioh 3's co-op is PvE-only, so this tool cannot affect other players. It is
 > still provided strictly for learning/testing. Back up your save before use;
 > the author is not responsible for any damage.
@@ -17,23 +17,27 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 
 ## Features
 
-* **Persistent edits** 鈥?decrypt the PC user save, patch accessory effect
+* **Persistent edits** — decrypt the PC user save, patch accessory effect
   slots, recompute the user checksum, re-encrypt, verify, and atomically replace
   the save with a plaintext backup + manifest.
-* **Legal-affix-only editing** 鈥?the affix catalog is built from the
-  `浠佺帇3璇嶆潯瑁呭搴搗2.21.xlsx` 楗板搧璇嶆潯 sheet (鈫?276 unique effect ids); any affix
+* **Legal-affix-only editing** — the affix catalog is built from the
+  `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
   outside the table is rejected (fail closed).
-* **Dual crypto backend** 鈥?the bundled reference executable
+* **Dual crypto backend** — the bundled reference executable
   (`bin/Nioh_Savefile_decrypt.exe`, ~0.4 s per pass) by default; a
   bit-exact pure-Python port of the custom Nioh AES as a zero-dependency
   fallback (`--python-crypto`, ~32 s per pass).
-* **GUI (Tkinter) and CLI** 鈥?no third-party dependencies.
-* **Stamped builds** 鈥?`build.ps1` bakes the commit tail, source path, build
+* **GUI (Tkinter) and CLI** — no third-party dependencies.
+* **Stamped builds** — `build.ps1` bakes the commit tail, source path, build
   time and language into the app, so every copy can say exactly what it is.
-* **Verified write pipeline** 鈥?quiescence double-read, game-process gate,
+* **Verified write pipeline** — quiescence double-read, game-process gate,
   checksum recompute, plaintext backup + manifest, staged decryption check
   before install, post-write check with automatic rollback, and a durable
   `MoveFileExW` replace.
+* **Backups you can restore** — every write first saves a timestamped plaintext
+  copy plus a manifest; `restore` lists them and puts any one back (re-encrypted,
+  with a safety copy of what it replaced). See
+  [Backup and restore](#backup-and-restore).
 
 ## Requirements
 
@@ -67,6 +71,11 @@ python launch_editor.py edit --record 3 --edit 1:0x0B32:200 --dry-run
 # CLI: plaintext backup only
 python launch_editor.py backup
 
+# CLI: list this save's backups, then restore the newest one (dry run first)
+python launch_editor.py restore --list
+python launch_editor.py restore --from latest --dry-run
+python launch_editor.py restore --from latest
+
 # CLI: version/build information (commit tail, source, build time, language)
 python launch_editor.py --version
 python launch_editor.py version --json
@@ -86,6 +95,7 @@ program needs is inside that one file.
   .\Nioh3AccessoryEditor.exe list
   .\Nioh3AccessoryEditor.exe check
   .\Nioh3AccessoryEditor.exe edit --record 3 --edit 1:0x0B32:200
+  .\Nioh3AccessoryEditor.exe restore --list
   .\Nioh3AccessoryEditor.exe version
   ```
 
@@ -127,11 +137,11 @@ python tools/make_icon.py --check    # CI-style check: assets/ == generator outp
 python tools/make_icon.py --preview build\icon-preview.png
 ```
 
-* The motif is a 鍕剧帀 (magatama): a fat head tapering to a point, which is what
+* The motif is a 勾玉 (magatama): a fat head tapering to a point, which is what
   distinguishes it from a plain crescent (the two bounding circles are internally
   tangent).  Small sizes are drawn bolder and without the cord hole so 16 px stays
   readable, and `tests/test_icon.py` asserts that (gold coverage per size).
-* `assets/app.ico` carries all nine sizes (16 鈥?256) and is compiled into the
+* `assets/app.ico` carries all nine sizes (16–256) and is compiled into the
   executable, so Explorer, the taskbar and the window title bar all show it.
 * The GUI loads `assets/logo-64.png` for the header and `assets/app.ico` for the
   window icon, and falls back to text if you delete them -- branding is never a
@@ -168,11 +178,70 @@ must precede the subcommand. `--no-verify` skips the pre/post write decryption
 checks (faster, riskier); `--force-while-running` overrides the game-process
 gate.
 
-Every command except `edit` is strictly read-only. `edit` refuses to touch the
-save when: the save is being written by the game (quiescence check), Nioh 3 is
-running (unless overridden), an affix is outside the legal table, the target
-record does not exist in the save, or the staged re-encryption does not decrypt
-back to the patched bytes.
+Every command except `edit` and `restore --from ...` is strictly read-only
+(`restore` without `--from` only lists). A write refuses to touch the save when:
+the save is being written by the game (quiescence check), Nioh 3 is running
+(unless overridden), an affix is outside the legal table, the target record does
+not exist in the save, the staged re-encryption does not decrypt back to the
+patched bytes, or the chosen backup is corrupt.
+
+## Backup and restore
+
+**Every write backs the save up first.** A backup holds the *decrypted* bytes, so
+restoring is not a file copy: the tool re-encrypts them exactly as an edit does.
+
+Where backups go — `<state root>` is `backup_root` from `config/editor.json`, else
+the folder holding the exe (or the current directory when run from source):
+
+```text
+<state root>/_nioh3_accessory_backup/
+    account-<steam id>/          # e.g. account-76561198000000000
+        slot-<NN>/               # e.g. slot-03, matching SAVEDATA03
+            SAVEDATA-<YYYYmmdd-HHMMSS>-<uuid8>-plain.bin
+            backup-manifest.json
+```
+
+| File | What it is |
+| --- | --- |
+| `SAVEDATA-*-plain.bin` | the save exactly as the editor read it, **decrypted** (`RNNUSR`, `0x9001B0` bytes) — a plaintext backup, *not* a copy of `SAVEDATA.BIN` |
+| `backup-manifest.json` | schema, account, slot, `created_at`, `main_save_sha256` (the encrypted file as it was) and `plain_backup_sha256` |
+
+Backups are never overwritten — every one gets its own timestamped name — so they
+accumulate and you can roll back to any point.
+
+```powershell
+# list this save's backups, newest first (read-only)
+python launch_editor.py restore --list
+
+# dry run: validate the backup and every gate, write nothing
+python launch_editor.py restore --from latest --dry-run
+
+# restore the newest one; also --from 2 (an index) or --from D:\my-plain.bin
+python launch_editor.py restore --from latest
+```
+
+The GUI has the matching **恢复备份** (restore backup) button: it lists the backups
+with their time and size, then asks for confirmation before writing.
+
+A restore is itself reversible: the current save is backed up *before* it is
+overwritten, and the report prints where that safety copy went
+(`safety_backup_dir`). It refuses to write when the backup's SHA-256 no longer
+matches its manifest or when the bytes are not a valid `RNNUSR` save of
+`0x9001B0` bytes, and it obeys the same game-running gate, quiescence re-check
+and `SAVE_SYNC_ACTIVE` refusal as an edit.
+
+`matches_original_save` in the report says whether the restored file is
+byte-identical to the file that was backed up. It can honestly be `false` for a
+reason worth knowing: the reference crypto tool zeroes the save's last 8 bytes —
+which lie outside the encrypted region — in **both** directions, so a backup
+cannot record them. The restore then leaves those bytes as the game wrote them
+instead of zeroing them (`tail_source: "on-disk"`): the payload is restored, the
+tail is preserved, and the report says exactly that. With the pure-Python backend
+the tail round-trips and a byte-identical restore is reported as `true`.
+
+> The game keeps its own `BACKUP.BIN` next to `SAVEDATA.BIN`. This tool never
+> reads or writes it; it appears in the fingerprint checks only, so a running game
+> writing there still counts as activity.
 
 ## Build
 
@@ -211,25 +280,25 @@ Every version surface reports the same four facts:
 
 ```text
 Nioh3AccessoryEditor v0.1.0
-commit    : 34cca8de (宸ヤ綔鍖烘湁鏈彁浜ゆ敼鍔?
-鏉ユ簮      : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
-鍔犲瘑缁勪欢  : D:\...\bin\Nioh_Savefile_decrypt.exe
-鏋勫缓鏃堕棿  : 2026-09-19T11:01:52+08:00
-璇█      : CPython 3.10.10 (浠呮爣鍑嗗簱 / stdlib only, 鍚?tkinter GUI)
+commit    : 34cca8de (工作区有未提交改动)
+来源      : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
+加密组件  : D:\...\bin\Nioh_Savefile_decrypt.exe
+构建时间  : 2026-09-19T11:01:52+08:00
+语言      : CPython 3.10.10 (仅标准库 / stdlib only, 含 tkinter GUI)
 ```
 
 | Fact | Meaning |
 |---|---|
 | `commit` | the **last 8 characters** of the git commit id (project convention, not the usual prefix) |
-| `鏉ユ簮` / `鍔犲瘑缁勪欢` | where the build came from: the project root plus the crypto executable it uses |
-| `鏋勫缓鏃堕棿` | local build time, ISO-8601 with UTC offset |
-| `璇█` | language/runtime the build targets (CPython + stdlib only) |
+| `来源` / `加密组件` | where the build came from: the project root plus the crypto executable it uses |
+| `构建时间` | local build time, ISO-8601 with UTC offset |
+| `语言` | language/runtime the build targets (CPython + stdlib only) |
 
 Where it shows up:
 
 * `python launch_editor.py --version` (or the `version` subcommand; add `--json`
   for machine-readable output),
-* the GUI footer, plus the **鐗堟湰淇℃伅** button for the full banner (full commit,
+* the GUI footer, plus the **版本信息** button for the full banner (full commit,
   branch, component SHA-256, information source),
 * `BUILD-INFO.txt` / `BUILD-INFO.json` in the project root and inside the
   staged `dist\` tree, and the build log itself.
@@ -240,12 +309,12 @@ verifies its own output by re-importing the generated module and comparing every
 field, and it fails the build if the short commit is not exactly 8 characters.
 The generated module, both `BUILD-INFO.*` files and `dist/` are gitignored
 build artifacts: a fresh checkout reports live git information
-(`淇℃伅鏉ユ簮: git`) with `鏋勫缓鏃堕棿: 鏈瀯寤猴紙婧愮爜杩愯锛塦 until the next build.
+(`信息来源: git`) with `构建时间: 未构建（源码运行）` until the next build.
 
 ## Tests
 
 ```powershell
-# Whole suite (460 tests, ~2 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (502 tests, ~4 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter
@@ -260,9 +329,12 @@ python tools/run_tests.py --pure-crypto
 The suite covers the crypto layer (golden key schedule, exe-observed keystream,
 region coverage, involution/XOR equivalence), the checksum fold, record
 parsing/patching, the affix catalog schema, save discovery + durability +
-backup + rollback, the editor/CLI pipelines, and a full CLI write against a
-synthetic save on disk. Tests that need the reference executable or the sibling
-reference checkout skip themselves when those are unavailable.
+backup + rollback, the editor/CLI pipelines, a full CLI write against a
+synthetic save on disk, and the backup/restore path — including a real
+encrypt → back up → damage → restore round trip asserting that the restored file
+is byte-identical to the backed-up one (and that the uncovered tail is never
+zeroed). Tests that need the reference executable or the sibling reference
+checkout skip themselves when those are unavailable.
 
 ### Heavyweight cross-check (manual)
 
@@ -285,8 +357,8 @@ python tools/build_affix_db.py --dry-run  # parse + report only
 ```
 
 The default source is the bundled copy
-`third_party/source-data/浠佺帇3璇嶆潯瑁呭搴搗2.21.xlsx` (see that folder's README for
-provenance and licensing); pass an explicit path (xlsx or the `A1=鈥 TSV dump)
+`third_party/source-data/仁王3词条装备库v2.21.xlsx` (see that folder's README for
+provenance and licensing); pass an explicit path (xlsx or the `A1=...` TSV dump)
 to override. The builder de-duplicates by effect id and records any
 same-id/different-value conflict in the catalog's `conflicts` field instead of
 silently picking one.
@@ -297,7 +369,7 @@ Verified against the reference executable (golden values captured from its
 debug output and full-file byte comparison):
 
 * `_key_setup` header key/IV pairs match byte-for-byte
-  (`CD1F3135鈥?84B` / `1BDFDD57鈥?925` / `CD958C0E鈥4D5` / `FD4C40A2鈥?7BD`).
+  (`CD1F3135…84B` / `1BDFDD57…925` / `CD958C0E…4D5` / `FD4C40A2…7BD`).
 * The header keystream prefix matches the observed `31d530acb6d67a46`.
 * Full-file encryption matches the exe for every byte in the crypto-covered
   region; only the trailing 8 bytes (outside the crypto scope) differ, and the
@@ -320,21 +392,21 @@ Useful crypto findings (documented because they are easy to get wrong):
 |---|---|
 | Save size | `0x9001B0` (header `0x158` + body `0x900058`) |
 | Crypto coverage | `[0, 0x158 + 0x900050)`; last 8 bytes preserved verbatim |
-| Record region | `0x176CCE`, 400 slots 脳 `0xE8` |
-| Effect slots | 7 slots 脳 `0x18`, starting at `0x34` |
+| Record region | `0x176CCE`, 400 slots × `0xE8` |
+| Effect slots | 7 slots × `0x18`, starting at `0x34` |
 | Slot fields | `<6I`: prefix@0, effect_id@4, value@8, metadata@0xC, tail_0@0x10, tail_1@0x14 |
 | Checksum | body `[0x190, 0x900190)` in `0x400` blocks; seed@`0x900190`, value@`0x900194` |
-| Affix code | bytes0-3 effect id, bytes4-7 value, byte9 bit6 鍥哄畾, byte10 bit2 鏄?|
+| Affix code | bytes0-3 effect id, bytes4-7 value, byte9 bit6 固定, byte10 bit2 星|
 
 What an edit actually writes: the slot's `effect_id` and `value` fields. The
-`metadata` field (which is where the 鍥哄畾/鏄?flag bits are expected to live) is
+`metadata` field (which is where the 固定/星 flag bits are expected to live) is
 **never** modified by the GUI, because the slot-level encoding of those bits has
 not been confirmed against a real save; the CLI can set it explicitly with
 `--edit <slot>:<id>:<value>:<metadata>` when you know what you want. Selecting a
-璇嶆潯 whose id already occupies the slot is treated as "no change" and writes
+词条 whose id already occupies the slot is treated as "no change" and writes
 nothing.
 
-> **鈿狅笍 Honest boundary:** the exact accessory effect-slot layout inside a
+> **⚠️ Honest boundary:** the exact accessory effect-slot layout inside a
 > *real* Nioh 3 v2.21 save has **not** been confirmed against a real decrypted
 > save yet. The offsets above come from the reference scroll-layout work and the
 > Cheat Table's equipment structure, and the record region contains all
@@ -351,23 +423,29 @@ nothing.
   made in-game afterwards overwrites the edit and can corrupt the slot. The rule
   is stated before every write (`savefile.SAVE_WRITE_REQUIREMENT`): in the CLI
   output, in the GUI notice line, and in the write-confirmation dialog.
-* Backups: `<cwd>/_nioh3_accessory_backup/account-<id>/slot-<NN>/` holds a
+* Backups: `<state root>/_nioh3_accessory_backup/account-<id>/slot-<NN>/` holds a
   decrypted `SAVEDATA-<timestamp>-<random>-plain.bin` plus `backup-manifest.json`
-  (schema, account, slot, main-save SHA-256, plaintext SHA-256).
+  (schema, account, slot, main-save SHA-256, plaintext SHA-256); see
+  [Backup and restore](#backup-and-restore).
 * Game process gate: a detected `Nioh3.exe` / `Nioh3-Win64-Shipping.exe` makes
   the writer fail closed (`GameRunningError`, CLI exit 1) unless
   `--force-while-running` is passed explicitly.
 * Quiescence: save + `BACKUP.BIN` + the account system save are hashed twice
   0.2 s apart; any change aborts with `SAVE_SYNC_ACTIVE`.
 * Fingerprint races: hashing re-stats the file and aborts if size/mtime moved.
-* Write path: stage 鈫?decrypt-verify 鈫?re-check fingerprints 鈫?atomic replace 鈫?  decrypt-verify again 鈫?roll back the original bytes if the final check fails.
+* Write path: stage → decrypt-verify → re-check fingerprints → atomic replace →
+  decrypt-verify again → roll back the original bytes if the final check fails.
+* Restore path: the same pipeline plus a manifest/SHA-256 check on the backup and
+  a fresh safety backup of the save being replaced, so a restore is undoable by
+  restoring that copy. The save's last 8 bytes (outside the crypto region) are
+  kept from the current file when the backup cannot carry them, never zeroed.
 * The GUI shows the required disclaimer in the window title and footer, and
-  defaults to 浠呮紨缁?(dry run).
+  defaults to 仅演练 (dry run).
 
 ## Credits & attribution
 
-* Affix data: 浠佺帇3璇嶆潯瑁呭搴搗2.21.xlsx by 绁炵儲锝?(3DM) / -绁?鐑? (bilibili),
-  thanks QQ@ReIAm, QQ@MasterBayesian, QQ缇?1106302479.
+* Affix data: 仁王3词条装备库v2.21.xlsx by 神烦～ (3DM) / -神-烦- (bilibili),
+  thanks QQ@ReIAm, QQ@MasterBayesian, QQ群 1106302479.
   Non-commercial use with credit; do not re-publish commercially.
 * Save-crypto research: Nioh3-Scroll-Generator (rework of pawREP/
   Nioh-Savedata-Decryption-Tool), including the bundled reference exe and the

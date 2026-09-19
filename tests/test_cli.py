@@ -15,7 +15,10 @@ from nioh3_accessory_editor import savefile as savefile_module
 from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.editor import EditorError, SaveDescriptor
 from nioh3_accessory_editor.records import EMPTY_EFFECT_ID
-from nioh3_accessory_editor.savefile import SAVE_WRITE_REQUIREMENT
+from nioh3_accessory_editor.savefile import (
+    SAVE_WRITE_REQUIREMENT,
+    backup_directory_for,
+)
 from tests import support
 
 
@@ -69,7 +72,7 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 0)
 
     def test_subcommand_help(self) -> None:
-        for command in ("list", "check", "edit", "backup"):
+        for command in ("list", "check", "edit", "backup", "restore"):
             with self.assertRaises(SystemExit) as caught:
                 with contextlib.redirect_stdout(io.StringIO()):
                     cli.main([command, "--help"])
@@ -94,6 +97,116 @@ class ParserTests(unittest.TestCase):
         self.assertFalse(args.dry_run)
         self.assertFalse(args.no_verify)
         self.assertFalse(args.force_while_running)
+
+    def test_restore_defaults_to_listing_only(self) -> None:
+        """``restore`` with no --from must never write anything."""
+        args = cli.build_parser().parse_args(["restore"])
+        self.assertIsNone(args.from_)
+        self.assertFalse(args.list)
+        self.assertFalse(args.dry_run)
+        self.assertFalse(args.force_while_running)
+
+
+class RestoreCommandTests(unittest.TestCase):
+    """``restore`` end to end, with backup discovery on a synthetic save."""
+
+    def setUp(self) -> None:
+        self._temp = tempfile.TemporaryDirectory(prefix="nioh3-cli-restore-")
+        self.addCleanup(self._temp.cleanup)
+        self.root = Path(self._temp.name)
+        self.save_path = (self.root / "saves" / "76561198000000009"
+                          / "SAVEDATA01" / "SAVEDATA.BIN")
+        self.save_path.parent.mkdir(parents=True)
+        self.save_path.write_bytes(b"RNIOH3" * 4)
+        self.state = self.root / "state"
+        self.directory = backup_directory_for(self.save_path, self.state)
+        self.directory.mkdir(parents=True)
+        self.plain = support.build_plain_save()
+        for stamp in ("20260101-010101-aaaaaaaa", "20260202-020202-bbbbbbbb"):
+            (self.directory / f"SAVEDATA-{stamp}-plain.bin").write_bytes(self.plain)
+
+    def _run(self, argv: list[str]) -> tuple[int, str]:
+        buffer = io.StringIO()
+        code = 0
+        with contextlib.redirect_stdout(buffer), \
+                mock.patch.object(cli, "_state_root", return_value=self.state), \
+                mock.patch.object(cli, "_crypto", return_value=mock.Mock()), \
+                mock.patch.object(cli, "_select_save",
+                                  return_value=SaveDescriptor(self.save_path, 9, 1, 8)):
+            try:
+                code = cli.main(argv)
+            except SystemExit as exit_code:  # pragma: no cover - argparse only
+                code = int(exit_code.code or 0)
+        return code, buffer.getvalue()
+
+    def test_listing_shows_both_backups_and_the_directory(self) -> None:
+        code, output = self._run(["restore", "--list"])
+        self.assertEqual(code, 0)
+        self.assertIn("共 2 个备份", output)
+        # Newest first, with a readable time *and* the exact file name (needed to
+        # pass --from with a path).
+        newest = output.index("2026-02-02 02:02:02")
+        older = output.index("2026-01-01 01:01:01")
+        self.assertLess(newest, older)
+        self.assertIn("SAVEDATA-20260202-020202-bbbbbbbb-plain.bin", output)
+        self.assertIn(str(self.directory), output)
+
+    def test_bare_restore_lists_without_writing(self) -> None:
+        before = self.save_path.read_bytes()
+        code, output = self._run(["restore"])
+        self.assertEqual(code, 0)
+        self.assertIn("未指定 --from", output)
+        self.assertEqual(self.save_path.read_bytes(), before)
+
+    def test_from_index_restores_and_reports_the_backup(self) -> None:
+        result = {"dry_run": False, "new_sha256": "ab" * 32,
+                  "safety_backup_dir": str(self.directory),
+                  "matches_original_save": True}
+        with mock.patch.object(cli, "restore_backup",
+                               return_value=result) as restore, \
+                mock.patch.object(cli, "running_game_processes", return_value=()):
+            code, output = self._run(["restore", "--from", "1"])
+        self.assertEqual(code, 0)
+        entry = restore.call_args.args[1]
+        self.assertIn("20260101-010101", entry.plain_path.name)
+        self.assertIn("还原后的文件与备份时记录的原文件 SHA-256 完全一致", output)
+        # A real restore states the usage notice and the write requirement.
+        self.assertIn("仅供测试学习用", output)
+        self.assertIn("标题界面", output)
+        self.assertIn("还原前的存档已另行备份到", output)
+
+    def test_latest_picks_the_newest_backup(self) -> None:
+        with mock.patch.object(cli, "restore_backup",
+                               return_value={"dry_run": True}) as restore, \
+                mock.patch.object(cli, "running_game_processes", return_value=()):
+            self._run(["restore", "--from", "latest", "--dry-run"])
+        self.assertIn("20260202-020202", restore.call_args.args[1].plain_path.name)
+
+    def test_out_of_range_index_fails_loudly(self) -> None:
+        code, _ = self._run(["restore", "--from", "7"])
+        self.assertEqual(code, 1)
+
+    def test_missing_path_fails_loudly(self) -> None:
+        code, _ = self._run(["restore", "--from", str(self.root / "nope.bin")])
+        self.assertEqual(code, 1)
+
+    def test_explicit_path_outside_the_backup_folder_is_accepted(self) -> None:
+        loose = self.root / "loose-plain.bin"
+        loose.write_bytes(self.plain)
+        with mock.patch.object(cli, "restore_backup",
+                               return_value={"dry_run": True}) as restore, \
+                mock.patch.object(cli, "running_game_processes", return_value=()):
+            code, _ = self._run(["restore", "--from", str(loose), "--dry-run"])
+        self.assertEqual(code, 0)
+        self.assertEqual(restore.call_args.args[1].plain_path, loose)
+
+    def test_no_backups_at_all_reports_where_to_look(self) -> None:
+        for path in self.directory.glob("*.bin"):
+            path.unlink()
+        code, output = self._run(["restore", "--list"])
+        self.assertEqual(code, 0)
+        self.assertIn("未发现备份", output)
+        self.assertIn("backup", output)
 
 
 class CryptoBackendTests(unittest.TestCase):

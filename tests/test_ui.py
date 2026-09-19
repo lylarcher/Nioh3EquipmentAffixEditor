@@ -15,6 +15,7 @@ from nioh3_accessory_editor import ui
 from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.editor import SaveDescriptor
 from nioh3_accessory_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID
+from nioh3_accessory_editor import savefile
 from nioh3_accessory_editor.version import version_info
 from tests import support
 
@@ -351,6 +352,145 @@ class WriteFlowTests(UiTestCase):
         with mock.patch.object(ui.messagebox, "showwarning") as warned:
             self.app.backup_save()
         warned.assert_called_once()
+
+    # --------------------------------------------------------------- restore
+
+    def _backup_entry(self):
+        return savefile.BackupEntry(
+            plain_path=self.root / "SAVEDATA-20260101-010101-aaaaaaaa-plain.bin",
+            created_at="20260101-010101-aaaaaaaa",
+            plain_size=0x9001B0, plain_sha256="", original_save_sha256="",
+        )
+
+    def _select_realistic(self) -> None:
+        """Select a save whose path carries account/slot, as discovery gives it."""
+        self.app._populate_saves((SaveDescriptor(
+            self.root / "76561198000000001" / "SAVEDATA02" / "SAVEDATA.BIN",
+            76561198000000001, 2, len(self.plan)),))
+        self.app._populate_accessories(
+            (self.plan, ui.list_accessories(self.plan), True))
+        self.app.tree.selection_set("3")
+        self.app._on_accessory_selected()
+
+    def test_restore_requires_a_selected_save(self) -> None:
+        with mock.patch.object(ui.messagebox, "showwarning") as warned, \
+                mock.patch.object(ui, "list_backups") as listed:
+            self.app.restore_save()
+        warned.assert_called_once()
+        listed.assert_not_called()
+
+    def test_restore_explains_when_there_is_nothing_to_restore(self) -> None:
+        self._select_realistic()
+        with mock.patch.object(ui, "list_backups", return_value=()), \
+                mock.patch.object(ui.messagebox, "showinfo") as informed, \
+                mock.patch.object(ui.messagebox, "askyesno") as asked:
+            self.app.restore_save()
+        self.assertIn("没有可用备份", informed.call_args[0][0])
+        self.assertIn("_nioh3_accessory_backup", informed.call_args[0][1])
+        self.assertIn("account-76561198000000001", informed.call_args[0][1])
+        self.assertIn("slot-02", informed.call_args[0][1])
+        asked.assert_not_called()
+
+    def test_restore_explains_an_unlocatable_save_path(self) -> None:
+        """A save copied to an arbitrary folder must not crash the window."""
+        self._select()  # <temp>/SAVEDATA.BIN: no account/slot in the path
+        with mock.patch.object(ui.messagebox, "showinfo") as informed:
+            self.app.restore_save()
+        self.assertIn("无法定位备份目录", informed.call_args[0][0])
+
+    def test_restore_cancelled_by_the_picker_writes_nothing(self) -> None:
+        self._select()
+        with mock.patch.object(ui, "list_backups", return_value=(self._backup_entry(),)), \
+                mock.patch.object(self.app, "_choose_backup_dialog", return_value=None), \
+                mock.patch.object(ui, "restore_backup") as restored:
+            self.app.restore_save()
+        restored.assert_not_called()
+
+    def test_restore_asks_for_confirmation_and_passes_the_entry(self) -> None:
+        self._select()
+        entry = self._backup_entry()
+        captured: dict[str, object] = {}
+
+        def fake_restore(save, chosen, **kwargs):
+            captured.update(kwargs)
+            captured["entry"] = chosen
+            return {"dry_run": False, "new_sha256": "CD" * 32,
+                    "restored_from": str(chosen.plain_path),
+                    "safety_backup_dir": str(self.root / "safety"),
+                    "matches_original_save": True}
+
+        with mock.patch.object(ui, "list_backups", return_value=(entry,)), \
+                mock.patch.object(self.app, "_choose_backup_dialog", return_value=entry), \
+                mock.patch.object(ui, "running_game_processes", return_value=()), \
+                mock.patch.object(ui.messagebox, "askyesno", return_value=True) as asked, \
+                mock.patch.object(ui.messagebox, "showinfo") as informed, \
+                mock.patch.object(ui, "restore_backup", side_effect=fake_restore), \
+                self._run_worker_synchronously():
+            self.app.restore_save()
+
+        self.assertIs(captured["entry"], entry)
+        self.assertEqual(captured["allow_game_running"], True)
+        self.assertEqual(captured["state_root"], self.app.state_root)
+        confirmation = asked.call_args[0][1]
+        self.assertIn("20260101-010101", confirmation)
+        self.assertIn("标题界面", confirmation)
+        self.assertIn("仅供测试学习用", confirmation)
+        self.assertIn("完全一致", informed.call_args[0][1])
+        self.assertIn("CD", self.app.status_var.get())
+
+    def test_restore_aborts_when_the_user_declines(self) -> None:
+        self._select()
+        entry = self._backup_entry()
+        with mock.patch.object(ui, "list_backups", return_value=(entry,)), \
+                mock.patch.object(self.app, "_choose_backup_dialog", return_value=entry), \
+                mock.patch.object(ui.messagebox, "askyesno", return_value=False), \
+                mock.patch.object(ui, "restore_backup") as restored:
+            self.app.restore_save()
+        restored.assert_not_called()
+
+    def test_restore_warns_about_a_running_game(self) -> None:
+        self._select()
+        entry = self._backup_entry()
+        with mock.patch.object(ui, "list_backups", return_value=(entry,)), \
+                mock.patch.object(self.app, "_choose_backup_dialog", return_value=entry), \
+                mock.patch.object(ui, "running_game_processes",
+                                  return_value=("Nioh3.exe",)), \
+                mock.patch.object(ui.messagebox, "askyesno", return_value=False) as asked:
+            self.app.restore_save()
+        self.assertIn("Nioh3.exe", asked.call_args[0][1])
+
+    def test_restore_invalidates_loaded_data(self) -> None:
+        """After restoring, the in-memory copy is stale and must not be written."""
+        self._select()
+        self.assertIsNotNone(self.app.decrypted)
+        entry = self._backup_entry()
+        with mock.patch.object(ui, "list_backups", return_value=(entry,)), \
+                mock.patch.object(self.app, "_choose_backup_dialog", return_value=entry), \
+                mock.patch.object(ui, "running_game_processes", return_value=()), \
+                mock.patch.object(ui.messagebox, "askyesno", return_value=True), \
+                mock.patch.object(ui.messagebox, "showinfo"), \
+                mock.patch.object(ui, "restore_backup", return_value={
+                    "dry_run": False, "new_sha256": "EF" * 32,
+                    "restored_from": "x", "safety_backup_dir": "y",
+                    "matches_original_save": False,
+                }), self._run_worker_synchronously():
+            self.app.restore_save()
+        self.assertIsNone(self.app.decrypted)
+        self.assertEqual(self.app.tree.get_children(), ())
+
+    def test_restore_dry_run_does_not_invalidate(self) -> None:
+        self._select()
+        entry = self._backup_entry()
+        with mock.patch.object(ui, "list_backups", return_value=(entry,)), \
+                mock.patch.object(self.app, "_choose_backup_dialog", return_value=entry), \
+                mock.patch.object(ui, "running_game_processes", return_value=()), \
+                mock.patch.object(ui.messagebox, "askyesno", return_value=True), \
+                mock.patch.object(ui.messagebox, "showinfo"), \
+                mock.patch.object(ui, "restore_backup",
+                                  return_value={"dry_run": True}), \
+                self._run_worker_synchronously():
+            self.app.restore_save()
+        self.assertIsNotNone(self.app.decrypted)
 
 
 @unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")

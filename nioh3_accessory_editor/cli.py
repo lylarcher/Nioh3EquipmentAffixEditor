@@ -26,15 +26,19 @@ from .editor import (
     discover_saves,
     list_accessories,
     open_save,
+    restore_backup,
     save_checksum_is_valid,
 )
 from .records import RecordError
 from .savefile import (
     SAVE_WRITE_REQUIREMENT,
+    BackupEntry,
     SaveCrypto,
     SaveError,
+    backup_directory_for,
     create_backup,
     default_crypto_tool,
+    list_backups,
     running_game_processes,
     save_root_directory,
 )
@@ -45,6 +49,9 @@ DISCLAIMER = (
     "仁王3 为单机/纯 PVE 联机游戏，本工具不会影响其他玩家。\n"
     "使用前请备份存档；作者对存档损坏不承担任何责任。"
 )
+
+#: How this program is invoked (source: ``python launch_editor.py``; frozen: exe).
+PROG = "launch_editor.py"
 
 
 def _crypto(args: argparse.Namespace) -> SaveCrypto:
@@ -224,7 +231,121 @@ def cmd_backup(args: argparse.Namespace) -> int:
     save = _select_save(args)
     backup_dir = create_backup(save.path, state_root=_state_root(args), crypto=crypto)
     print(f"已备份到: {backup_dir}")
+    print(f"内容    : 解密后的明文副本（SAVEDATA-*-plain.bin）与 backup-manifest.json")
+    print(f"恢复    : {PROG} restore --list 查看历史备份，"
+          f"{PROG} restore --from latest 可还原")
     return 0
+
+
+def _format_backup(index: int, entry: BackupEntry) -> str:
+    marker = "" if entry.integrity_ok else "  [校验不符，已拒绝用于恢复]"
+    return f"  [{index}] {entry.when}  {entry.plain_size:#x} 字节  {entry.plain_path.name}{marker}"
+
+
+def cmd_restore(args: argparse.Namespace) -> int:
+    """List or restore plaintext backups for the selected save."""
+    crypto = _crypto(args)
+    save = _select_save(args)
+    state_root = _state_root(args)
+    entries = list_backups(save.path, state_root)
+    directory = backup_directory_for(save.path, state_root)
+
+    if args.list or args.from_ is None:
+        print(f"存档      : {save.display}")
+        print(f"备份目录  : {directory}")
+        if not entries:
+            print("未发现备份。写入存档前会自动备份，也可以先用 backup 子命令手动备份。")
+            print("提示：备份目录可用 config/editor.json 的 backup_root 指定。")
+            return 0
+        print(f"共 {len(entries)} 个备份（新→旧）：")
+        for index, entry in enumerate(entries):
+            print(_format_backup(index, entry))
+        if args.list:
+            print(f"\n恢复指定备份：{PROG} restore --from <序号|latest|路径>")
+            return 0
+        if args.from_ is None and not args.list:
+            print(f"\n未指定 --from，仅列出备份（未做任何修改）。")
+            return 0
+
+    entry = _pick_backup(args.from_, entries, directory)
+    print(f"存档      : {save.display}")
+    print(f"恢复来源  : {entry.plain_path}")
+    print(f"备份时间  : {entry.when}")
+    print(f"备份 SHA-256: {entry.plain_sha256}")
+    if entry.account_id is not None or entry.slot_index is not None:
+        print(f"备份来源  : 账号 {entry.account_id} / 栏位 "
+              f"{'--' if entry.slot_index is None else format(entry.slot_index, '02d')}")
+    if entry.slot_index is not None and entry.slot_index != save.slot_index:
+        print("⚠ 该备份来自其它栏位——请确认这是你想要的内容。")
+
+    print("\n" + SAVE_WRITE_REQUIREMENT)
+    running = running_game_processes()
+    if running:
+        print(f"当前状态：检测到 {'、'.join(running)} 正在运行——"
+              f"{'已强制继续（--force-while-running）' if args.force_while_running else '将被拒绝'}。")
+    else:
+        print("当前状态：未检测到游戏进程。")
+    if args.dry_run:
+        print("本次为演练模式（--dry-run），不会写入存档。")
+    else:
+        print("\n" + DISCLAIMER)
+
+    result = restore_backup(
+        save,
+        entry,
+        crypto=crypto,
+        state_root=state_root,
+        dry_run=args.dry_run,
+        verify=not args.no_verify,
+        allow_game_running=args.force_while_running,
+    )
+    print("\n" + json.dumps(result, ensure_ascii=False, indent=2))
+    if not result["dry_run"]:
+        print(f"\n已还原。还原前的存档已另行备份到：\n{result['safety_backup_dir']}")
+        matches = result.get("matches_original_save")
+        if matches is True:
+            print("校验：还原后的文件与备份时记录的原文件 SHA-256 完全一致。")
+        elif matches is False:
+            source = result.get("tail_source")
+            if source == "on-disk":
+                print("说明：内容已按备份还原；文件 SHA-256 与备份时不同，"
+                      "仅因存档末尾 8 字节不在备份范围内（参考解密工具会将其清零），"
+                      "已沿用当前文件的值。")
+            else:
+                print("注意：还原后的 SHA-256 与备份时记录的原文件不一致。")
+        for problem in result.get("source_mismatch") or ():
+            print(f"⚠ {problem}")
+        print("请在游戏中加载该存档确认。")
+    return 0
+
+
+def _pick_backup(value: str, entries: tuple[BackupEntry, ...],
+                 directory: Path) -> BackupEntry:
+    """Resolve ``--from``: latest | index | a path to a *-plain.bin file."""
+    if not entries and value != "latest":
+        raise EditorError(f"备份目录中没有可用备份：{directory}")
+    if value == "latest":
+        if not entries:
+            raise EditorError(f"备份目录中没有可用备份：{directory}")
+        return entries[0]
+    if value.isdigit():
+        index = int(value)
+        if not 0 <= index < len(entries):
+            raise EditorError(f"备份序号 {index} 超出范围（共 {len(entries)} 个）")
+        return entries[index]
+    path = Path(value).expanduser()
+    if not path.is_file():
+        raise EditorError(f"找不到备份文件：{path}")
+    for entry in entries:
+        if entry.plain_path == path:
+            return entry
+    # A file outside the backup directory: hash it and let the reader validate.
+    return BackupEntry(
+        plain_path=path,
+        created_at=path.stem,
+        plain_size=path.stat().st_size,
+        plain_sha256="",
+    )
 
 
 class _VersionAction(argparse.Action):
@@ -327,6 +448,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser_backup = sub.add_parser("backup", help="备份存档（解密明文副本）")
     parser_backup.set_defaults(func=cmd_backup)
+
+    parser_restore = sub.add_parser(
+        "restore", help="列出备份并还原（备份是解密明文，会重新加密写回）")
+    parser_restore.add_argument("--list", action="store_true",
+                                help="只列出该存档的历史备份")
+    parser_restore.add_argument("--from", dest="from_", default=None,
+                                metavar="序号|latest|路径",
+                                help="还原哪一个备份（默认只列出，不还原）")
+    parser_restore.add_argument("--dry-run", action="store_true",
+                                help="仅演练：检查并校验，不写入")
+    parser_restore.add_argument("--no-verify", action="store_true",
+                                help="跳过写入前后的解密校验（更快，但风险更高）")
+    parser_restore.add_argument("--force-while-running", action="store_true",
+                                help="即使检测到游戏正在运行也继续写入（不推荐）")
+    parser_restore.set_defaults(func=cmd_restore)
 
     parser_version = sub.add_parser("version", help="显示版本与构建信息")
     parser_version.add_argument("--json", action="store_true",

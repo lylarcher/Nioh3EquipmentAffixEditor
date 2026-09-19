@@ -24,12 +24,16 @@ from .affixdb import AffixDb
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .savefile import (
+    UNCOVERED_TAIL_BYTES,
+    BackupEntry,
     SaveCrypto,
     account_id_from_save_path,
     capture_quiescent_save_fingerprints,
     create_backup,
     decrypt_save_to_bytes,
     discover_save_paths,
+    list_backups,
+    read_backup_plaintext,
     require_game_not_running,
     save_slot_index_from_path,
     write_encrypted_save,
@@ -44,8 +48,10 @@ __all__ = [
     "commit_save",
     "discover_saves",
     "list_accessories",
+    "list_backups",
     "open_save",
     "plan_edits",
+    "restore_backup",
 ]
 
 
@@ -340,4 +346,105 @@ def commit_save(
         new_sha256=new_sha256,
         verified=bool(verify),
     )
+    return report
+
+
+def restore_backup(
+    save: SaveDescriptor,
+    entry: BackupEntry,
+    *,
+    crypto: SaveCrypto,
+    state_root: Path,
+    dry_run: bool = False,
+    verify: bool = True,
+    allow_game_running: bool = False,
+) -> dict[str, object]:
+    """Put a plaintext backup back into the save file (re-encrypted).
+
+    Backups hold *decrypted* bytes, so restoring is not a file copy: the bytes
+    are re-encrypted with the same routine an edit uses, which also means the
+    write inherits every safety property (quiescence re-check, staged
+    verification, atomic durable replace, rollback on failure) and the same
+    "close the game first" gate.
+
+    The current save is backed up **before** it is overwritten, so a restore is
+    itself undoable.  ``dry_run`` performs every check and writes nothing.
+
+    Trailing bytes (:data:`savefile.UNCOVERED_TAIL_BYTES`): the reference crypto
+    tool zeroes them in *both* directions, so a backup made with it cannot carry
+    a real tail.  When the backup does hold a non-zero tail (pure-Python backend,
+    or a hand-made backup) that value is written back; otherwise the on-disk tail
+    is kept, which never discards data we actually have.  ``tail_source`` in the
+    report states which happened, and ``matches_original_save`` remains the exact
+    verdict on the resulting file.
+
+    ``source_mismatch`` lists any disagreement between the backup's recorded
+    account/slot and the save being written (possible only when the caller names a
+    backup file explicitly).  The restore still proceeds -- the user asked for that
+    file and the safety backup keeps it reversible -- but the caller is expected to
+    surface the warning.
+    """
+    plain = read_backup_plaintext(entry)
+    running = require_game_not_running(allow_running=allow_game_running)
+    expected = capture_quiescent_save_fingerprints(save.path)
+
+    backed_up_tail = plain[-UNCOVERED_TAIL_BYTES:]
+    tail = backed_up_tail if any(backed_up_tail) else None
+
+    # A backup from another account/slot (possible only via an explicit path:
+    # the listing is per save) is very likely a mix-up, so say so loudly.
+    mismatch: list[str] = []
+    if entry.account_id is not None:
+        try:
+            current_account = account_id_from_save_path(save.path)
+        except ValueError:  # pragma: no cover - path shape already validated
+            current_account = None
+        if current_account is not None and entry.account_id != current_account:
+            mismatch.append(f"备份属于账号 {entry.account_id}，当前存档是账号 "
+                            f"{current_account}")
+    if entry.slot_index is not None and entry.slot_index != save.slot_index:
+        mismatch.append(f"备份来自栏位 {entry.slot_index:02d}，当前存档是栏位 "
+                        f"{save.slot_index:02d}")
+
+    report: dict[str, object] = {
+        "dry_run": bool(dry_run),
+        "path": str(save.path),
+        "restored_from": str(entry.plain_path),
+        "backup_created_at": entry.created_at,
+        "plain_sha256": entry.plain_sha256,
+        "game_processes_running": list(running),
+        "verified": False,
+        "safety_backup_dir": None,
+        "new_sha256": None,
+        "matches_original_save": None,
+        "tail_source": "backup" if tail is not None else "on-disk",
+        "source_mismatch": mismatch,
+    }
+    if dry_run:
+        return report
+
+    # Make the restore reversible: keep what is on disk right now.
+    safety = create_backup(
+        save.path,
+        state_root=state_root,
+        crypto=crypto,
+        expected_fingerprints=expected,
+    )
+    new_sha256 = write_encrypted_save(
+        save.path,
+        plain,
+        crypto=crypto,
+        expected_fingerprints=expected,
+        verify=verify,
+        # ``None`` keeps the current on-disk tail; the backup's tail is written
+        # explicitly when it carries one, because encryption zeroes it.
+        tail=tail,
+    )
+    report.update(
+        safety_backup_dir=str(safety),
+        new_sha256=new_sha256,
+        verified=bool(verify),
+    )
+    if entry.original_save_sha256:
+        report["matches_original_save"] = new_sha256 == entry.original_save_sha256
     return report
