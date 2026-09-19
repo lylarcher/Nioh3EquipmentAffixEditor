@@ -15,6 +15,7 @@ from nioh3_accessory_editor import ui
 from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.editor import SaveDescriptor
 from nioh3_accessory_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID
+from nioh3_accessory_editor.version import version_info
 from tests import support
 
 try:  # pragma: no cover - environment dependent
@@ -86,6 +87,27 @@ class ConstructionTests(UiTestCase):
         self.assertIsNone(self.app.decrypted)
         self.assertIsNone(self.app.selected_accessory)
         self.assertEqual(self.app.accessory_views, [])
+
+    def test_title_and_footer_report_the_build(self) -> None:
+        info = version_info()
+        self.assertIn(f"v{info.version}", self.app.title())
+        footer = self.app.version_var.get()
+        self.assertIn(f"commit {info.commit}", footer)
+        self.assertIn(f"来源 {info.built_from}", footer)
+        self.assertIn(f"加密组件 {info.crypto_exe}", footer)
+        self.assertIn(info.language, footer)
+        self.assertIn("构建时间", footer)
+
+    def test_version_button_shows_the_full_banner(self) -> None:
+        info = version_info()
+        with mock.patch.object(ui.messagebox, "showinfo") as informed:
+            self.app.show_version_info()
+        informed.assert_called_once()
+        title, body = informed.call_args[0]
+        self.assertEqual(title, "版本信息")
+        for expected in (info.commit, info.built_from, info.crypto_exe,
+                         info.language, "完整 commit", "分支"):
+            self.assertIn(expected, body)
 
 
 class SelectionTests(UiTestCase):

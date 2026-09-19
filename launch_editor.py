@@ -5,6 +5,7 @@
     python launch_editor.py check           -> CLI: read-only integrity check
     python launch_editor.py edit --help     -> CLI: edit a save
     python launch_editor.py backup          -> CLI: plaintext backup
+    python launch_editor.py version         -> CLI: build/version information
 """
 
 from __future__ import annotations
@@ -17,7 +18,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from nioh3_accessory_editor import cli, ui
 
 #: Any of these as the first argument means "run the CLI, not the GUI".
-CLI_COMMANDS = frozenset({"list", "check", "edit", "backup", "-h", "--help", "--version"})
+#: Kept in sync with the CLI subcommands by tests/test_entrypoints.py.
+CLI_COMMANDS = frozenset(
+    {"list", "check", "edit", "backup", "version", "-h", "--help", "--version"}
+)
 
 
 def main(argv: list[str] | None = None) -> int:

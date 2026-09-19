@@ -16,6 +16,7 @@ from nioh3_accessory_editor import cli, ui
 class LaunchEditorTests(unittest.TestCase):
     def test_cli_commands_route_to_the_cli(self) -> None:
         for argv in (["list"], ["check"], ["edit", "--help"], ["backup"],
+                     ["version"], ["version", "--json"],
                      ["-h"], ["--help"], ["--version"]):
             with mock.patch.object(cli, "main", return_value=7) as cli_main, \
                     mock.patch.object(ui, "main") as gui_main:

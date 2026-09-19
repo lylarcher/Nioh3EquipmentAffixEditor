@@ -31,6 +31,7 @@ from .editor import (
 )
 from .records import EFFECT_COUNT, EMPTY_EFFECT_ID, EffectSlot
 from .savefile import SaveCrypto, create_backup, running_game_processes
+from .version import UNKNOWN, version_banner, version_info
 
 DISCLAIMER = (
     "仅供测试学习用，不要用于联机影响游戏平衡。\n"
@@ -50,7 +51,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def __init__(self) -> None:
         super().__init__()
-        self.title(TITLE)
+        self.title(f"{TITLE} · v{version_info().version}")
         self.geometry("1000x700")
         self.minsize(880, 620)
 
@@ -146,8 +147,42 @@ class AccessoryEditorApp(tk.Tk):
         ttk.Button(bottom, text="写入存档", command=self.write_save).pack(side=tk.LEFT, padx=2)
 
         ttk.Separator(self).pack(fill=tk.X)
+
+        footer = ttk.Frame(self, padding=(8, 2))
+        footer.pack(fill=tk.X)
+        self.version_var = tk.StringVar(value=self._version_text())
+        ttk.Label(footer, textvariable=self.version_var, foreground="#555555",
+                  justify=tk.LEFT, font=("Consolas", 8)).pack(side=tk.LEFT)
+        ttk.Button(footer, text="版本信息",
+                   command=self.show_version_info).pack(side=tk.RIGHT, padx=4)
+
         ttk.Label(self, text=DISCLAIMER, foreground="#b30000",
                   justify=tk.LEFT).pack(fill=tk.X, padx=8, pady=4)
+
+    # ------------------------------------------------------------- version
+
+    @staticmethod
+    def _version_text() -> str:
+        """Four required facts: commit tail, source, build time, language."""
+        info = version_info()
+        built = info.built_at if info.built_at != UNKNOWN else "未构建（源码运行）"
+        return (
+            f"版本 v{info.version} · commit {info.commit}{info.dirty_suffix}\n"
+            f"来源 {info.built_from}\n"
+            f"加密组件 {info.crypto_exe}\n"
+            f"构建时间 {built} · 语言 {info.language}"
+        )
+
+    def show_version_info(self) -> None:
+        info = version_info()
+        details = [version_banner(info), ""]
+        if info.commit_full not in ("", UNKNOWN):
+            details.append(f"完整 commit: {info.commit_full}")
+        details.append(f"分支       : {info.branch}")
+        if info.crypto_exe_sha256 not in ("", UNKNOWN):
+            details.append(f"组件 SHA-256: {info.crypto_exe_sha256}")
+        details.append(f"信息来源   : {info.source}")
+        messagebox.showinfo("版本信息", "\n".join(details))
 
     # ------------------------------------------------------------- helpers
 

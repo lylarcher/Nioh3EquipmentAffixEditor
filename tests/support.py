@@ -166,3 +166,50 @@ def make_fake_save_tree(root: Path, *, account: int = 76561198000000000, slots: 
     system.mkdir(parents=True, exist_ok=True)
     (system / "SAVEDATA.BIN").write_bytes(b"system-placeholder")
     return created
+
+
+# --------------------------------------------------------------------------
+# Build/version helpers
+# --------------------------------------------------------------------------
+
+def load_tool_module(name: str):
+    """Import a module from ``tools/`` by name (that directory is not a package)."""
+    import importlib.util
+
+    path = PROJECT_ROOT / "tools" / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"_tool_{name}", path)
+    if spec is None or spec.loader is None:  # pragma: no cover - defensive
+        raise ImportError(f"cannot load tool module: {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+BUILD_INFO_MODULE_NAME = "nioh3_accessory_editor._buildinfo"
+
+
+def install_build_info_module(source: str):
+    """Install ``source`` as the package's ``_buildinfo`` module and return it.
+
+    Lets tests exercise the frozen-build path without running a real build.
+    """
+    import importlib.util
+
+    module = type(sys)(BUILD_INFO_MODULE_NAME)
+    module.__file__ = "<generated _buildinfo for tests>"
+    exec(compile(source, module.__file__, "exec"), module.__dict__)
+    sys.modules[BUILD_INFO_MODULE_NAME] = module
+
+    package = sys.modules.get("nioh3_accessory_editor")
+    if package is not None:
+        setattr(package, "_buildinfo", module)
+    return module
+
+
+def forget_build_info_module() -> None:
+    """Remove any injected ``_buildinfo`` so tests stay independent."""
+    sys.modules.pop(BUILD_INFO_MODULE_NAME, None)
+    package = sys.modules.get("nioh3_accessory_editor")
+    if package is not None and hasattr(package, "_buildinfo"):
+        delattr(package, "_buildinfo")

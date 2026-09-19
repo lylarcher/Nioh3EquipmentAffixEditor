@@ -32,6 +32,7 @@ from .savefile import (
     create_backup,
     default_crypto_tool,
 )
+from .version import version_banner, version_info
 
 DISCLAIMER = (
     "本工具仅供测试学习用，请勿用于联机环境或影响游戏平衡。\n"
@@ -185,11 +186,43 @@ def cmd_backup(args: argparse.Namespace) -> int:
     return 0
 
 
+class _VersionAction(argparse.Action):
+    """Print the version banner verbatim.
+
+    ``argparse``'s built-in ``version`` action routes the text through the help
+    formatter, which re-wraps it into a paragraph and destroys the line breaks
+    of the multi-line banner.  Printing directly keeps the four facts readable.
+    """
+
+    def __init__(self, option_strings, dest, **kwargs) -> None:
+        super().__init__(option_strings, dest, nargs=0, **kwargs)
+
+    def __call__(self, parser, namespace, values, option_string=None) -> None:
+        print(version_banner())
+        parser.exit(0)
+
+
+def cmd_version(args: argparse.Namespace) -> int:
+    """Print the build/version block (also available as ``--version``)."""
+    info = version_info()
+    print(version_banner(info))
+    if args.json:
+        print("\n" + json.dumps(info.as_dict(), ensure_ascii=False, indent=2))
+    crypto = _crypto(args)
+    if crypto.executable is None:
+        print("\n当前加密后端: 纯 Python（内置实现）")
+    else:
+        print(f"\n当前加密后端: 外部 exe ({crypto.executable})")
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="launch_editor.py",
         description="仁王3 饰品词条修改器（仅供测试学习用）",
     )
+    parser.add_argument("--version", action=_VersionAction,
+                        help="显示版本信息（commit 后8位、来源、构建时间、语言）")
     parser.add_argument("--python-crypto", action="store_true",
                         help="使用纯 Python 加解密后端（较慢，无需外部 exe）")
     parser.add_argument("--save-index", type=int, default=None,
@@ -218,6 +251,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser_backup = sub.add_parser("backup", help="备份存档（解密明文副本）")
     parser_backup.set_defaults(func=cmd_backup)
+
+    parser_version = sub.add_parser("version", help="显示版本与构建信息")
+    parser_version.add_argument("--json", action="store_true",
+                                help="同时输出 JSON 格式的版本信息")
+    parser_version.set_defaults(func=cmd_version)
     return parser
 
 

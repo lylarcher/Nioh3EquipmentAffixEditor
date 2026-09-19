@@ -26,6 +26,8 @@ subprocess-isolated crypto, quiescence fingerprinting, atomic durable writes).
   bit-exact pure-Python port of the custom Nioh AES as a zero-dependency
   fallback (`--python-crypto`, ~32 s per pass).
 * **GUI (Tkinter) and CLI** — no third-party dependencies.
+* **Stamped builds** — `build.ps1` bakes the commit tail, source path, build
+  time and language into the app, so every copy can say exactly what it is.
 * **Verified write pipeline** — quiescence double-read, game-process gate,
   checksum recompute, plaintext backup + manifest, staged decryption check
   before install, post-write check with automatic rollback, and a durable
@@ -57,6 +59,10 @@ python launch_editor.py edit --record 3 --edit 1:0x0B32:200 --dry-run
 
 # CLI: plaintext backup only
 python launch_editor.py backup
+
+# CLI: version/build information (commit tail, source, build time, language)
+python launch_editor.py --version
+python launch_editor.py version --json
 ```
 
 `--python-crypto`, `--save-index N` and `--account ID` are global options and
@@ -70,10 +76,70 @@ running (unless overridden), an affix is outside the legal table, the target
 record does not exist in the save, or the staged re-encryption does not decrypt
 back to the patched bytes.
 
+## Build
+
+```powershell
+# Release: stamp build identity, run the tests, stage dist/, zip it
+powershell -File .\build.ps1
+
+# Only refresh the build identity of the working tree (no dist, no zip)
+powershell -File .\build.ps1 -Configuration Debug -SkipTests
+
+# Faster iteration / custom interpreter
+powershell -File .\build.ps1 -SkipTests -SkipZip -Python D:\Python310\python.exe
+```
+
+`build.ps1` resolves the interpreter, reads the git facts, generates the build
+identity, runs the suite, stages a runnable tree under `dist\`, and smoke-tests
+that staged copy (it must report the frozen commit, not whatever git says now).
+Parameters: `-Python`, `-Configuration Release|Debug`, `-OutputDirectory`,
+`-SkipTests`, `-SkipZip`, `-PureCryptoTests`, `-Quiet`.
+
+> `build.ps1` is saved as UTF-8 **with BOM** on purpose: Windows PowerShell
+> reads a BOM-less script with the ANSI code page (GBK on zh-CN), which would
+> corrupt its Chinese messages and break parsing. Keep the BOM when editing.
+
+### Version information
+
+Every version surface reports the same four facts:
+
+```text
+Nioh3AccessoryEditor v0.1.0
+commit    : 34cca8de (工作区有未提交改动)
+来源      : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
+加密组件  : D:\...\bin\Nioh_Savefile_decrypt.exe
+构建时间  : 2026-09-19T11:01:52+08:00
+语言      : CPython 3.10.10 (仅标准库 / stdlib only, 含 tkinter GUI)
+```
+
+| Fact | Meaning |
+|---|---|
+| `commit` | the **last 8 characters** of the git commit id (project convention, not the usual prefix) |
+| `来源` / `加密组件` | where the build came from: the project root plus the crypto executable it uses |
+| `构建时间` | local build time, ISO-8601 with UTC offset |
+| `语言` | language/runtime the build targets (CPython + stdlib only) |
+
+Where it shows up:
+
+* `python launch_editor.py --version` (or the `version` subcommand; add `--json`
+  for machine-readable output),
+* the GUI footer, plus the **版本信息** button for the full banner (full commit,
+  branch, component SHA-256, information source),
+* `BUILD-INFO.txt` / `BUILD-INFO.json` in the project root and inside the
+  staged `dist\` tree, and the build log itself.
+
+`tools/make_build_info.py` generates `nioh3_accessory_editor/_buildinfo.py`
+(frozen facts, imported at runtime), `BUILD-INFO.json` and `BUILD-INFO.txt`. It
+verifies its own output by re-importing the generated module and comparing every
+field, and it fails the build if the short commit is not exactly 8 characters.
+The generated module, both `BUILD-INFO.*` files and `dist/` are gitignored
+build artifacts: a fresh checkout reports live git information
+(`信息来源: git`) with `构建时间: 未构建（源码运行）` until the next build.
+
 ## Tests
 
 ```powershell
-# Whole suite (211 tests, ~100 s; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (278 tests, ~2 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter

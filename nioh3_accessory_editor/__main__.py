@@ -10,7 +10,9 @@ import sys
 
 from . import cli, ui
 
-CLI_COMMANDS = frozenset({"list", "check", "edit", "backup", "-h", "--help", "--version"})
+CLI_COMMANDS = frozenset(
+    {"list", "check", "edit", "backup", "version", "-h", "--help", "--version"}
+)
 
 
 def main(argv: list[str] | None = None) -> int:
