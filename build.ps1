@@ -105,7 +105,8 @@ $stageItems = @(
     'bin',
     'data',
     'tests',
-    'tools'
+    'tools',
+    'third_party'
 )
 $excludeDirectories = @('.git', '__pycache__', 'dist', '_nioh3_accessory_backup', 'state')
 $excludeFilePatterns = @('*.pyc', '*.pyo', '*.tmp', '*.zip')

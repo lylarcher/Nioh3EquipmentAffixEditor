@@ -26,8 +26,30 @@ from nioh3_accessory_editor.affixdb import AffixEntry, save_catalog
 
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
-DEFAULT_SOURCE = Path(r"D:\AIWorkspace\DSHWorkSpcae\Nioh3Trainer\仁王3词条装备库v2.21.xlsx")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+#: Bundled copy of the source workbook (see third_party/source-data/README.md).
+#: The legacy location is kept as a fallback so an older checkout layout still
+#: works; the bundled copy wins whenever it exists.
+DEFAULT_SOURCE = (
+    PROJECT_ROOT / "third_party" / "source-data" / "仁王3词条装备库v2.21.xlsx"
+)
+LEGACY_SOURCES = (
+    Path(r"D:\AIWorkspace\DSHWorkSpcae\Nioh3Trainer\仁王3词条装备库v2.21.xlsx"),
+)
 TARGET_SHEET = "饰品词条"
+
+
+def resolve_source(explicit: str | Path | None = None) -> Path:
+    """Pick the source workbook: explicit path > bundled copy > legacy path."""
+    if explicit is not None:
+        return Path(explicit)
+    if DEFAULT_SOURCE.is_file():
+        return DEFAULT_SOURCE
+    for candidate in LEGACY_SOURCES:
+        if candidate.is_file():
+            return candidate
+    return DEFAULT_SOURCE  # missing: the caller reports it with a hint
 
 
 def parse_code(code: str) -> tuple[int, int, int]:
@@ -127,9 +149,11 @@ def _rows_from_tsv(path: Path) -> list[list[str]]:
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     dry_run = "--dry-run" in sys.argv[1:]
-    source = Path(args[0]) if args else DEFAULT_SOURCE
+    source = resolve_source(args[0] if args else None)
     if not source.is_file():
         print(f"错误：找不到词条来源文件 {source}")
+        print("      原始数据应位于 third_party/source-data/ "
+              "（见该目录的 README.md），或把路径作为参数传入。")
         return 1
     if source.suffix.lower() == ".tsv":
         rows = _rows_from_tsv(source)

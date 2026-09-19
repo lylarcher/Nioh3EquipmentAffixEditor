@@ -24,14 +24,13 @@ from .affixdb import AffixDb
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .savefile import (
-    GameRunningError,
     SaveCrypto,
     account_id_from_save_path,
     capture_quiescent_save_fingerprints,
     create_backup,
     decrypt_save_to_bytes,
     discover_save_paths,
-    running_game_processes,
+    require_game_not_running,
     save_slot_index_from_path,
     write_encrypted_save,
 )
@@ -300,14 +299,9 @@ def commit_save(
     # Measured on the buffer handed to us: after an edit the stored checksum is
     # expected to be stale, which is exactly why we recompute it below.
     input_checksum_was_consistent = verify_user_checksum(decrypted)
-    running = running_game_processes()
-    if running and not allow_game_running:
-        raise GameRunningError(
-            "检测到仁王3 正在运行（"
-            + "、".join(running)
-            + "）。游戏可能持有存档并在退出时覆盖修改，因此拒绝写入。"
-            "请先完全退出游戏后重试；确需在游戏运行时写入请显式允许。"
-        )
+    # Single gate shared with the rest of the codebase: writes land in the file
+    # on disk, so a running game holding that save in memory is refused.
+    running = require_game_not_running(allow_running=allow_game_running)
 
     # Recompute the user checksum over the patched body.
     patched = bytearray(decrypted)

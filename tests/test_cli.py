@@ -14,6 +14,7 @@ from nioh3_accessory_editor import cli
 from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.editor import EditorError, SaveDescriptor
 from nioh3_accessory_editor.records import EMPTY_EFFECT_ID
+from nioh3_accessory_editor.savefile import SAVE_WRITE_REQUIREMENT
 from tests import support
 
 
@@ -248,6 +249,54 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertIn('"dry_run": true', out)
         self.assertEqual(self.save_path.read_bytes(), before)
         self.assertFalse((self.root / "_nioh3_accessory_backup").exists())
+
+    def test_edit_states_the_write_requirement(self) -> None:
+        """Both the notice and the current gate state must be visible."""
+        code, out, err = run_cli([
+            "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:55",
+            "--dry-run",
+        ])
+        self.assertEqual(code, 0, err)
+        self.assertIn(SAVE_WRITE_REQUIREMENT, out)
+        self.assertIn("退出游戏", out)
+        self.assertIn("标题界面", out)
+        self.assertIn("当前状态：未检测到游戏进程", out)
+        self.assertIn("演练模式", out)
+
+    def test_edit_warns_when_the_game_is_running(self) -> None:
+        with mock.patch.object(cli, "running_game_processes",
+                               return_value=("Nioh3.exe",)):
+            code, out, err = run_cli([
+                "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:55",
+                "--dry-run",
+            ])
+        self.assertEqual(code, 0, err)
+        self.assertIn("Nioh3.exe", out)
+        self.assertIn("将被拒绝", out)
+
+    def test_write_refuses_while_the_game_runs(self) -> None:
+        """The gate inside the writer (not just the notice) must fail closed."""
+        from nioh3_accessory_editor import savefile
+
+        before = self.save_path.read_bytes()
+        with mock.patch.object(savefile, "running_game_processes",
+                               return_value=("Nioh3.exe",)):
+            code, _out, err = run_cli([
+                "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:55",
+            ])
+        self.assertEqual(code, 1)
+        self.assertIn("正在运行", err)
+        self.assertIn("标题界面", err)
+        self.assertIn("--force-while-running", err)
+        self.assertEqual(self.save_path.read_bytes(), before)
+        self.assertFalse((self.root / "_nioh3_accessory_backup").exists())
+
+    def test_success_message_warns_about_overwriting(self) -> None:
+        code, out, err = run_cli([
+            "edit", "--record", "3", "--edit", f"2:{self.affix.effect_id:#x}:66",
+        ])
+        self.assertEqual(code, 0, err)
+        self.assertIn("覆盖本次修改", out)
 
     def test_edit_writes_and_persists(self) -> None:
         code, out, err = run_cli([

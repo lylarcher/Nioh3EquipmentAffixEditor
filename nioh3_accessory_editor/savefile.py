@@ -36,6 +36,7 @@ __all__ = [
     "GAME_PROCESS_NAMES",
     "SAVE_QUIESCENCE_SECONDS",
     "SAVE_SCHEMA_PROFILE",
+    "SAVE_WRITE_REQUIREMENT",
     "SaveCrypto",
     "SaveError",
     "SaveFileFingerprint",
@@ -47,6 +48,7 @@ __all__ = [
     "decrypt_save_to_bytes",
     "default_crypto_tool",
     "discover_save_paths",
+    "require_game_not_running",
     "restore_save_from_bytes",
     "running_game_processes",
     "save_root_directory",
@@ -322,18 +324,34 @@ class GameRunningError(SaveError):
     """Raised when the game is running and the caller did not opt in."""
 
 
-def require_game_not_running(*, allow_running: bool = False) -> None:
-    """Fail closed when Nioh 3 is running: it may overwrite our edits."""
-    if allow_running:
-        return
+#: Shown before every save-file write.  Edits land in the file on disk, so the
+#: running game must not hold that save in memory -- otherwise its next save
+#: overwrites our edits (or the two fight over the slot).  Kept as one constant
+#: so the CLI, the GUI and the error message below always say the same thing.
+SAVE_WRITE_REQUIREMENT = (
+    "写入前置条件：请先【完全退出游戏】，或退回到游戏【标题界面】"
+    "（即当前没有读取任何存档、不在游戏内）。\n"
+    "在游戏内（存档已载入内存）写入，游戏之后保存会用内存数据覆盖本次修改，"
+    "可能造成修改丢失或存档冲突。"
+)
+
+
+def require_game_not_running(*, allow_running: bool = False) -> tuple[str, ...]:
+    """Fail closed when Nioh 3 is running: it may overwrite our edits.
+
+    Returns the detected process names (empty when the game is not running) so
+    callers can report the gate state without probing the process list twice.
+    """
     running = running_game_processes()
-    if running:
+    if running and not allow_running:
         raise GameRunningError(
             "检测到仁王3 正在运行（"
             + "、".join(running)
-            + "）。游戏可能持有存档并在退出时覆盖修改，因此拒绝写入。"
-            "请先完全退出游戏后重试；确需在游戏运行时写入请显式使用 --force-while-running。"
+            + "）。\n"
+            + SAVE_WRITE_REQUIREMENT
+            + "\n如已退到标题界面且确认要写入，请显式使用 --force-while-running。"
         )
+    return running
 
 
 # --------------------------------------------------------------------------

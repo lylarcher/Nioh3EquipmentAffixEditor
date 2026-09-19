@@ -9,6 +9,7 @@ from unittest import mock
 
 from nioh3_accessory_editor import editor as editor_module
 from nioh3_accessory_editor import records
+from nioh3_accessory_editor import savefile as savefile_module
 from nioh3_accessory_editor.affixdb import AffixDb, AffixError
 from nioh3_accessory_editor.editor import (
     EditorError,
@@ -360,9 +361,11 @@ class CommitTests(EditorTestCase):
         self.assertEqual(report["checksum_before"], report["checksum_after"])
 
     def test_commit_blocks_while_the_game_runs(self) -> None:
+        # The gate lives in savefile (single implementation, shared with the
+        # CLI/GUI notices), so that is the module to patch.
         descriptor, crypto = self._make_save()
         before = descriptor.path.read_bytes()
-        with mock.patch.object(editor_module, "running_game_processes",
+        with mock.patch.object(savefile_module, "running_game_processes",
                                return_value=("Nioh3.exe",)):
             with self.assertRaises(GameRunningError):
                 commit_save(descriptor, self.plain, crypto=crypto,
@@ -371,7 +374,7 @@ class CommitTests(EditorTestCase):
 
     def test_commit_can_override_the_game_gate(self) -> None:
         descriptor, crypto = self._make_save()
-        with mock.patch.object(editor_module, "running_game_processes",
+        with mock.patch.object(savefile_module, "running_game_processes",
                                return_value=("Nioh3.exe",)):
             report = commit_save(descriptor, self.plain, crypto=crypto,
                                  state_root=self.root / "state",

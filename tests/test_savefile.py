@@ -218,6 +218,26 @@ class GameProcessTests(unittest.TestCase):
             require_game_not_running()
             self.assertEqual(running_game_processes(), ())
 
+    def test_requirement_names_the_safe_states(self) -> None:
+        """The notice must tell the user *when* writing is allowed."""
+        text = savefile.SAVE_WRITE_REQUIREMENT
+        self.assertIn("退出游戏", text)
+        self.assertIn("标题界面", text)
+        self.assertIn("覆盖", text)
+
+    def test_refusal_message_carries_the_requirement(self) -> None:
+        with mock.patch.object(savefile, "_windows_process_names",
+                               return_value={"Nioh3.exe"}):
+            with self.assertRaises(GameRunningError) as caught:
+                require_game_not_running()
+        message = str(caught.exception)
+        self.assertIn("Nioh3.exe", message)
+        self.assertIn("标题界面", message)
+        self.assertIn("--force-while-running", message)
+
+    def test_requirement_is_exported(self) -> None:
+        self.assertIn("SAVE_WRITE_REQUIREMENT", savefile.__all__)
+
 
 class DurableWriteTests(TempDirTestCase):
     def test_durable_copy_creates_and_replaces(self) -> None:

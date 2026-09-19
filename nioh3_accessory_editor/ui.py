@@ -30,12 +30,23 @@ from .editor import (
     save_checksum_is_valid,
 )
 from .records import EFFECT_COUNT, EMPTY_EFFECT_ID, EffectSlot
-from .savefile import SaveCrypto, create_backup, running_game_processes
+from .savefile import (
+    SAVE_WRITE_REQUIREMENT,
+    SaveCrypto,
+    create_backup,
+    running_game_processes,
+)
 from .version import UNKNOWN, version_banner, version_info
 
 DISCLAIMER = (
     "仅供测试学习用，不要用于联机影响游戏平衡。\n"
     "仁王3 为单机/纯 PVE 联机游戏，本工具不会影响其他玩家。"
+)
+
+#: One-line form of savefile.SAVE_WRITE_REQUIREMENT for the always-visible
+#: status area; the full wording goes into the write-confirmation dialog.
+WRITE_REQUIREMENT_SHORT = (
+    "写入存档前请先退出游戏，或退回到游戏标题界面；在游戏内写入会被游戏下次保存覆盖。"
 )
 
 TITLE = "仁王3 饰品词条修改器（仅供测试学习用）"
@@ -145,6 +156,12 @@ class AccessoryEditorApp(tk.Tk):
         ttk.Button(bottom, text="应用修改",
                    command=self.apply_edits_to_selection).pack(side=tk.LEFT, padx=2)
         ttk.Button(bottom, text="写入存档", command=self.write_save).pack(side=tk.LEFT, padx=2)
+
+        # Always visible (not only in the confirmation dialog): the write target
+        # is the save on disk, so the game must not hold that save in memory.
+        self.write_requirement_var = tk.StringVar(value=WRITE_REQUIREMENT_SHORT)
+        ttk.Label(self, textvariable=self.write_requirement_var, foreground="#b03030",
+                  wraplength=960, justify=tk.LEFT).pack(fill=tk.X, padx=8, pady=(2, 0))
 
         ttk.Separator(self).pack(fill=tk.X)
 
@@ -426,13 +443,19 @@ class AccessoryEditorApp(tk.Tk):
         if running:
             warning = (
                 "\n\n⚠ 检测到游戏正在运行（" + "、".join(running) + "）。\n"
-                "游戏可能持有存档并在退出时覆盖本次修改，强烈建议先退出游戏。"
+                "若你正处于游戏内的存档中，写进去的修改会被游戏下次保存覆盖。\n"
+                "正确做法：完全退出游戏，或退回到标题界面后再写入。"
             )
-            if not messagebox.askyesno("游戏正在运行", "仍要继续写入吗？" + warning):
+            if not messagebox.askyesno(
+                "游戏正在运行",
+                "当前游戏正在运行，只有在【标题界面】写入才是安全的。\n"
+                "确定你现在不在游戏内的存档中吗？" + warning,
+            ):
                 return
         if not messagebox.askyesno(
             "确认写入",
             "即将把修改写入存档（会自动备份原存档）。\n\n"
+            + SAVE_WRITE_REQUIREMENT + "\n\n"
             + DISCLAIMER + warning + "\n\n确认继续吗？",
         ):
             return

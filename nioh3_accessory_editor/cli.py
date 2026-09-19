@@ -27,10 +27,12 @@ from .editor import (
 )
 from .records import RecordError
 from .savefile import (
+    SAVE_WRITE_REQUIREMENT,
     SaveCrypto,
     SaveError,
     create_backup,
     default_crypto_tool,
+    running_game_processes,
 )
 from .version import version_banner, version_info
 
@@ -163,6 +165,19 @@ def cmd_edit(args: argparse.Namespace) -> int:
         for line in view.describe_effects(affix_db):
             print(line)
 
+    # State the requirement before touching the file, and say whether the gate
+    # is currently satisfied so the user is never surprised by a refusal.
+    print("\n" + SAVE_WRITE_REQUIREMENT)
+    running = running_game_processes()
+    if running:
+        print(f"当前状态：检测到 {'、'.join(running)} 正在运行——"
+              f"{'已强制继续（--force-while-running）' if args.force_while_running else '将被拒绝'}。")
+    else:
+        print("当前状态：未检测到游戏进程。")
+    if args.dry_run:
+        print("本次为演练模式（--dry-run），不会写入存档。")
+        print("提示：真正写入时请保持游戏处于已退出或标题界面状态。")
+
     result = commit_save(
         save,
         patched,
@@ -174,7 +189,8 @@ def cmd_edit(args: argparse.Namespace) -> int:
     )
     print("\n" + json.dumps(result, ensure_ascii=False, indent=2))
     if not result["dry_run"]:
-        print("\n完成。请在游戏中重新加载该存档以查看效果。")
+        print("\n完成。请在游戏中重新加载该存档以查看效果"
+              "（加载前请勿在游戏内保存，否则会覆盖本次修改）。")
     return 0
 
 

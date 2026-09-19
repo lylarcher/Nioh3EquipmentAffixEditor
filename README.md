@@ -43,6 +43,11 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 
 ## Quick start
 
+> **Before writing: close the game, or park it at the title screen.** Edits are
+> written into the save file, so the game must not have that save loaded (see
+> [Safety model](#safety-model)). Every write prints this requirement; the GUI
+> shows it permanently and repeats it in the confirmation dialog.
+
 ```powershell
 # GUI
 python launch_editor.py
@@ -184,11 +189,12 @@ python tools/build_affix_db.py            # writes data/accessory_affixes.json
 python tools/build_affix_db.py --dry-run  # parse + report only
 ```
 
-The default source path points at
-`D:\AIWorkspace\DSHWorkSpcae\Nioh3Trainer\仁王3词条装备库v2.21.xlsx`; pass an
-explicit path (xlsx or the `A1=…` TSV dump) to override. The builder de-duplicates
-by effect id and records any same-id/different-value conflict in the catalog's
-`conflicts` field instead of silently picking one.
+The default source is the bundled copy
+`third_party/source-data/仁王3词条装备库v2.21.xlsx` (see that folder's README for
+provenance and licensing); pass an explicit path (xlsx or the `A1=…` TSV dump)
+to override. The builder de-duplicates by effect id and records any
+same-id/different-value conflict in the catalog's `conflicts` field instead of
+silently picking one.
 
 ## Verified facts vs. unverified boundaries
 
@@ -244,9 +250,18 @@ nothing.
 
 ## Safety model
 
+* **Write requirement**: edits are written into the save **file**, so the game
+  must not hold that save in memory. Close the game completely, or at least stay
+  at the **title screen** (no save loaded, not in-game) before writing; a save
+  made in-game afterwards overwrites the edit and can corrupt the slot. The rule
+  is stated before every write (`savefile.SAVE_WRITE_REQUIREMENT`): in the CLI
+  output, in the GUI notice line, and in the write-confirmation dialog.
 * Backups: `<cwd>/_nioh3_accessory_backup/account-<id>/slot-<NN>/` holds a
   decrypted `SAVEDATA-<timestamp>-<random>-plain.bin` plus `backup-manifest.json`
   (schema, account, slot, main-save SHA-256, plaintext SHA-256).
+* Game process gate: a detected `Nioh3.exe` / `Nioh3-Win64-Shipping.exe` makes
+  the writer fail closed (`GameRunningError`, CLI exit 1) unless
+  `--force-while-running` is passed explicitly.
 * Quiescence: save + `BACKUP.BIN` + the account system save are hashed twice
   0.2 s apart; any change aborts with `SAVE_SYNC_ACTIVE`.
 * Fingerprint races: hashing re-stats the file and aborts if size/mtime moved.
