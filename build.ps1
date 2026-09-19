@@ -156,10 +156,11 @@ function Invoke-NativeCommand {
         Run a native executable and report its exit code via
         $script:LastNativeExitCode.
 
-        PowerShell 7.4+ maps native stderr output to error records that obey
-        $ErrorActionPreference, so a child writing a mere warning to stderr
-        would abort this script (which runs with 'Stop').  The relaxations
-        below are scoped to the call: the exit code stays the source of truth.
+        Native stderr output reaches PowerShell as error records; with
+        $ErrorActionPreference = 'Stop' (Windows PowerShell 5.1 and PowerShell
+        7.4+ alike) a child writing a mere warning to stderr would abort this
+        script.  The relaxations below are scoped to the call: the exit code
+        stays the single source of truth.
     #>
     param(
         [string]$FilePath,
@@ -244,8 +245,9 @@ function Invoke-PythonStep {
 
     Invoke-NativeCommand -FilePath $script:PythonExe -Arguments $Arguments -MergeError
     if ($script:LastNativeExitCode -ne 0) {
-        throw "Python 步骤失败 (exit $($script:LastNativeExitCode)): " +
-            "$script:PythonExe $($Arguments -join ' ')"
+        $exitCode = $script:LastNativeExitCode
+        $commandLine = $Arguments -join ' '
+        throw "Python 步骤失败 (exit $exitCode): $script:PythonExe $commandLine"
     }
 }
 
