@@ -25,6 +25,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import paths
+
 __all__ = [
     "BUILD_SCHEMA",
     "DEFAULT_CRYPTO_EXE",
@@ -188,7 +190,9 @@ def version_info(*, refresh: bool = False) -> BuildInfo:
         return _CACHE
 
     frozen = _frozen_info()
-    live = _git_info()
+    # A built executable has no checkout to interrogate (and no git binary in
+    # reach), so its identity comes from the generated module only.
+    live = None if paths.is_frozen() else _git_info()
     fields: dict[str, object] = {
         "version": __version__,
         "commit": UNKNOWN,
@@ -196,8 +200,8 @@ def version_info(*, refresh: bool = False) -> BuildInfo:
         "branch": UNKNOWN,
         "dirty": False,
         "built_at": UNKNOWN,
-        "built_from": str(PROJECT_ROOT),
-        "crypto_exe": str(DEFAULT_CRYPTO_EXE),
+        "built_from": str(paths.application_root()),
+        "crypto_exe": str(paths.default_crypto_exe()),
         "crypto_exe_sha256": UNKNOWN,
         "language": _runtime_language(),
         "python_version": _python_version(),
@@ -211,6 +215,11 @@ def version_info(*, refresh: bool = False) -> BuildInfo:
         fields.update({key: value for key, value in frozen.items()
                        if value not in (None, "")})
         fields["source"] = "build"
+    if paths.is_frozen() and frozen is None:
+        # Frozen without generated build info must still not claim to be a
+        # checkout: report the executable itself as the source.
+        fields["source"] = "frozen"
+        fields["built_from"] = str(paths.application_root())
 
     _CACHE = BuildInfo(**fields)  # type: ignore[arg-type]
     return _CACHE

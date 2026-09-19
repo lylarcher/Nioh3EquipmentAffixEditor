@@ -8,15 +8,20 @@ from __future__ import annotations
 
 import sys
 
-from . import cli, ui
+from . import bootstrap
 
 CLI_COMMANDS = frozenset(
-    {"list", "check", "edit", "backup", "version", "-h", "--help", "--version"}
+    {"list", "check", "edit", "backup", "version", "config",
+     "-h", "--help", "--version", "--config", "--python-crypto"}
 )
 
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    bootstrap.ensure_once()
+
+    from . import cli, ui  # noqa: PLC0415 - imported after bootstrap
+
     if args and args[0] in CLI_COMMANDS:
         return cli.main(args)
     return ui.main()

@@ -30,7 +30,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 #: Bundled copy of the source workbook (see third_party/source-data/README.md).
 #: The legacy location is kept as a fallback so an older checkout layout still
-#: works; the bundled copy wins whenever it exists.
+#: works; the bundled copy wins whenever it exists.  The legacy directory
+#: (``Nioh3Trainer``) was removed from the workspace, so this path normally just
+#: documents where the data used to live.
 DEFAULT_SOURCE = (
     PROJECT_ROOT / "third_party" / "source-data" / "仁王3词条装备库v2.21.xlsx"
 )

@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 from nioh3_accessory_editor import cli
+from nioh3_accessory_editor import savefile as savefile_module
 from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.editor import EditorError, SaveDescriptor
 from nioh3_accessory_editor.records import EMPTY_EFFECT_ID
@@ -109,12 +110,47 @@ class CryptoBackendTests(unittest.TestCase):
             self.assertIsNone(crypto.executable)
 
     def test_missing_exe_degrades_with_a_hint(self) -> None:
-        args = cli.build_parser().parse_args(["list"])
-        with mock.patch.object(cli, "default_crypto_tool",
-                               side_effect=FileNotFoundError("no exe")):
+        """No helper anywhere -> pure Python, and the user is told why."""
+        absent = Path("C:/nowhere/Nioh_Savefile_decrypt.exe")
+        args = cli.build_parser().parse_args(
+            ["--config", str(self.config_path()), "list"])
+        with mock.patch.object(savefile_module.paths, "default_crypto_exe",
+                               lambda: absent):
             crypto = cli._crypto(args)
         self.assertIsNone(crypto.executable)
         self.assertEqual(crypto.backend_name, "python")
+
+    def test_configured_helper_missing_falls_back_to_the_bundled_one(self) -> None:
+        args = cli.build_parser().parse_args(["--config", str(self.config_path()),
+                                             "list"])
+        crypto = cli._crypto(args)
+        if support.HAVE_EXE:
+            self.assertEqual(crypto.executable,
+                             savefile_module.paths.default_crypto_exe())
+        else:  # pragma: no cover - depends on the checkout
+            self.assertIsNone(crypto.executable)
+
+    def test_config_can_request_the_pure_python_backend(self) -> None:
+        target = self.config_path({"crypto_exe": None})
+        args = cli.build_parser().parse_args(["--config", str(target), "list"])
+        crypto = cli._crypto(args)
+        self.assertIsNone(crypto.executable)
+        self.assertEqual(crypto.backend_name, "python")
+
+    def config_path(self, overrides: dict | None = None) -> Path:
+        """Write a throwaway configuration file for one test."""
+        import json
+        import tempfile
+
+        from nioh3_accessory_editor.config import CONFIG_SCHEMA
+
+        temp = tempfile.TemporaryDirectory(prefix="nioh3-cli-config-")
+        self.addCleanup(temp.cleanup)
+        target = Path(temp.name) / "editor.json"
+        document = {"schema": CONFIG_SCHEMA, "crypto_exe": "bin/absent-helper.exe"}
+        document.update(overrides or {})
+        target.write_text(json.dumps(document), encoding="utf-8")
+        return target
 
 
 class CommandErrorTests(unittest.TestCase):

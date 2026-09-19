@@ -31,6 +31,26 @@
   * 文案集中在 `savefile.SAVE_WRITE_REQUIREMENT`，CLI/GUI/拒绝信息三处保持同一口径。
 * **原始数据入库**：`third_party/source-data/` 收纳《仁王3词条装备库v2.21.xlsx》与
   `Nioh3 v2.21.CT`（含来源与授权说明），词条库可离线重新生成，工程不再依赖外部目录。
+* **单文件 exe（发行形态）**：发行包只包含 `Nioh3AccessoryEditor.exe` 一个文件，不再有
+  任何 `.py`、目录或安装步骤。
+  * 首次运行把随附文件解压到 **exe 同目录**：`config/editor.json`（参数配置）、
+    `data/accessory_affixes.json`（词条库）、`bin/Nioh_Savefile_decrypt.exe`
+    （随附加解密组件）、`third_party/source-data/`（原始 xlsx/CT）、`README.md`、
+    `CHANGELOG.md`，并写入 `.extracted-manifest.json` 记录清单。
+  * 解压**不会覆盖用户改过的文件**：清单里记的是本程序写入的哈希，内容一致才刷新；
+    删掉的文件会重新解压出来；目录只读时降级为「只从 exe 内部读取」而不报错。
+  * 控制台子系统：从终端运行时保留控制台（CLI 可用），双击启动 GUI 时自行隐藏控制台
+    （仅在独占该控制台时隐藏，不影响用户的终端）。
+* **参数配置文件 `config/editor.json`**：存档目录、账号/栏位过滤、加密后端、备份目录、
+  GUI 演练/校验默认值都可在文件里改；命令行参数始终优先。
+  * 新增 `config` 子命令：`config`（查看有效配置）、`config --json`、
+    `config --init [路径] [--force]`（生成带说明的默认文件）。
+  * 新增全局参数 `--config <路径>`，可指定其它配置文件。
+  * 文件校验严格：`schema` 不匹配、未知键（如把 `default_dry_run` 写成 `dry_run`）、
+    类型错误都会在启动时报错，不会静默忽略；`_` 开头的键视为注释。
+    相对路径相对 exe 目录解析，便于整个文件夹搬迁。
+* **`build.ps1` 新增 `-TestPattern`**：只跑匹配的测试模块（如 `-TestPattern test_cli.py`），
+  便于单模块迭代。
 
 ### 变更
 
@@ -38,7 +58,26 @@
   副本（保留旧路径作为回退），新增 `resolve_source()` 与找不到文件时的路径提示。
 * 游戏进程门禁统一为一处实现：`editor.commit_save` 改为调用
   `savefile.require_game_not_running()`，不再维护第二份判断与文案。
-* `build.ps1`：发行目录一并复制 `third_party/`，发行包可离线重建词条库。
+* `build.ps1`：发行流程改为「生成构建信息 → 跑测试 → 生成内嵌载荷
+  （`tools/make_payload.py`）→ PyInstaller 单文件打包 → 在全新目录冒烟测试 exe
+  （校验自解压产物与冻结的构建信息）→ 校验发行物无 `.py` → 打包 zip」，不再复制源码目录。
+  * PyInstaller 只作为构建期依赖，自动装入 `.build-venv`（可用
+    `-PyInstallerPython` 指定解释器；镜像源可用 `NIOH3_PIP_INDEX` 覆盖）。
+  * **修复了一处会让失败构建看起来成功的缺陷**：Windows PowerShell 5.1 下
+    `& exe 2>&1 | ForEach-Object` 这种合并输出写法可能返回过期的 `$LASTEXITCODE`（子进程
+    实际退出码非 0，PowerShell 却报告 0），导致单元测试失败时构建仍继续出包。现在改为
+    `Start-Process -Wait -PassThru` 读取真实退出码，并在构建开始时用
+    `tools/check_build_gate.py` **自检**「失败的子步骤一定会被中止」，自检不过直接中止构建。
+* `nioh3_accessory_editor/paths.py`（新增）：统一「源码布局」与「冻结布局」的路径解析，
+  资源一律以 exe 同目录为准。
+* `nioh3_accessory_editor/bootstrap.py`（新增）：随附文件的自解压与清单管理。
+* `nioh3_accessory_editor/config.py`（新增）：参数配置的读取、校验与默认值生成。
+* `savefile.default_crypto_tool()` / `savefile.discover_save_paths()` /
+  `editor.discover_saves()`：改为按冻结布局与配置解析路径（`discover_save_paths(root=...)`、
+  `discover_saves(root=...)` 可按配置指定存档根目录）。
+* `version.py`：冻结运行时不再尝试调用 `git`，构建身份只取自 `_buildinfo`；版本信息额外
+  显示程序目录与配置文件路径。
+* GUI 的备份目录、演练/校验默认值改由配置决定（源码运行时仍为当前目录）。
 
 ### 移除
 

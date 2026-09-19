@@ -72,6 +72,70 @@ python launch_editor.py --version
 python launch_editor.py version --json
 ```
 
+### Release build: one single-file executable
+
+Download/copy `Nioh3AccessoryEditor.exe` anywhere and run it. There is **no
+installer, no `dist/` folder and no `.py` file** in a release: everything the
+program needs is inside that one file.
+
+* **Double-click** it to open the GUI.
+* Run it from a terminal for the CLI (the GUI hides the console it was started
+  with, but a CLI run keeps it):
+
+  ```powershell
+  .\Nioh3AccessoryEditor.exe list
+  .\Nioh3AccessoryEditor.exe check
+  .\Nioh3AccessoryEditor.exe edit --record 3 --edit 1:0x0B32:200
+  .\Nioh3AccessoryEditor.exe version
+  ```
+
+**First run unpacks the side-by-side files next to the exe** (this is by
+design, so you can read and edit them):
+
+| Path | What it is |
+| --- | --- |
+| `config/editor.json` | parameter file: save root, account/slot filter, crypto backend, backup root, GUI defaults |
+| `data/accessory_affixes.json` | the legal affix catalogue the editor validates against |
+| `bin/Nioh_Savefile_decrypt.exe` | bundled crypto helper (fast path; pure Python is the fallback) |
+| `third_party/source-data/` | the original `.xlsx` / `.CT` inputs (regenerate the catalogue yourself) |
+| `README.md`, `CHANGELOG.md` | documentation, copied for offline reading |
+| `.extracted-manifest.json` | bookkeeping (hash of every file this program wrote) |
+
+Rules that make this safe to keep next to your own files:
+
+* A file you edited is **never overwritten** by a later version of the exe --
+  only files whose contents still match what was extracted are refreshed.
+* Deleting a file restores it on the next run.
+* If the folder is read-only (e.g. `Program Files`), the program still runs and
+  simply reads resources from inside the executable instead of writing them.
+* Keep the exe in a writable folder of your choice; backups are written to the
+  same folder (`_nioh3_accessory_backup/`) unless the config says otherwise.
+
+The executable itself unpacks its Python runtime into the usual per-session
+`%TEMP%\_MEIxxxx` directory (standard one-file behaviour, deleted on exit); the
+files listed above are the only ones that stay on disk.
+
+### Parameter file
+
+```powershell
+# show the effective settings (file + defaults)
+.\Nioh3AccessoryEditor.exe config
+
+# same, as JSON
+.\Nioh3AccessoryEditor.exe config --json
+
+# (re)create config/editor.json with comments explaining every key
+.\Nioh3AccessoryEditor.exe config --init
+.\Nioh3AccessoryEditor.exe config --init --force     # overwrite an existing file
+.\Nioh3AccessoryEditor.exe --config D:\my\editor.json config   # use another file
+```
+
+The file is deliberately strict: a wrong `schema`, an unknown key (e.g.
+`dry_run` instead of `default_dry_run`) or a wrong type is reported on startup
+instead of being silently ignored. Keys starting with `_` are comments.
+Relative paths are relative to the exe, so the folder stays portable. Command
+line options always win over the file.
+
 `--python-crypto`, `--save-index N` and `--account ID` are global options and
 must precede the subcommand. `--no-verify` skips the pre/post write decryption
 checks (faster, riskier); `--force-while-running` overrides the game-process
@@ -86,14 +150,18 @@ back to the patched bytes.
 ## Build
 
 ```powershell
-# Release: stamp build identity, run the tests, stage dist/, zip it
+# Release: stamp build identity, run the tests, build the single-file exe,
+# smoke-test it in a fresh folder, then zip it -> dist/
 powershell -File .\build.ps1
 
-# Drop older dist/ artifacts first (only Nioh3AccessoryEditor-v* entries)
+# Drop older dist/ artifacts first (only Nioh3AccessoryEditor* entries)
 powershell -File .\build.ps1 -Clean
 
 # Only refresh the build identity of the working tree (no dist, no zip)
 powershell -File .\build.ps1 -Configuration Debug -SkipTests
+
+# Only this test module, e.g. while iterating on the CLI
+powershell -File .\build.ps1 -Configuration Debug -TestPattern test_cli.py
 
 # Faster iteration / custom interpreter
 powershell -File .\build.ps1 -SkipTests -SkipZip -Python D:\Python310\python.exe
@@ -150,7 +218,7 @@ build artifacts: a fresh checkout reports live git information
 ## Tests
 
 ```powershell
-# Whole suite (278 tests, ~2 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (417 tests, ~2 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter

@@ -14,7 +14,10 @@ import json
 import sys
 from pathlib import Path
 
+from . import paths
 from .affixdb import AffixDb, AffixError
+from .bootstrap import ensure_once
+from .config import ConfigError, EditorConfig, load_config, write_default_config
 from .editor import (
     EditorError,
     SaveDescriptor,
@@ -33,6 +36,7 @@ from .savefile import (
     create_backup,
     default_crypto_tool,
     running_game_processes,
+    save_root_directory,
 )
 from .version import version_banner, version_info
 
@@ -45,35 +49,56 @@ DISCLAIMER = (
 
 def _crypto(args: argparse.Namespace) -> SaveCrypto:
     """Build the crypto backend, degrading to pure Python when the exe is gone."""
-    prefer_python = bool(getattr(args, "python_crypto", False))
+    config = _config(args)
+    if bool(getattr(args, "python_crypto", False)):
+        return SaveCrypto(None, prefer_python=True)
+    backend = config.crypto_backend()
+    if backend.note:
+        print(f"提示：{backend.note}", file=sys.stderr)
+    return SaveCrypto(backend.executable, prefer_python=backend.prefer_python)
+
+
+def _config(args: argparse.Namespace) -> EditorConfig:
+    """Load the configuration file named by ``--config`` (cached per run)."""
+    cached = getattr(args, "_config_cache", None)
+    if cached is not None:
+        return cached
+    explicit = getattr(args, "config", None)
+    config = load_config(Path(explicit) if explicit else None)
+    # Command-line filters win over the file.
+    config = config.with_overrides(account=getattr(args, "account", None),
+                                   save_index=getattr(args, "save_index", None))
     try:
-        executable = None if prefer_python else default_crypto_tool(Path.cwd())
-    except FileNotFoundError as error:
-        if not prefer_python:
-            print(f"提示：{error}\n      已自动切换到纯 Python 后端（较慢）。", file=sys.stderr)
-        executable = None
-        prefer_python = True
-    return SaveCrypto(executable, prefer_python=prefer_python)
+        args._config_cache = config
+    except AttributeError:  # pragma: no cover - argparse namespaces accept it
+        pass
+    return config
+
+
+def _state_root(args: argparse.Namespace) -> Path:
+    """Where backups go: config value, else next to the exe / current directory."""
+    return _config(args).resolved_backup_root()
 
 
 def _select_save(args: argparse.Namespace) -> SaveDescriptor:
-    saves = discover_saves()
+    config = _config(args)
+    saves = discover_saves(config.resolved_save_root())
     if not saves:
+        root = config.resolved_save_root() or save_root_directory()
         raise EditorError(
-            "未发现 Nioh 3 存档。请确认游戏已运行过且存档位于 "
-            "%LOCALAPPDATA%\\KoeiTecmo\\NIOH3\\Savedata"
+            f"未发现 Nioh 3 存档。请确认游戏已运行过且存档位于 {root}"
         )
-    account = getattr(args, "account", None)
+    account = config.account
     if account is not None:
         saves = tuple(save for save in saves if save.account_id == account)
         if not saves:
             raise EditorError(f"未找到账号 {account} 的存档")
-    slot = getattr(args, "save_index", None)
+    slot = config.save_index
     if slot is not None:
         saves = tuple(save for save in saves if save.slot_index == slot)
         if not saves:
             raise EditorError(f"未找到栏位 {slot} 的存档")
-    if len(saves) > 1 and getattr(args, "save_index", None) is None:
+    if len(saves) > 1 and slot is None:
         print(f"提示：发现 {len(saves)} 个候选存档，使用第一个；可用 --save-index/--account 选择。",
               file=sys.stderr)
     return saves[0]
@@ -182,7 +207,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         save,
         patched,
         crypto=crypto,
-        state_root=Path.cwd(),
+        state_root=_state_root(args),
         dry_run=args.dry_run,
         verify=not args.no_verify,
         allow_game_running=args.force_while_running,
@@ -197,7 +222,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
 def cmd_backup(args: argparse.Namespace) -> int:
     crypto = _crypto(args)
     save = _select_save(args)
-    backup_dir = create_backup(save.path, state_root=Path.cwd(), crypto=crypto)
+    backup_dir = create_backup(save.path, state_root=_state_root(args), crypto=crypto)
     print(f"已备份到: {backup_dir}")
     return 0
 
@@ -218,6 +243,37 @@ class _VersionAction(argparse.Action):
         parser.exit(0)
 
 
+def cmd_config(args: argparse.Namespace) -> int:
+    """Show the effective configuration, or create the default file."""
+    config = _config(args)
+    if args.init:
+        target = Path(args.init) if args.init is not True else None
+        try:
+            written = write_default_config(
+                target, version=version_info().version,
+                commit=version_info().commit, overwrite=args.force,
+            )
+        except ConfigError as error:
+            raise EditorError(str(error)) from error
+        print(f"已写入默认配置文件: {written}")
+        print("按需修改后重启程序生效；也可用 --config <路径> 指定其它文件。")
+        return 0
+
+    if args.json:
+        payload = config.to_dict()
+        payload["_source"] = str(config.source) if config.source else None
+        payload["_config_path"] = str(paths.default_config_path())
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+
+    print("Nioh3AccessoryEditor 配置")
+    for line in config.describe():
+        print(line)
+    print(f"默认路径  : {paths.default_config_path()}"
+          f"{'' if paths.default_config_path().is_file() else '（尚未创建，可用 config --init 生成）'}")
+    return 0
+
+
 def cmd_version(args: argparse.Namespace) -> int:
     """Print the build/version block (also available as ``--version``)."""
     info = version_info()
@@ -229,6 +285,8 @@ def cmd_version(args: argparse.Namespace) -> int:
         print("\n当前加密后端: 纯 Python（内置实现）")
     else:
         print(f"\n当前加密后端: 外部 exe ({crypto.executable})")
+    print(f"附属文件目录: {paths.resource_root()}")
+    print(f"配置文件    : {paths.default_config_path()}")
     return 0
 
 
@@ -241,6 +299,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help="显示版本信息（commit 后8位、来源、构建时间、语言）")
     parser.add_argument("--python-crypto", action="store_true",
                         help="使用纯 Python 加解密后端（较慢，无需外部 exe）")
+    parser.add_argument("--config", default=None,
+                        help="指定参数配置文件（默认为程序目录下的 config/editor.json）")
     parser.add_argument("--save-index", type=int, default=None,
                         help="选择存档栏位（默认第一个；需写在子命令之前）")
     parser.add_argument("--account", type=int, default=None,
@@ -272,10 +332,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser_version.add_argument("--json", action="store_true",
                                 help="同时输出 JSON 格式的版本信息")
     parser_version.set_defaults(func=cmd_version)
+
+    parser_config = sub.add_parser("config", help="查看或生成参数配置文件")
+    parser_config.add_argument("--json", action="store_true", help="以 JSON 输出有效配置")
+    parser_config.add_argument("--init", nargs="?", const=True, default=None,
+                               metavar="路径",
+                               help="写入默认配置文件（可指定路径）")
+    parser_config.add_argument("--force", action="store_true",
+                               help="与 --init 一起使用时覆盖已存在的文件")
+    parser_config.set_defaults(func=cmd_config)
     return parser
 
 
 def main(argv: list[str] | None = None) -> int:
+    # Frozen builds unpack their side-by-side files (config/, data/, bin/,
+    # third_party/) next to the executable before anything reads them.
+    ensure_once()
     parser = build_parser()
     args = parser.parse_args(argv)
     try:

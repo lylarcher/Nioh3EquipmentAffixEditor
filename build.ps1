@@ -10,9 +10,13 @@
       3. generate the build identity -- nioh3_accessory_editor/_buildinfo.py,
          BUILD-INFO.json and BUILD-INFO.txt -- via tools/make_build_info.py,
       4. run the unit-test suite (python tools/run_tests.py),
-      5. stage a runnable Release tree under dist/ and zip it,
-      6. smoke-test the staged copy so a packaged tree provably reports the
-         frozen build identity instead of falling back to live git.
+      5. build app-payload.zip -- the parameter configuration, affix catalogue,
+         bundled crypto helper and original source data,
+      6. build a SINGLE-FILE executable (PyInstaller onefile) that embeds the
+         payload, so the release contains no .py files whatsoever,
+      7. smoke-test that exe in a fresh directory: it must unpack the payload
+         next to itself and report the frozen build identity,
+      8. verify the shipped tree has no Python sources, then zip the exe.
 
     The version information always reports these four facts:
       * commit   -- the LAST 8 characters of the git commit id (project rule),
@@ -21,8 +25,13 @@
       * built    -- the local build timestamp (ISO-8601 with UTC offset),
       * language -- the language/runtime the build targets (CPython + stdlib).
 
+    On first run the exe writes data/, config/, bin/ and third_party/ next to
+    itself (see nioh3_accessory_editor/bootstrap.py); from then on those are
+    ordinary user-editable files, and a file the user changed is never
+    overwritten by a later build.
+
     Debug configuration generates the build identity and runs the tests, but
-    does not stage or zip a distribution.
+    does not build the executable.
 
     NOTE: this file is UTF-8 **with BOM** on purpose. Windows PowerShell reads
     a BOM-less script using the ANSI code page (GBK on zh-CN), which would
@@ -36,20 +45,29 @@
     Release (default) builds + zips; Debug only stamps build info and tests.
 
 .PARAMETER OutputDirectory
-    Directory that receives the staged tree and the zip. Default: <root>\dist.
+    Directory that receives the executable and the zip. Default: <root>\dist.
+
+.PARAMETER PyInstallerPython
+    Python interpreter used to run PyInstaller. Default: the build virtual
+    environment <root>\.build-venv, created and populated automatically when it
+    is missing (PyInstaller is the only build-time dependency).
 
 .PARAMETER SkipTests
     Do not run the unit-test suite.
 
+.PARAMETER TestPattern
+    Only run test modules matching this filename pattern (e.g. test_cli.py),
+    which keeps the gate verifiable while iterating on one subsystem.
+
 .PARAMETER SkipZip
-    Stage the distribution tree but do not create the .zip archive.
+    Build the executable but do not create the .zip archive.
 
 .PARAMETER PureCryptoTests
     Also run the slow full-file pure-Python crypto round trip.
 
 .PARAMETER Clean
-    Remove previous Nioh3AccessoryEditor-v* artifacts from the output directory
-    before staging. Only entries matching this project's own artifact name are
+    Remove previous Nioh3AccessoryEditor* artifacts from the output directory
+    before building. Only entries matching this project's own artifact name are
     touched, so a custom -OutputDirectory is never wiped wholesale.
 
 .PARAMETER Quiet
@@ -57,11 +75,15 @@
 
 .EXAMPLE
     powershell -File .\build.ps1
-    Full Release build: stamp, test, stage, zip.
+    Full Release build: stamp, test, payload, single-file exe, verify, zip.
 
 .EXAMPLE
     powershell -File .\build.ps1 -Configuration Debug -SkipTests
     Only refresh the build identity of the working tree.
+
+.EXAMPLE
+    powershell -File .\build.ps1 -Clean -SkipZip
+    Rebuild the exe after deleting older artifacts, without zipping.
 
 .EXAMPLE
     powershell -File .\build.ps1 -Clean
@@ -73,7 +95,9 @@ param(
     [ValidateSet('Release', 'Debug')]
     [string]$Configuration = 'Release',
     [string]$OutputDirectory,
+    [string]$PyInstallerPython,
     [switch]$SkipTests,
+    [string]$TestPattern,
     [switch]$SkipZip,
     [switch]$PureCryptoTests,
     [switch]$Clean,
@@ -83,11 +107,18 @@ param(
 $ErrorActionPreference = 'Stop'
 $LASTEXITCODE = 0
 
+#: Index used only to install the build-time PyInstaller into .build-venv.
+$script:PipIndex = if ($env:NIOH3_PIP_INDEX) { $env:NIOH3_PIP_INDEX }
+    else { 'https://pypi.tuna.tsinghua.edu.cn/simple' }
+
 $projectRoot = $PSScriptRoot
 $packageRoot = Join-Path $projectRoot 'nioh3_accessory_editor'
 $buildInfoScript = Join-Path $projectRoot 'tools\make_build_info.py'
 $testScript = Join-Path $projectRoot 'tools\run_tests.py'
 $cryptoExe = Join-Path $projectRoot 'bin\Nioh_Savefile_decrypt.exe'
+$payloadScript = Join-Path $projectRoot 'tools\make_payload.py'
+$buildRoot = Join-Path $projectRoot 'build'
+$buildVenvRoot = Join-Path $projectRoot '.build-venv'
 $buildInfoJson = Join-Path $projectRoot 'BUILD-INFO.json'
 $buildInfoText = Join-Path $projectRoot 'BUILD-INFO.txt'
 $distRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
@@ -96,20 +127,8 @@ $distRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
     $OutputDirectory
 }
 
-# Top-level entries copied into a staged Release tree.
-$stageItems = @(
-    'launch_editor.py',
-    'README.md',
-    'CHANGELOG.md',
-    'nioh3_accessory_editor',
-    'bin',
-    'data',
-    'tests',
-    'tools',
-    'third_party'
-)
-$excludeDirectories = @('.git', '__pycache__', 'dist', '_nioh3_accessory_backup', 'state')
-$excludeFilePatterns = @('*.pyc', '*.pyo', '*.tmp', '*.zip')
+# Payload contents are declared in tools/make_payload.py (single source of
+# truth, covered by tests/test_payload.py).
 
 
 # --------------------------------------------------------------------------
@@ -166,13 +185,19 @@ or put python.exe on PATH. This project needs Python 3.10+ (stdlib only).
 function Invoke-NativeCommand {
     <#
         Run a native executable and report its exit code via
-        $script:LastNativeExitCode.
+        $script:LastNativeExitCode, returning its output as text lines.
 
-        Native stderr output reaches PowerShell as error records; with
-        $ErrorActionPreference = 'Stop' (Windows PowerShell 5.1 and PowerShell
-        7.4+ alike) a child writing a mere warning to stderr would abort this
-        script.  The relaxations below are scoped to the call: the exit code
-        stays the single source of truth.
+        Why this is not just "& $exe @args 2>&1":
+          * native stderr reaches PowerShell as error records, and with
+            $ErrorActionPreference = 'Stop' a child writing a mere warning would
+            abort the build;
+          * on Windows PowerShell 5.1 the merged pipeline can complete with a
+            stale $LASTEXITCODE of 0 even though the child exited non-zero, which
+            silently disables every "did this step fail?" check.
+
+        Start-Process -Wait -PassThru reports the real exit code, so it is the
+        source of truth; stdout/stderr are captured to temporary files and
+        returned as lines (UTF-8, the encoding this script forces on children).
     #>
     param(
         [string]$FilePath,
@@ -181,48 +206,70 @@ function Invoke-NativeCommand {
         [switch]$DiscardError
     )
 
-    $previousEap = $ErrorActionPreference
-    $hasNativePreference = Test-Path variable:PSNativeCommandUseErrorActionPreference
-    $previousNativePreference = $null
-    if ($hasNativePreference) {
-        $previousNativePreference = $PSNativeCommandUseErrorActionPreference
-        $PSNativeCommandUseErrorActionPreference = $false
-    }
-    try {
-        $ErrorActionPreference = 'Continue'
-        if ($MergeError) {
-            # Merge stderr into stdout as *plain text*: children legitimately
-            # warn on stderr (e.g. "no exe, using the Python backend"), and an
-            # unstringified ErrorRecord would be rendered as a red
-            # NativeCommandError that looks like a build failure.
-            & $FilePath @Arguments 2>&1 | ForEach-Object {
-                $text = if ($_ -is [System.Management.Automation.ErrorRecord]) {
-                    $_.Exception.Message
-                } else {
-                    "$_"
-                }
-                # PowerShell occasionally surfaces a bare type name instead of
-                # the stderr text; it carries no information.
-                if (-not [string]::IsNullOrWhiteSpace($text) -and
-                    -not $text.StartsWith('System.Management.Automation.')) {
-                    $text
-                }
-            }
-            $script:LastNativeExitCode = $LASTEXITCODE
-        } elseif ($DiscardError) {
-            & $FilePath @Arguments 2>$null
-            $script:LastNativeExitCode = $LASTEXITCODE
+    # Start-Process joins -ArgumentList with spaces; quote anything that would
+    # otherwise split (paths containing spaces, e.g. a checkout under "My Docs").
+    $quoted = @()
+    foreach ($argument in @($Arguments)) {
+        $text = [string]$argument
+        if ($text -match '[\s"]') {
+            $quoted += '"' + ($text -replace '"', '\"') + '"'
         } else {
-            & $FilePath @Arguments
-            $script:LastNativeExitCode = $LASTEXITCODE
+            $quoted += $text
         }
+    }
+
+    $stdoutFile = [System.IO.Path]::GetTempFileName()
+    $stderrFile = [System.IO.Path]::GetTempFileName()
+    try {
+        $process = Start-Process -FilePath $FilePath -ArgumentList $quoted `
+            -NoNewWindow -Wait -PassThru `
+            -RedirectStandardOutput $stdoutFile -RedirectStandardError $stderrFile
+        $script:LastNativeExitCode = $process.ExitCode
+
+        $lines = @()
+        if (Test-Path -LiteralPath $stdoutFile) {
+            $lines += @(Get-Content -LiteralPath $stdoutFile -Encoding UTF8 -ErrorAction SilentlyContinue)
+        }
+        if ($MergeError -and (Test-Path -LiteralPath $stderrFile)) {
+            $lines += @(Get-Content -LiteralPath $stderrFile -Encoding UTF8 -ErrorAction SilentlyContinue)
+        }
+        return $lines
     } finally {
-        $ErrorActionPreference = $previousEap
-        if ($hasNativePreference) {
-            $PSNativeCommandUseErrorActionPreference = $previousNativePreference
+        foreach ($temporary in @($stdoutFile, $stderrFile)) {
+            if (Test-Path -LiteralPath $temporary) {
+                Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue
+            }
         }
     }
 }
+
+function Assert-ExitCodeDetection {
+    <#
+        Prove that a failing step is actually noticed before trusting the build.
+
+        This guards the whole pipeline: if PowerShell ever changes how a child's
+        exit code is reported, the build must refuse to run rather than report a
+        green build over failed tests.
+    #>
+    $gateScript = Join-Path $projectRoot 'tools\check_build_gate.py'
+
+    Invoke-NativeCommand -FilePath $script:PythonExe `
+        -Arguments @($gateScript, '--exit-code', '7', '--stderr', '--lines', '3') `
+        -MergeError | Out-Null
+    $deliberate = $script:LastNativeExitCode
+    if ($deliberate -ne 7) {
+        throw ("构建脚本无法识别失败的子进程：期望退出码 7，实际 $deliberate。" +
+            '构建已中止，避免在测试失败的情况下产出发行包。')
+    }
+
+    Invoke-NativeCommand -FilePath $script:PythonExe `
+        -Arguments @($gateScript, '--exit-code', '0') -MergeError | Out-Null
+    if ($script:LastNativeExitCode -ne 0) {
+        throw ("构建脚本把成功的子进程判为失败：实际退出码 $script:LastNativeExitCode。")
+    }
+    Write-Note '退出码检测自检通过（失败会被中止）'
+}
+
 
 function Invoke-Git {
     param([string[]]$Arguments)
@@ -255,7 +302,8 @@ function Get-CommitShort {
 function Invoke-PythonStep {
     param([string[]]$Arguments)
 
-    Invoke-NativeCommand -FilePath $script:PythonExe -Arguments $Arguments -MergeError
+    Invoke-NativeCommand -FilePath $script:PythonExe -Arguments $Arguments -MergeError |
+        ForEach-Object { Write-Host $_ }
     if ($script:LastNativeExitCode -ne 0) {
         $exitCode = $script:LastNativeExitCode
         $commandLine = $Arguments -join ' '
@@ -263,31 +311,48 @@ function Invoke-PythonStep {
     }
 }
 
-function Copy-FilteredTree {
-    param([string]$Source, [string]$Destination)
-
-    $files = Get-ChildItem -LiteralPath $Source -Recurse -Force -File
-    foreach ($file in $files) {
-        $relative = $file.FullName.Substring($Source.Length).TrimStart('\', '/')
-        $parts = $relative -split '[\\/]'
-        $skip = $false
-        foreach ($part in $parts) {
-            if ($excludeDirectories -contains $part) { $skip = $true; break }
+function Resolve-PackagingPython {
+    <#
+        Return a Python that can run PyInstaller, creating the build virtual
+        environment on demand.  PyInstaller is a build-time-only dependency, so
+        it never touches the project's own interpreter or the user's PATH.
+    #>
+    if ($PyInstallerPython) {
+        if (-not (Test-Path -LiteralPath $PyInstallerPython -PathType Leaf)) {
+            throw "指定的 PyInstaller Python 不存在: $PyInstallerPython"
         }
-        if (-not $skip) {
-            foreach ($pattern in $excludeFilePatterns) {
-                if ($file.Name -like $pattern) { $skip = $true; break }
-            }
-        }
-        if ($skip) { continue }
-
-        $target = Join-Path $Destination $relative
-        $targetDirectory = Split-Path -Parent $target
-        if (-not (Test-Path -LiteralPath $targetDirectory)) {
-            New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
-        }
-        Copy-Item -LiteralPath $file.FullName -Destination $target -Force
+        return $PyInstallerPython
     }
+
+    $venvPython = Join-Path $buildVenvRoot 'Scripts\python.exe'
+    if (-not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+        Write-Note "创建构建虚拟环境 $buildVenvRoot"
+        Invoke-NativeCommand -FilePath $script:PythonExe `
+            -Arguments @('-m', 'venv', $buildVenvRoot) -MergeError
+        if ($script:LastNativeExitCode -ne 0 -or
+            -not (Test-Path -LiteralPath $venvPython -PathType Leaf)) {
+            throw "无法创建构建虚拟环境: $buildVenvRoot"
+        }
+    }
+
+    Invoke-NativeCommand -FilePath $venvPython `
+        -Arguments @('-c', 'import PyInstaller') -DiscardError
+    if ($script:LastNativeExitCode -ne 0) {
+        Write-Note '安装 PyInstaller（仅构建期依赖，装入 .build-venv）'
+        Invoke-NativeCommand -FilePath $venvPython `
+            -Arguments @('-m', 'pip', 'install', '--no-input', '--disable-pip-version-check',
+                '--progress-bar', 'off', '-i', $script:PipIndex, 'pyinstaller') -MergeError
+        if ($script:LastNativeExitCode -ne 0) {
+            throw ('PyInstaller 安装失败。可手动执行：' +
+                "$venvPython -m pip install -i $script:PipIndex pyinstaller")
+        }
+    }
+
+    $version = (Invoke-NativeCommand -FilePath $venvPython `
+            -Arguments @('-c', 'import PyInstaller; print(PyInstaller.__version__)') |
+        Out-String).Trim()
+    Write-Note "PyInstaller $version ($venvPython)"
+    return $venvPython
 }
 
 
@@ -312,6 +377,9 @@ function Invoke-Build {
     if (-not (Test-Path -LiteralPath $cryptoExe -PathType Leaf)) {
         throw "缺少加密组件（版本信息中的来源之一）: $cryptoExe"
     }
+
+    Write-Step '自检：构建脚本能否发现失败的子步骤'
+    Assert-ExitCodeDetection
 
     # 2. Git facts -----------------------------------------------------------
     Write-Step '读取 git 信息 (commit id / 分支 / 工作区状态)'
@@ -364,20 +432,21 @@ function Invoke-Build {
     } else {
         Write-Step '运行单元测试 (tools/run_tests.py)'
         $testArguments = @($testScript)
+        if ($TestPattern) { $testArguments += @('-p', $TestPattern) }
         if ($PureCryptoTests) { $testArguments += '--pure-crypto' }
         Invoke-PythonStep -Arguments $testArguments
     }
 
-    # 5. Stage + zip (Release only) -----------------------------------------
-    $script:StagePath = $null
+    # 5. Single-file executable (Release only) ------------------------------
+    $script:ExePath = $null
     $script:ZipPath = $null
     if ($Configuration -eq 'Debug') {
-        Write-Step 'Debug 配置：不生成发行目录（仅刷新构建信息并跑测试）'
+        Write-Step 'Debug 配置：只刷新构建信息并跑测试（不生成 exe）'
     } else {
         if ($Clean -and (Test-Path -LiteralPath $distRoot -PathType Container)) {
             Write-Step "清理旧的发行产物 $distRoot"
             $previous = Get-ChildItem -LiteralPath $distRoot -Force |
-                Where-Object { $_.Name -like 'Nioh3AccessoryEditor-v*' }
+                Where-Object { $_.Name -like 'Nioh3AccessoryEditor*' }
             foreach ($entry in $previous) {
                 Remove-Item -LiteralPath $entry.FullName -Recurse -Force
                 Write-Note "已删除 $($entry.Name)"
@@ -385,58 +454,106 @@ function Invoke-Build {
             if ($previous.Count -eq 0) { Write-Note '没有需要清理的产物' }
         }
 
-        $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-        $stageName = "Nioh3AccessoryEditor-v$($info.version)-$commitShort-$stamp"
-        $script:StagePath = Join-Path $distRoot $stageName
-
-        Write-Step "组装发行目录 $($script:StagePath)"
-        if (Test-Path -LiteralPath $script:StagePath) {
-            Remove-Item -LiteralPath $script:StagePath -Recurse -Force
+        # 5a. Payload: the files the exe unpacks next to itself --------------
+        Write-Step '生成随 exe 内嵌的载荷（配置 / 词条库 / 加解密组件 / 原始数据）'
+        $payloadPath = Join-Path $buildRoot 'app-payload.zip'
+        Invoke-PythonStep -Arguments @(
+            $payloadScript,
+            '--output', $payloadPath,
+            '--root', $projectRoot,
+            '--version', $info.version,
+            '--commit', $commitShort,
+            '--created', $builtAt,
+            '--verify'
+        )
+        if (-not (Test-Path -LiteralPath $payloadPath -PathType Leaf)) {
+            throw "载荷未生成: $payloadPath"
         }
-        New-Item -ItemType Directory -Path $script:StagePath -Force | Out-Null
 
-        foreach ($item in $stageItems) {
-            $source = Join-Path $projectRoot $item
-            if (-not (Test-Path -LiteralPath $source)) {
-                throw "缺少发行必需项: $source"
-            }
-            if (Test-Path -LiteralPath $source -PathType Container) {
-                Copy-FilteredTree -Source $source -Destination (Join-Path $script:StagePath $item)
-            } else {
-                Copy-Item -LiteralPath $source -Destination (Join-Path $script:StagePath $item) -Force
-            }
+        # 5b. PyInstaller: one file, no .py sources --------------------------
+        Write-Step '构建单文件 exe (PyInstaller onefile)'
+        $script:PackPython = Resolve-PackagingPython
+        $packLog = Join-Path $buildRoot 'pyinstaller.log'
+        $packArguments = @(
+            '-m', 'PyInstaller',
+            '--noconfirm', '--clean',
+            '--distpath', $distRoot,
+            '--workpath', (Join-Path $buildRoot 'pyi'),
+            (Join-Path $projectRoot 'Nioh3AccessoryEditor.spec')
+        )
+        $packOutput = Invoke-NativeCommand -FilePath $script:PackPython `
+            -Arguments $packArguments -MergeError
+        # PyInstaller is verbose: keep the full log on disk, show the tail.
+        $packOutput | Set-Content -LiteralPath $packLog -Encoding UTF8
+        $packOutput | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" }
+        if ($script:LastNativeExitCode -ne 0) {
+            throw "PyInstaller 失败 (exit $($script:LastNativeExitCode))；完整日志: $packLog"
         }
-        Copy-Item -LiteralPath $buildInfoJson -Destination $script:StagePath -Force
-        Copy-Item -LiteralPath $buildInfoText -Destination $script:StagePath -Force
-        Write-Note "已复制 $($stageItems.Count) 个顶层项 + BUILD-INFO.json/.txt"
+        $script:ExePath = Join-Path $distRoot 'Nioh3AccessoryEditor.exe'
+        if (-not (Test-Path -LiteralPath $script:ExePath -PathType Leaf)) {
+            throw "未生成 exe: $($script:ExePath)"
+        }
+        $exeSize = [math]::Round((Get-Item -LiteralPath $script:ExePath).Length / 1MB, 2)
+        Write-Note "exe: $($script:ExePath) ($exeSize MB)"
 
-        Write-Step '冒烟测试发行副本（必须报告冻结的构建信息）'
-        $smokeOutput = Invoke-NativeCommand `
-            -FilePath $script:PythonExe `
-            -Arguments @((Join-Path $script:StagePath 'launch_editor.py'), '--version') `
-            -MergeError
+        # 5c. Smoke test: fresh directory, must extract and report its commit -
+        Write-Step '冒烟测试单文件 exe（解压附属文件 + 报告冻结的构建信息）'
+        $smokeRoot = Join-Path $buildRoot 'smoke'
+        if (Test-Path -LiteralPath $smokeRoot) {
+            Remove-Item -LiteralPath $smokeRoot -Recurse -Force
+        }
+        New-Item -ItemType Directory -Path $smokeRoot -Force | Out-Null
+        $smokeExe = Join-Path $smokeRoot 'Nioh3AccessoryEditor.exe'
+        Copy-Item -LiteralPath $script:ExePath -Destination $smokeExe -Force
+
+        $smokeOutput = Invoke-NativeCommand -FilePath $smokeExe `
+            -Arguments @('--version') -MergeError
+        $smokeOutput | ForEach-Object { Write-Host $_ }
         $smokeExit = $script:LastNativeExitCode
         if ($smokeExit -ne 0) {
-            throw "发行副本冒烟测试失败 (exit $smokeExit)"
+            throw "exe 冒烟测试失败 (exit $smokeExit)"
         }
         $smokeText = ($smokeOutput | Out-String)
         if ($smokeText -notmatch [regex]::Escape($commitShort)) {
-            throw "发行副本未报告预期的 commit $commitShort"
+            throw "exe 未报告预期的 commit $commitShort"
         }
-        Write-Note "冒烟测试通过：发行副本报告 commit $commitShort"
+
+        foreach ($relative in @('config\editor.json', 'data\accessory_affixes.json',
+                'bin\Nioh_Savefile_decrypt.exe', 'README.md', 'CHANGELOG.md',
+                'third_party\source-data')) {
+            if (-not (Test-Path -LiteralPath (Join-Path $smokeRoot $relative))) {
+                throw "exe 未在自身目录解压: $relative"
+            }
+        }
+        if (-not (Test-Path -LiteralPath (Join-Path $smokeRoot '.extracted-manifest.json'))) {
+            throw 'exe 未写入解压清单 .extracted-manifest.json'
+        }
+        Write-Note "冒烟测试通过：解压附属文件成功，报告 commit $commitShort"
+
+        # 5d. The shipped tree must contain no Python sources ----------------
+        Write-Step '校验发行内容（仅 exe，无 .py 文件）'
+        $pyFiles = @(Get-ChildItem -LiteralPath $smokeRoot -Recurse -Force -File -Filter '*.py')
+        if ($pyFiles.Count -gt 0) {
+            $names = ($pyFiles | ForEach-Object { $_.Name }) -join ', '
+            throw "发行目录出现 Python 源文件: $names"
+        }
+        $topLevel = @(Get-ChildItem -LiteralPath $distRoot -Force)
+        Write-Note "发行目录顶层项: $(($topLevel | ForEach-Object { $_.Name }) -join ', ')"
 
         if ($SkipZip) {
             Write-Step '跳过打包 (-SkipZip)'
         } else {
-            $script:ZipPath = "$($script:StagePath).zip"
-            Write-Step "打包 $($script:ZipPath)"
+            $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+            $script:ZipPath = Join-Path $distRoot `
+                "Nioh3AccessoryEditor-v$($info.version)-$commitShort-$stamp.zip"
+            Write-Step "打包单文件 exe -> $($script:ZipPath)"
             if (Test-Path -LiteralPath $script:ZipPath) {
                 Remove-Item -LiteralPath $script:ZipPath -Force
             }
-            Compress-Archive -LiteralPath $script:StagePath -DestinationPath $script:ZipPath `
+            Compress-Archive -LiteralPath $script:ExePath -DestinationPath $script:ZipPath `
                 -CompressionLevel Optimal
-            $zipSize = [math]::Round((Get-Item -LiteralPath $script:ZipPath).Length / 1KB, 1)
-            Write-Note "压缩包大小: $zipSize KB"
+            $zipSize = [math]::Round((Get-Item -LiteralPath $script:ZipPath).Length / 1MB, 2)
+            Write-Note "压缩包: $zipSize MB（内含单个 exe，其余文件首次运行时自解压）"
         }
     }
 
@@ -446,7 +563,7 @@ function Invoke-Build {
     Get-Content -LiteralPath $buildInfoText -Encoding UTF8 | ForEach-Object { Write-Host $_ }
     Write-Host ''
     if ($Configuration -eq 'Release') {
-        Write-Host "发行目录  : $($script:StagePath)"
+        Write-Host "单文件 exe: $($script:ExePath)"
         if ($null -ne $script:ZipPath) { Write-Host "压缩包    : $($script:ZipPath)" }
     }
     Write-Host "完整 commit: $commitFull"
@@ -481,3 +598,9 @@ try {
         Write-Verbose "无法恢复控制台编码: $_"
     }
 }
+
+# Reaching this point means every step succeeded (a failed step throws and the
+# script exits non-zero), so report success explicitly instead of leaking
+# whatever $LASTEXITCODE happened to hold.
+exit 0
+

@@ -1,0 +1,82 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller spec for the single-file Nioh3AccessoryEditor executable.
+
+Layout produced by this spec:
+
+* ``Nioh3AccessoryEditor.exe`` -- one file, no ``.py`` sources, console
+  subsystem so ``--version`` / ``list`` / ``edit`` work from a terminal while the
+  GUI hides its own console when double-clicked (see ``ui._hide_own_console``).
+* Inside it: the Python runtime, ``nioh3_accessory_editor`` (including the
+  generated ``_buildinfo``) and ``app-payload.zip``.
+
+``app-payload.zip`` is *not* read from the temporary extraction directory at
+run time: :mod:`nioh3_accessory_editor.bootstrap` unpacks it next to the
+executable on first run, so the configuration file, the affix catalogue and the
+bundled crypto helper end up as ordinary files the user can edit.
+
+Build it through ``build.ps1`` (which generates the payload and the build
+identity first):
+
+    pyinstaller --noconfirm --clean --distpath dist --workpath build/pyi \\
+        Nioh3AccessoryEditor.spec
+"""
+
+import os
+import sys
+from pathlib import Path
+
+PROJECT_ROOT = Path(SPECPATH).resolve()  # noqa: F821 - provided by PyInstaller
+PAYLOAD = PROJECT_ROOT / "build" / "app-payload.zip"
+ENTRY_POINT = PROJECT_ROOT / "launch_editor.py"
+
+if not PAYLOAD.is_file():
+    raise SystemExit(
+        f"缺少载荷文件 {PAYLOAD}；请先运行 tools/make_payload.py 或使用 build.ps1"
+    )
+
+#: Ship the generated build identity even though it is imported defensively.
+HIDDEN_IMPORTS = ["nioh3_accessory_editor._buildinfo"]
+
+#: Nothing here is needed at run time and it keeps the image smaller.
+EXCLUDES = [
+    "pydoc_data", "unittest", "pdb", "doctest", "lib2to3", "distutils",
+    "setuptools", "pip", "PyInstaller", "test", "tests", "tools",
+]
+
+a = Analysis(  # noqa: F821 - PyInstaller injects Analysis/PYZ/EXE
+    [str(ENTRY_POINT)],
+    pathex=[str(PROJECT_ROOT)],
+    binaries=[],
+    datas=[(str(PAYLOAD), ".")],
+    hiddenimports=HIDDEN_IMPORTS,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=EXCLUDES,
+    noarchive=False,
+    optimize=0,
+)
+
+pyz = PYZ(a.pure)  # noqa: F821
+
+exe = EXE(  # noqa: F821
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name="Nioh3AccessoryEditor",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=None,
+)

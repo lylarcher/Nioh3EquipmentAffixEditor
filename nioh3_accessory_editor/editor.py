@@ -110,10 +110,10 @@ class EditPlan:
 # Discovery / reading
 # --------------------------------------------------------------------------
 
-def discover_saves() -> tuple[SaveDescriptor, ...]:
+def discover_saves(root: Path | None = None) -> tuple[SaveDescriptor, ...]:
     """Return every discoverable USR save, newest account/slot first."""
     descriptors: list[SaveDescriptor] = []
-    for path in discover_save_paths():
+    for path in discover_save_paths(root):
         try:
             size = path.stat().st_size
         except OSError:

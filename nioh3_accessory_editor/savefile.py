@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import crypto as py_crypto
+from . import paths
 
 __all__ = [
     "BACKUP_MANIFEST_SCHEMA",
@@ -95,12 +96,11 @@ def sha256_file(path: Path) -> str:
 def default_crypto_tool(project_root: Path | None = None) -> Path:
     """Locate the bundled reference decrypt executable.
 
-    The packaged ``bin/`` next to this package wins over a caller-supplied
-    project root so the backend never depends on the current directory.
+    The packaged ``bin/`` **next to the executable** (frozen build) or next to
+    this package (source run) wins over a caller-supplied project root, so the
+    backend never depends on the current directory.
     """
-    candidates: list[Path] = [
-        Path(__file__).resolve().parents[1] / "bin" / "Nioh_Savefile_decrypt.exe",
-    ]
+    candidates: list[Path] = [paths.default_crypto_exe()]
     if project_root is not None:
         candidates.append(project_root / "bin" / "Nioh_Savefile_decrypt.exe")
     for candidate in candidates:
@@ -237,9 +237,13 @@ def account_id_from_save_path(path: Path) -> int:
         raise SaveError("无法从存档路径识别 Steam 账号 ID") from error
 
 
-def discover_save_paths() -> list[Path]:
-    """Return every ``SAVEDATA??/SAVEDATA.BIN`` under the Nioh 3 save root."""
-    root = save_root_directory()
+def discover_save_paths(root: Path | None = None) -> list[Path]:
+    """Return every ``SAVEDATA??/SAVEDATA.BIN`` under the Nioh 3 save root.
+
+    ``root`` overrides the automatic ``%LOCALAPPDATA%\\KoeiTecmo\\...`` lookup,
+    which is how ``save_root`` in ``config/editor.json`` is honoured.
+    """
+    root = Path(root) if root is not None else save_root_directory()
     if not root.is_dir():
         return []
     discovered: list[Path] = []

@@ -22,6 +22,8 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
+from .paths import default_catalog_path
+
 __all__ = [
     "DEFAULT_CATALOG",
     "FLAG_FIXED",
@@ -33,7 +35,7 @@ __all__ = [
     "save_catalog",
 ]
 
-DEFAULT_CATALOG = Path(__file__).resolve().parents[1] / "data" / "accessory_affixes.json"
+DEFAULT_CATALOG = default_catalog_path()
 CATALOG_SCHEMA = "nioh3-accessory-affixes/v1"
 
 # Metadata flag bits decoded from the 词条代码 byte layout:

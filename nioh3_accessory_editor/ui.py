@@ -12,13 +12,17 @@ The window shows the required disclaimer permanently.
 
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
+from . import paths
 from .affixdb import AffixDb
+from .bootstrap import ensure_once, last_report
+from .config import ConfigError, EditorConfig, load_config
 from .editor import (
     AccessoryView,
     SaveDescriptor,
@@ -29,6 +33,7 @@ from .editor import (
     open_save,
     save_checksum_is_valid,
 )
+from .paths import resource_root
 from .records import EFFECT_COUNT, EMPTY_EFFECT_ID, EffectSlot
 from .savefile import (
     SAVE_WRITE_REQUIREMENT,
@@ -60,14 +65,17 @@ class UiEditError(ValueError):
 class AccessoryEditorApp(tk.Tk):
     """Main window: save selection, record list, affix slots, write actions."""
 
-    def __init__(self) -> None:
+    def __init__(self, config: EditorConfig | None = None) -> None:
         super().__init__()
+        self.config = config if config is not None else load_config()
+        self.state_root = self.config.resolved_backup_root()
         self.title(f"{TITLE} · v{version_info().version}")
         self.geometry("1000x700")
         self.minsize(880, 620)
 
         self.affix_db = AffixDb()
-        self.crypto = SaveCrypto()
+        self._backend_note = ""
+        self.crypto = self._build_crypto()
         self.saves: list[SaveDescriptor] = []
         self.accessory_views: list[AccessoryView] = []
         self.decrypted: bytes | None = None
@@ -79,6 +87,13 @@ class AccessoryEditorApp(tk.Tk):
         self._build_ui()
         self.after(80, self._poll_worker)
         self.refresh_saves()
+
+    def _build_crypto(self) -> SaveCrypto:
+        """Use the configured backend, degrading to pure Python when missing."""
+        backend = self.config.crypto_backend()
+        if backend.note:
+            self._backend_note = backend.note
+        return SaveCrypto(backend.executable, prefer_python=backend.prefer_python)
 
     # ------------------------------------------------------------------ UI
 
@@ -145,12 +160,14 @@ class AccessoryEditorApp(tk.Tk):
 
         bottom = ttk.Frame(self, padding=(8, 4))
         bottom.pack(fill=tk.X)
-        self.status_var = tk.StringVar(value="就绪")
+        self.status_var = tk.StringVar(
+            value=self._backend_note if self._backend_note else "就绪"
+        )
         ttk.Label(bottom, textvariable=self.status_var, foreground="#0366d6").pack(side=tk.LEFT)
-        self.dry_run_var = tk.BooleanVar(value=True)
+        self.dry_run_var = tk.BooleanVar(value=self.config.default_dry_run)
         ttk.Checkbutton(bottom, text="仅演练（不写回）",
                         variable=self.dry_run_var).pack(side=tk.LEFT, padx=6)
-        self.verify_var = tk.BooleanVar(value=True)
+        self.verify_var = tk.BooleanVar(value=self.config.default_verify)
         ttk.Checkbutton(bottom, text="写入校验",
                         variable=self.verify_var).pack(side=tk.LEFT, padx=6)
         ttk.Button(bottom, text="应用修改",
@@ -199,6 +216,15 @@ class AccessoryEditorApp(tk.Tk):
         if info.crypto_exe_sha256 not in ("", UNKNOWN):
             details.append(f"组件 SHA-256: {info.crypto_exe_sha256}")
         details.append(f"信息来源   : {info.source}")
+        details.append("")
+        details.append(f"程序目录   : {resource_root()}")
+        details.append(f"配置文件   : {self.config.source or paths.default_config_path()}")
+        details.append(f"备份目录   : {self.state_root}")
+        if self._backend_note:
+            details.append(f"加密后端   : {self._backend_note}")
+        report = last_report()
+        if report is not None:
+            details.append(f"随附文件   : {report.summary()}")
         messagebox.showinfo("版本信息", "\n".join(details))
 
     # ------------------------------------------------------------- helpers
@@ -261,7 +287,7 @@ class AccessoryEditorApp(tk.Tk):
 
     @staticmethod
     def _load_saves() -> tuple[str, tuple[SaveDescriptor, ...]]:
-        return "saves", discover_saves()
+        return "saves", discover_saves(self.config.resolved_save_root())
 
     def _populate_saves(self, saves: object) -> None:
         self.saves = list(saves) if saves else []
@@ -429,7 +455,7 @@ class AccessoryEditorApp(tk.Tk):
         crypto = self.crypto
 
         def worker() -> tuple[str, str]:
-            return "backup", str(create_backup(save.path, state_root=Path.cwd(),
+            return "backup", str(create_backup(save.path, state_root=self.state_root,
                                                crypto=crypto))
 
         self._run_worker(worker)
@@ -468,7 +494,7 @@ class AccessoryEditorApp(tk.Tk):
 
         def worker() -> tuple[str, dict]:
             result = commit_save(
-                save, data, crypto=crypto, state_root=Path.cwd(),
+                save, data, crypto=crypto, state_root=self.state_root,
                 dry_run=dry_run, verify=verify, allow_game_running=True,
             )
             return ("dry_run" if result.get("dry_run") else "written"), result
@@ -476,8 +502,40 @@ class AccessoryEditorApp(tk.Tk):
         self._run_worker(worker)
 
 
-def main() -> int:
-    app = AccessoryEditorApp()
+def _hide_own_console() -> None:
+    """Hide the console a double-clicked frozen build starts with.
+
+    A console-subsystem executable gets a console window whether or not it was
+    started from a terminal.  The window is hidden only when this process is the
+    sole owner of that console, so running ``Nioh3AccessoryEditor.exe`` from an
+    existing shell never hides the user's own terminal.  Best effort by design:
+    a failure here must not stop the GUI from opening.
+    """
+    if not paths.is_frozen() or os.name != "nt":
+        return
+    try:
+        import ctypes  # noqa: PLC0415 - Windows-only, imported on demand
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        process_ids = (ctypes.c_ulong * 4)()
+        attached = kernel32.GetConsoleProcessList(process_ids, 4)
+        if attached <= 1:
+            window = kernel32.GetConsoleWindow()
+            if window:
+                ctypes.WinDLL("user32", use_last_error=True).ShowWindow(window, 0)
+    except Exception:  # noqa: BLE001 - cosmetic only
+        return
+
+
+def main(config: EditorConfig | None = None) -> int:
+    if config is None:
+        try:
+            config = load_config()
+        except ConfigError as error:
+            messagebox.showerror("配置文件错误", str(error))
+            return 2
+    _hide_own_console()
+    app = AccessoryEditorApp(config)
     app.mainloop()
     return 0
 
