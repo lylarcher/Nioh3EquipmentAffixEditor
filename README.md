@@ -82,6 +82,9 @@ back to the patched bytes.
 # Release: stamp build identity, run the tests, stage dist/, zip it
 powershell -File .\build.ps1
 
+# Drop older dist/ artifacts first (only Nioh3AccessoryEditor-v* entries)
+powershell -File .\build.ps1 -Clean
+
 # Only refresh the build identity of the working tree (no dist, no zip)
 powershell -File .\build.ps1 -Configuration Debug -SkipTests
 
@@ -93,7 +96,8 @@ powershell -File .\build.ps1 -SkipTests -SkipZip -Python D:\Python310\python.exe
 identity, runs the suite, stages a runnable tree under `dist\`, and smoke-tests
 that staged copy (it must report the frozen commit, not whatever git says now).
 Parameters: `-Python`, `-Configuration Release|Debug`, `-OutputDirectory`,
-`-SkipTests`, `-SkipZip`, `-PureCryptoTests`, `-Quiet`.
+`-SkipTests`, `-SkipZip`, `-PureCryptoTests`, `-Clean`, `-Quiet`. It works on
+Windows PowerShell 5.1 and PowerShell 7+.
 
 > `build.ps1` is saved as UTF-8 **with BOM** on purpose: Windows PowerShell
 > reads a BOM-less script with the ANSI code page (GBK on zh-CN), which would

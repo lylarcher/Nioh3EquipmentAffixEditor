@@ -47,6 +47,11 @@
 .PARAMETER PureCryptoTests
     Also run the slow full-file pure-Python crypto round trip.
 
+.PARAMETER Clean
+    Remove previous Nioh3AccessoryEditor-v* artifacts from the output directory
+    before staging. Only entries matching this project's own artifact name are
+    touched, so a custom -OutputDirectory is never wiped wholesale.
+
 .PARAMETER Quiet
     Suppress per-step progress output (the version banner is still printed).
 
@@ -57,6 +62,10 @@
 .EXAMPLE
     powershell -File .\build.ps1 -Configuration Debug -SkipTests
     Only refresh the build identity of the working tree.
+
+.EXAMPLE
+    powershell -File .\build.ps1 -Clean
+    Release build that first drops older dist artifacts.
 #>
 [CmdletBinding()]
 param(
@@ -67,6 +76,7 @@ param(
     [switch]$SkipTests,
     [switch]$SkipZip,
     [switch]$PureCryptoTests,
+    [switch]$Clean,
     [switch]$Quiet
 )
 
@@ -362,6 +372,17 @@ function Invoke-Build {
     if ($Configuration -eq 'Debug') {
         Write-Step 'Debug 配置：不生成发行目录（仅刷新构建信息并跑测试）'
     } else {
+        if ($Clean -and (Test-Path -LiteralPath $distRoot -PathType Container)) {
+            Write-Step "清理旧的发行产物 $distRoot"
+            $previous = Get-ChildItem -LiteralPath $distRoot -Force |
+                Where-Object { $_.Name -like 'Nioh3AccessoryEditor-v*' }
+            foreach ($entry in $previous) {
+                Remove-Item -LiteralPath $entry.FullName -Recurse -Force
+                Write-Note "已删除 $($entry.Name)"
+            }
+            if ($previous.Count -eq 0) { Write-Note '没有需要清理的产物' }
+        }
+
         $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
         $stageName = "Nioh3AccessoryEditor-v$($info.version)-$commitShort-$stamp"
         $script:StagePath = Join-Path $distRoot $stageName
