@@ -5,6 +5,7 @@
 # Windows binaries must never be line-ending converted.
 *.exe binary
 *.png binary
+*.ico binary
 *.zip binary
 
 # Bundled source data (third_party/source-data/).  `.CT` has no NUL byte in its

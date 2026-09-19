@@ -353,5 +353,70 @@ class WriteFlowTests(UiTestCase):
         warned.assert_called_once()
 
 
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class StartupScanTests(unittest.TestCase):
+    """The real startup path, with save discovery *not* stubbed out.
+
+    Every other UI test patches ``refresh_saves``, which once hid a live bug
+    (``_load_saves`` was a ``@staticmethod`` that still referenced ``self``, so
+    the save scan always failed with "name 'self' is not defined" behind a modal
+    error box).  These tests therefore build the window exactly as a user does.
+    """
+
+    def test_window_opens_and_the_save_scan_does_not_error(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="nioh3-start-") as temp, \
+                mock.patch.object(tkinter, "Tk", tkinter.Tk), \
+                mock.patch("nioh3_accessory_editor.savefile.save_root_directory",
+                           return_value=Path(temp)), \
+                mock.patch.object(ui.messagebox, "showerror") as failed:
+            app = ui.AccessoryEditorApp()
+            self.addCleanup(app.destroy)
+            for _ in range(200):  # drain the worker queue
+                app.update()
+                if app.worker_queue.empty():
+                    break
+        failed.assert_not_called()
+        self.assertEqual(app.saves, [])
+
+    def test_missing_save_root_is_reported_as_a_status_not_a_dialog(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="nioh3-start-") as temp, \
+                mock.patch("nioh3_accessory_editor.savefile.save_root_directory",
+                           return_value=Path(temp) / "absent"), \
+                mock.patch.object(ui.AccessoryEditorApp, "refresh_saves",
+                                  lambda self: None):
+            app = ui.AccessoryEditorApp()
+        self.addCleanup(app.destroy)
+        with mock.patch.object(ui.messagebox, "showerror") as failed:
+            app._populate_saves(())
+        failed.assert_not_called()
+        # The empty list is actionable: it says where the scan looked.
+        self.assertIn("未发现存档", app.status_var.get())
+        self.assertIn("查找位置", app.status_var.get())
+
+
+class StaticMethodTests(unittest.TestCase):
+    """A ``@staticmethod`` that touches ``self`` is a guaranteed NameError."""
+
+    def test_no_staticmethod_references_self(self) -> None:
+        import ast
+        from pathlib import Path as _Path
+
+        package = _Path(__file__).resolve().parents[1] / "nioh3_accessory_editor"
+        offenders = []
+        for path in sorted(package.glob("*.py")):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.FunctionDef):
+                    continue
+                if not any("staticmethod" in ast.unparse(d)
+                           for d in node.decorator_list):
+                    continue
+                used = {name.id for name in ast.walk(node)
+                        if isinstance(name, ast.Name)}
+                if "self" in used:
+                    offenders.append(f"{path.name}:{node.lineno}:{node.name}")
+        self.assertEqual(offenders, [], "staticmethod 里引用了 self")
+
+
 if __name__ == "__main__":
     unittest.main()

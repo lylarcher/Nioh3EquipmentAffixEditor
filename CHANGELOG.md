@@ -51,6 +51,18 @@
     相对路径相对 exe 目录解析，便于整个文件夹搬迁。
 * **`build.ps1` 新增 `-TestPattern`**：只跑匹配的测试模块（如 `-TestPattern test_cli.py`），
   便于单模块迭代。
+* **程序图标与 logo（勾玉）**：新增 `assets/`，全部由 `tools/make_icon.py` 用标准库几何绘制
+  生成（可复现、可复核，**不是游戏素材**）：
+  * `app.ico`：16/20/24/32/40/48/64/128/256 共 9 种尺寸，编译进 exe，资源管理器、
+    任务栏、标题栏都显示；
+  * `logo.png` / `logo-64.png` / `logo-32.png`：GUI 标题区与窗口图标使用；
+  * 小尺寸单独调整（加粗玉体、去掉穿绳孔与描边），保证 16 px 下仍能辨认；
+    `tests/test_icon.py` 用金色像素占比守住这一点。
+* **GUI 品牌区**：窗口/任务栏图标取自 `assets/app.ico`（读取失败时回退 `logo-32.png`），
+  顶部新增 64 px logo + 标题 + 副标题；资源缺失时自动降级为文字，不影响使用。
+* **`tools/check_exe_icon.py`**：直接解析 PE 资源目录（`RT_GROUP_ICON` / `RT_ICON`），
+  校验 exe 真的带图标、9 种尺寸齐全、且与 `assets/app.ico` **逐字节一致**——不再依赖
+  “PyInstaller 应该会嵌入”的假设。
 
 ### 变更
 
@@ -58,6 +70,8 @@
   副本（保留旧路径作为回退），新增 `resolve_source()` 与找不到文件时的路径提示。
 * 游戏进程门禁统一为一处实现：`editor.commit_save` 改为调用
   `savefile.require_game_not_running()`，不再维护第二份判断与文案。
+* `build.ps1`：新增「校验 assets/ 与生成器一致」与「校验 exe 内嵌图标（PE 资源）」两步，
+  冒烟测试额外断言 `assets\app.ico`、`assets\logo-32.png` 已解压到 exe 同目录。
 * `build.ps1`：发行流程改为「生成构建信息 → 跑测试 → 生成内嵌载荷
   （`tools/make_payload.py`）→ PyInstaller 单文件打包 → 在全新目录冒烟测试 exe
   （校验自解压产物与冻结的构建信息）→ 校验发行物无 `.py` → 打包 zip」，不再复制源码目录。
@@ -78,6 +92,21 @@
 * `version.py`：冻结运行时不再尝试调用 `git`，构建身份只取自 `_buildinfo`；版本信息额外
   显示程序目录与配置文件路径。
 * GUI 的备份目录、演练/校验默认值改由配置决定（源码运行时仍为当前目录）。
+
+### 修复
+
+* **GUI 启动时保存扫描必然失败**：`ui._load_saves` 是 `@staticmethod` 却引用了 `self`，
+  于是每次启动都抛 `name 'self' is not defined` 并弹出「错误」对话框（存档列表永远为空）。
+  该缺陷此前被所有 GUI 测试掩盖——它们都 stub 掉了 `refresh_saves`。现改为实例方法，并补上
+  两处防护：真正走启动扫描的回归测试，以及「package 内不允许 staticmethod 引用 self」的
+  静态检查测试。
+* `ui._load_image` 未指定 `master`：`tk.PhotoImage` 会绑定到默认解释器，在存在多个 Tk
+  解释器时图片不可用；现在显式绑定到本窗口。
+
+### 变更
+
+* GUI 未发现存档时，状态栏改为显示**实际查找位置**（`未发现存档 · 查找位置 …`），
+  而不是只报一句「未发现存档」。
 
 ### 移除
 

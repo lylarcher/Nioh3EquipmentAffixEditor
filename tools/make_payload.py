@@ -9,6 +9,7 @@ relative directories they occupy in a checkout:
 
     data/accessory_affixes.json     词条库（合法词条，可自行查看）
     config/editor.json              参数配置（改完后重启生效）
+    assets/app.ico, logo*.png       程序图标与 logo（GUI 使用，可替换）
     bin/Nioh_Savefile_decrypt.exe   随附的加解密组件（可替换）
     third_party/source-data/...     原始数据（xlsx / CT，供重新生成词条库）
     README.md, CHANGELOG.md         文档
@@ -35,7 +36,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = PROJECT_ROOT / "build" / "app-payload.zip"
 
 #: Directories copied verbatim (relative to the project root).
-PAYLOAD_DIRECTORIES = ("bin", "data", "third_party")
+PAYLOAD_DIRECTORIES = ("assets", "bin", "data", "third_party")
 
 #: Individual files copied verbatim.
 PAYLOAD_FILES = ("README.md", "CHANGELOG.md")

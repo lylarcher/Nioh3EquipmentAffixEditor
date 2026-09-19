@@ -455,7 +455,11 @@ function Invoke-Build {
         }
 
         # 5a. Payload: the files the exe unpacks next to itself --------------
-        Write-Step '生成随 exe 内嵌的载荷（配置 / 词条库 / 加解密组件 / 原始数据）'
+        Write-Step '校验图标与 logo（assets/ 必须与 tools/make_icon.py 一致）'
+        $iconScript = Join-Path $projectRoot 'tools\make_icon.py'
+        Invoke-PythonStep -Arguments @($iconScript, '--check')
+
+        Write-Step '生成随 exe 内嵌的载荷（配置 / 词条库 / 图标 / 加解密组件 / 原始数据）'
         $payloadPath = Join-Path $buildRoot 'app-payload.zip'
         Invoke-PythonStep -Arguments @(
             $payloadScript,
@@ -496,6 +500,16 @@ function Invoke-Build {
         $exeSize = [math]::Round((Get-Item -LiteralPath $script:ExePath).Length / 1MB, 2)
         Write-Note "exe: $($script:ExePath) ($exeSize MB)"
 
+        # 5b-bis. The icon must really be inside the PE resources ------------
+        Write-Step '校验 exe 内嵌图标（PE 资源里的 RT_GROUP_ICON）'
+        $iconCheckScript = Join-Path $projectRoot 'tools\check_exe_icon.py'
+        Invoke-PythonStep -Arguments @(
+            $iconCheckScript,
+            '--exe', $script:ExePath,
+            '--against', (Join-Path $projectRoot 'assets\app.ico'),
+            '--expect', '16,20,24,32,40,48,64,128,256'
+        )
+
         # 5c. Smoke test: fresh directory, must extract and report its commit -
         Write-Step '冒烟测试单文件 exe（解压附属文件 + 报告冻结的构建信息）'
         $smokeRoot = Join-Path $buildRoot 'smoke'
@@ -519,6 +533,7 @@ function Invoke-Build {
         }
 
         foreach ($relative in @('config\editor.json', 'data\accessory_affixes.json',
+                'assets\app.ico', 'assets\logo-32.png', 'assets\logo.png',
                 'bin\Nioh_Savefile_decrypt.exe', 'README.md', 'CHANGELOG.md',
                 'third_party\source-data')) {
             if (-not (Test-Path -LiteralPath (Join-Path $smokeRoot $relative))) {

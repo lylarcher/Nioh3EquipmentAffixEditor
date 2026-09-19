@@ -6,6 +6,8 @@ Layout produced by this spec:
 * ``Nioh3AccessoryEditor.exe`` -- one file, no ``.py`` sources, console
   subsystem so ``--version`` / ``list`` / ``edit`` work from a terminal while the
   GUI hides its own console when double-clicked (see ``ui._hide_own_console``).
+  Explorer, the taskbar and the window title bar take their icon from
+  ``assets/app.ico`` (all nine sizes are compiled into the PE resources).
 * Inside it: the Python runtime, ``nioh3_accessory_editor`` (including the
   generated ``_buildinfo``) and ``app-payload.zip``.
 
@@ -28,10 +30,16 @@ from pathlib import Path
 PROJECT_ROOT = Path(SPECPATH).resolve()  # noqa: F821 - provided by PyInstaller
 PAYLOAD = PROJECT_ROOT / "build" / "app-payload.zip"
 ENTRY_POINT = PROJECT_ROOT / "launch_editor.py"
+ICON = PROJECT_ROOT / "assets" / "app.ico"
 
 if not PAYLOAD.is_file():
     raise SystemExit(
         f"缺少载荷文件 {PAYLOAD}；请先运行 tools/make_payload.py 或使用 build.ps1"
+    )
+
+if not ICON.is_file():
+    raise SystemExit(
+        f"缺少图标 {ICON}；请先运行 python tools/make_icon.py"
     )
 
 #: Ship the generated build identity even though it is imported defensively.
@@ -78,5 +86,5 @@ exe = EXE(  # noqa: F821
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=str(ICON),
 )

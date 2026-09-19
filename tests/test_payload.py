@@ -36,12 +36,20 @@ class CollectorTests(unittest.TestCase):
     def test_ships_the_editable_resources(self) -> None:
         for expected in ("data/accessory_affixes.json",
                          "config/editor.json",
+                         "assets/app.ico",
+                         "assets/logo.png",
+                         "assets/logo-32.png",
+                         "assets/logo-64.png",
                          "bin/Nioh_Savefile_decrypt.exe",
                          "README.md",
                          "CHANGELOG.md"):
             self.assertIn(expected, self.payload, expected)
         self.assertTrue(any(name.startswith("third_party/source-data/")
                             for name in self.payload))
+
+    def test_ships_the_same_icon_data_as_the_icon_asset(self) -> None:
+        on_disk = (PROJECT_ROOT / "assets" / "app.ico").read_bytes()
+        self.assertEqual(self.payload["assets/app.ico"], on_disk)
 
     def test_ships_no_python_sources_or_caches(self) -> None:
         for name, data in self.payload.items():
@@ -252,6 +260,13 @@ class SpecContractTests(unittest.TestCase):
 
     def test_uses_no_upx_and_no_icon_argument_guessing(self) -> None:
         self.assertIn("upx=False", self.source)
+
+    def test_embeds_the_application_icon(self) -> None:
+        """The exe icon comes from the committed asset, and its absence fails."""
+        self.assertIn("ICON = PROJECT_ROOT", self.source)
+        self.assertIn('"app.ico"', self.source)
+        self.assertIn("icon=str(ICON)", self.source)
+        self.assertIn("缺少图标", self.source)
 
 
 if __name__ == "__main__":

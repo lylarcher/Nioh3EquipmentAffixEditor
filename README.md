@@ -1,10 +1,10 @@
 # Nioh3AccessoryEditor
 
-A Python accessory (饰品) affix editor for **Nioh 3 (PC)** that writes edits
-**directly into the save file** so they persist across sessions — not a
+A Python accessory (楗板搧) affix editor for **Nioh 3 (PC)** that writes edits
+**directly into the save file** so they persist across sessions 鈥?not a
 memory-only trainer.
 
-> **仅供测试学习用，不要用于联机影响游戏平衡。**
+> **浠呬緵娴嬭瘯瀛︿範鐢紝涓嶈鐢ㄤ簬鑱旀満褰卞搷娓告垙骞宠　銆?*
 > Nioh 3's co-op is PvE-only, so this tool cannot affect other players. It is
 > still provided strictly for learning/testing. Back up your save before use;
 > the author is not responsible for any damage.
@@ -17,20 +17,20 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 
 ## Features
 
-* **Persistent edits** — decrypt the PC user save, patch accessory effect
+* **Persistent edits** 鈥?decrypt the PC user save, patch accessory effect
   slots, recompute the user checksum, re-encrypt, verify, and atomically replace
   the save with a plaintext backup + manifest.
-* **Legal-affix-only editing** — the affix catalog is built from the
-  `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
+* **Legal-affix-only editing** 鈥?the affix catalog is built from the
+  `浠佺帇3璇嶆潯瑁呭搴搗2.21.xlsx` 楗板搧璇嶆潯 sheet (鈫?276 unique effect ids); any affix
   outside the table is rejected (fail closed).
-* **Dual crypto backend** — the bundled reference executable
+* **Dual crypto backend** 鈥?the bundled reference executable
   (`bin/Nioh_Savefile_decrypt.exe`, ~0.4 s per pass) by default; a
   bit-exact pure-Python port of the custom Nioh AES as a zero-dependency
   fallback (`--python-crypto`, ~32 s per pass).
-* **GUI (Tkinter) and CLI** — no third-party dependencies.
-* **Stamped builds** — `build.ps1` bakes the commit tail, source path, build
+* **GUI (Tkinter) and CLI** 鈥?no third-party dependencies.
+* **Stamped builds** 鈥?`build.ps1` bakes the commit tail, source path, build
   time and language into the app, so every copy can say exactly what it is.
-* **Verified write pipeline** — quiescence double-read, game-process gate,
+* **Verified write pipeline** 鈥?quiescence double-read, game-process gate,
   checksum recompute, plaintext backup + manifest, staged decryption check
   before install, post-write check with automatic rollback, and a durable
   `MoveFileExW` replace.
@@ -95,6 +95,7 @@ design, so you can read and edit them):
 | Path | What it is |
 | --- | --- |
 | `config/editor.json` | parameter file: save root, account/slot filter, crypto backend, backup root, GUI defaults |
+| `assets/` | program icon (`app.ico`) and logos (`logo.png`, `logo-64.png`, `logo-32.png`) |
 | `data/accessory_affixes.json` | the legal affix catalogue the editor validates against |
 | `bin/Nioh_Savefile_decrypt.exe` | bundled crypto helper (fast path; pure Python is the fallback) |
 | `third_party/source-data/` | the original `.xlsx` / `.CT` inputs (regenerate the catalogue yourself) |
@@ -114,6 +115,32 @@ Rules that make this safe to keep next to your own files:
 The executable itself unpacks its Python runtime into the usual per-session
 `%TEMP%\_MEIxxxx` directory (standard one-file behaviour, deleted on exit); the
 files listed above are the only ones that stay on disk.
+
+### Icon and logo
+
+Everything the program shows is generated from code, so the art is reviewable and
+licence-free (no Koei Tecmo assets, no unexplained binary blob):
+
+```powershell
+python tools/make_icon.py            # (re)write assets/
+python tools/make_icon.py --check    # CI-style check: assets/ == generator output
+python tools/make_icon.py --preview build\icon-preview.png
+```
+
+* The motif is a 鍕剧帀 (magatama): a fat head tapering to a point, which is what
+  distinguishes it from a plain crescent (the two bounding circles are internally
+  tangent).  Small sizes are drawn bolder and without the cord hole so 16 px stays
+  readable, and `tests/test_icon.py` asserts that (gold coverage per size).
+* `assets/app.ico` carries all nine sizes (16 鈥?256) and is compiled into the
+  executable, so Explorer, the taskbar and the window title bar all show it.
+* The GUI loads `assets/logo-64.png` for the header and `assets/app.ico` for the
+  window icon, and falls back to text if you delete them -- branding is never a
+  hard dependency.  Since `assets/` is extracted next to the exe like everything
+  else, you can drop in your own `logo-*.png` / `app.ico` and keep it: your files
+  are never overwritten.
+* The build refuses to ship stale art: `--check` fails first, and after packaging
+  `tools/check_exe_icon.py` parses the PE resource directory and requires all nine
+  sizes to be present and byte-identical to `assets/app.ico`.
 
 ### Parameter file
 
@@ -184,25 +211,25 @@ Every version surface reports the same four facts:
 
 ```text
 Nioh3AccessoryEditor v0.1.0
-commit    : 34cca8de (工作区有未提交改动)
-来源      : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
-加密组件  : D:\...\bin\Nioh_Savefile_decrypt.exe
-构建时间  : 2026-09-19T11:01:52+08:00
-语言      : CPython 3.10.10 (仅标准库 / stdlib only, 含 tkinter GUI)
+commit    : 34cca8de (宸ヤ綔鍖烘湁鏈彁浜ゆ敼鍔?
+鏉ユ簮      : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
+鍔犲瘑缁勪欢  : D:\...\bin\Nioh_Savefile_decrypt.exe
+鏋勫缓鏃堕棿  : 2026-09-19T11:01:52+08:00
+璇█      : CPython 3.10.10 (浠呮爣鍑嗗簱 / stdlib only, 鍚?tkinter GUI)
 ```
 
 | Fact | Meaning |
 |---|---|
 | `commit` | the **last 8 characters** of the git commit id (project convention, not the usual prefix) |
-| `来源` / `加密组件` | where the build came from: the project root plus the crypto executable it uses |
-| `构建时间` | local build time, ISO-8601 with UTC offset |
-| `语言` | language/runtime the build targets (CPython + stdlib only) |
+| `鏉ユ簮` / `鍔犲瘑缁勪欢` | where the build came from: the project root plus the crypto executable it uses |
+| `鏋勫缓鏃堕棿` | local build time, ISO-8601 with UTC offset |
+| `璇█` | language/runtime the build targets (CPython + stdlib only) |
 
 Where it shows up:
 
 * `python launch_editor.py --version` (or the `version` subcommand; add `--json`
   for machine-readable output),
-* the GUI footer, plus the **版本信息** button for the full banner (full commit,
+* the GUI footer, plus the **鐗堟湰淇℃伅** button for the full banner (full commit,
   branch, component SHA-256, information source),
 * `BUILD-INFO.txt` / `BUILD-INFO.json` in the project root and inside the
   staged `dist\` tree, and the build log itself.
@@ -213,12 +240,12 @@ verifies its own output by re-importing the generated module and comparing every
 field, and it fails the build if the short commit is not exactly 8 characters.
 The generated module, both `BUILD-INFO.*` files and `dist/` are gitignored
 build artifacts: a fresh checkout reports live git information
-(`信息来源: git`) with `构建时间: 未构建（源码运行）` until the next build.
+(`淇℃伅鏉ユ簮: git`) with `鏋勫缓鏃堕棿: 鏈瀯寤猴紙婧愮爜杩愯锛塦 until the next build.
 
 ## Tests
 
 ```powershell
-# Whole suite (417 tests, ~2 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (460 tests, ~2 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter
@@ -258,8 +285,8 @@ python tools/build_affix_db.py --dry-run  # parse + report only
 ```
 
 The default source is the bundled copy
-`third_party/source-data/仁王3词条装备库v2.21.xlsx` (see that folder's README for
-provenance and licensing); pass an explicit path (xlsx or the `A1=…` TSV dump)
+`third_party/source-data/浠佺帇3璇嶆潯瑁呭搴搗2.21.xlsx` (see that folder's README for
+provenance and licensing); pass an explicit path (xlsx or the `A1=鈥 TSV dump)
 to override. The builder de-duplicates by effect id and records any
 same-id/different-value conflict in the catalog's `conflicts` field instead of
 silently picking one.
@@ -270,7 +297,7 @@ Verified against the reference executable (golden values captured from its
 debug output and full-file byte comparison):
 
 * `_key_setup` header key/IV pairs match byte-for-byte
-  (`CD1F3135…484B` / `1BDFDD57…2925` / `CD958C0E…B4D5` / `FD4C40A2…57BD`).
+  (`CD1F3135鈥?84B` / `1BDFDD57鈥?925` / `CD958C0E鈥4D5` / `FD4C40A2鈥?7BD`).
 * The header keystream prefix matches the observed `31d530acb6d67a46`.
 * Full-file encryption matches the exe for every byte in the crypto-covered
   region; only the trailing 8 bytes (outside the crypto scope) differ, and the
@@ -293,21 +320,21 @@ Useful crypto findings (documented because they are easy to get wrong):
 |---|---|
 | Save size | `0x9001B0` (header `0x158` + body `0x900058`) |
 | Crypto coverage | `[0, 0x158 + 0x900050)`; last 8 bytes preserved verbatim |
-| Record region | `0x176CCE`, 400 slots × `0xE8` |
-| Effect slots | 7 slots × `0x18`, starting at `0x34` |
+| Record region | `0x176CCE`, 400 slots 脳 `0xE8` |
+| Effect slots | 7 slots 脳 `0x18`, starting at `0x34` |
 | Slot fields | `<6I`: prefix@0, effect_id@4, value@8, metadata@0xC, tail_0@0x10, tail_1@0x14 |
 | Checksum | body `[0x190, 0x900190)` in `0x400` blocks; seed@`0x900190`, value@`0x900194` |
-| Affix code | bytes0-3 effect id, bytes4-7 value, byte9 bit6 固定, byte10 bit2 星 |
+| Affix code | bytes0-3 effect id, bytes4-7 value, byte9 bit6 鍥哄畾, byte10 bit2 鏄?|
 
 What an edit actually writes: the slot's `effect_id` and `value` fields. The
-`metadata` field (which is where the 固定/星 flag bits are expected to live) is
+`metadata` field (which is where the 鍥哄畾/鏄?flag bits are expected to live) is
 **never** modified by the GUI, because the slot-level encoding of those bits has
 not been confirmed against a real save; the CLI can set it explicitly with
 `--edit <slot>:<id>:<value>:<metadata>` when you know what you want. Selecting a
-词条 whose id already occupies the slot is treated as "no change" and writes
+璇嶆潯 whose id already occupies the slot is treated as "no change" and writes
 nothing.
 
-> **⚠️ Honest boundary:** the exact accessory effect-slot layout inside a
+> **鈿狅笍 Honest boundary:** the exact accessory effect-slot layout inside a
 > *real* Nioh 3 v2.21 save has **not** been confirmed against a real decrypted
 > save yet. The offsets above come from the reference scroll-layout work and the
 > Cheat Table's equipment structure, and the record region contains all
@@ -333,15 +360,14 @@ nothing.
 * Quiescence: save + `BACKUP.BIN` + the account system save are hashed twice
   0.2 s apart; any change aborts with `SAVE_SYNC_ACTIVE`.
 * Fingerprint races: hashing re-stats the file and aborts if size/mtime moved.
-* Write path: stage → decrypt-verify → re-check fingerprints → atomic replace →
-  decrypt-verify again → roll back the original bytes if the final check fails.
+* Write path: stage 鈫?decrypt-verify 鈫?re-check fingerprints 鈫?atomic replace 鈫?  decrypt-verify again 鈫?roll back the original bytes if the final check fails.
 * The GUI shows the required disclaimer in the window title and footer, and
-  defaults to 仅演练 (dry run).
+  defaults to 浠呮紨缁?(dry run).
 
 ## Credits & attribution
 
-* Affix data: 仁王3词条装备库v2.21.xlsx by 神烦～ (3DM) / -神-烦- (bilibili),
-  thanks QQ@ReIAm, QQ@MasterBayesian, QQ群 1106302479.
+* Affix data: 浠佺帇3璇嶆潯瑁呭搴搗2.21.xlsx by 绁炵儲锝?(3DM) / -绁?鐑? (bilibili),
+  thanks QQ@ReIAm, QQ@MasterBayesian, QQ缇?1106302479.
   Non-commercial use with credit; do not re-publish commercially.
 * Save-crypto research: Nioh3-Scroll-Generator (rework of pawREP/
   Nioh-Savedata-Decryption-Tool), including the bundled reference exe and the

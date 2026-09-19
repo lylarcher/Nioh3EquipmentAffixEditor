@@ -133,6 +133,27 @@ class SpecAndPayloadWiringTests(unittest.TestCase):
         self.assertIn("make_payload.py", source)
         self.assertIn("--verify", source)
 
+    def test_icon_is_verified_before_it_is_packaged(self) -> None:
+        """Stale art must fail the build, not silently ship."""
+        self.assertTrue((PROJECT_ROOT / "tools" / "make_icon.py").is_file())
+        source = BUILD_SCRIPT.read_text(encoding="utf-8-sig")
+        self.assertIn("make_icon.py", source)
+        self.assertIn("'--check'", source)
+
+    def test_built_exe_icon_is_verified_in_the_pe_resources(self) -> None:
+        self.assertTrue((PROJECT_ROOT / "tools" / "check_exe_icon.py").is_file())
+        source = BUILD_SCRIPT.read_text(encoding="utf-8-sig")
+        self.assertIn("check_exe_icon.py", source)
+        self.assertIn("--against", source)
+        self.assertIn("--expect", source)
+        # All nine sizes must be demanded, 256 px included.
+        self.assertIn("'16,20,24,32,40,48,64,128,256'", source)
+
+    def test_smoke_test_checks_the_extracted_assets(self) -> None:
+        source = BUILD_SCRIPT.read_text(encoding="utf-8-sig")
+        for relative in ("assets\\app.ico", "assets\\logo-32.png"):
+            self.assertIn(relative, source, relative)
+
 
 if __name__ == "__main__":
     unittest.main()
