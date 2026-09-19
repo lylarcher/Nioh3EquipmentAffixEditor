@@ -100,6 +100,7 @@ $distRoot = if ([string]::IsNullOrWhiteSpace($OutputDirectory)) {
 $stageItems = @(
     'launch_editor.py',
     'README.md',
+    'CHANGELOG.md',
     'nioh3_accessory_editor',
     'bin',
     'data',

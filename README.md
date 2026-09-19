@@ -13,6 +13,8 @@ The project intentionally mirrors the style and architecture of
 Nioh3-Scroll-Generator (pure stdlib Python, fail-closed guards,
 subprocess-isolated crypto, quiescence fingerprinting, atomic durable writes).
 
+Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
+
 ## Features
 
 * **Persistent edits** — decrypt the PC user save, patch accessory effect
