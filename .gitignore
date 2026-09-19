@@ -1,0 +1,14 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Editor state
+_nioh3_accessory_backup/
+state/
+
+# Test scratch
+*.tmp
+
+# Local overrides
+.env

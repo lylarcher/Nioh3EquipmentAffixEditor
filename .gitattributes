@@ -1,0 +1,8 @@
+# Keep Python/Markdown/JSON sources at LF regardless of the local autocrlf
+# setting, so diffs stay stable across machines.
+* text=auto eol=lf
+
+# Windows binaries must never be line-ending converted.
+*.exe binary
+*.png binary
+*.zip binary

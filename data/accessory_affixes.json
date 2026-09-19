@@ -1,0 +1,1940 @@
+{
+  "schema": "nioh3-accessory-affixes/v1",
+  "count": 276,
+  "source": "仁王3词条装备库v2.21.xlsx / 饰品词条",
+  "conflicts": [],
+  "affixes": [
+    {
+      "effect_id": 2866,
+      "value": 200,
+      "flags": 64,
+      "name": "(同名固定)守护灵技的伤害 +20.0%",
+      "category": "造成伤害"
+    },
+    {
+      "effect_id": 8934,
+      "value": 45,
+      "flags": 64,
+      "name": "(同名固定)近距离攻击的精力消耗降低 -4.5%",
+      "category": "精力减少"
+    },
+    {
+      "effect_id": 43670,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)精力 +20",
+      "category": "精力减少"
+    },
+    {
+      "effect_id": 25707,
+      "value": 10,
+      "flags": 0,
+      "name": "火抗性 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 63841,
+      "value": 12,
+      "flags": 4,
+      "name": "(星)火抗性 +12",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 42240,
+      "value": 10,
+      "flags": 0,
+      "name": "水抗性 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 41132,
+      "value": 12,
+      "flags": 4,
+      "name": "(星)水抗性 +12",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 41758,
+      "value": 10,
+      "flags": 0,
+      "name": "雷抗性 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 32990,
+      "value": 12,
+      "flags": 4,
+      "name": "(星)雷抗性 +12",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 40143,
+      "value": 10,
+      "flags": 0,
+      "name": "风抗性 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 13801,
+      "value": 15,
+      "flags": 0,
+      "name": "防御时的属性攻击伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 14829,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)属性攻击伤害降低 +8",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 47927,
+      "value": 5,
+      "flags": 0,
+      "name": "属性攻击伤害降低 +5",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 54617,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)火属性伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 23908,
+      "value": 10,
+      "flags": 0,
+      "name": "火属性伤害降低 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 59098,
+      "value": 15,
+      "flags": 4,
+      "name": "(星)火属性伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 64116,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)水属性伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 46982,
+      "value": 10,
+      "flags": 0,
+      "name": "水属性伤害降低 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 49614,
+      "value": 15,
+      "flags": 4,
+      "name": "(星)水属性伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 44854,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)雷属性伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 22094,
+      "value": 10,
+      "flags": 0,
+      "name": "雷属性伤害降低 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 42555,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)风属性伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 63799,
+      "value": 10,
+      "flags": 0,
+      "name": "风属性伤害降低 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 34254,
+      "value": 15,
+      "flags": 4,
+      "name": "(星)风属性伤害降低 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 15922,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)毒抗性 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 13568,
+      "value": 10,
+      "flags": 0,
+      "name": "毒抗性 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 930,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)麻痹抗性 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 14884,
+      "value": 10,
+      "flags": 0,
+      "name": "麻痹抗性 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 18544,
+      "value": 15,
+      "flags": 4,
+      "name": "(星)麻痹抗性 +15",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 46310,
+      "value": 100,
+      "flags": 0,
+      "name": "中毒时持续承受伤害降低 -10.0%",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 48476,
+      "value": 100,
+      "flags": 0,
+      "name": "着火时持续承受伤害降低 -10.0%",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 33518,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)异常状态抗性 +10",
+      "category": "承受异常状态"
+    },
+    {
+      "effect_id": 8503,
+      "value": 31,
+      "flags": 64,
+      "name": "(同名固定)获得金钱 +3.1%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 19696,
+      "value": 31,
+      "flags": 0,
+      "name": "获得金钱 +3.1%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 25770,
+      "value": 31,
+      "flags": 0,
+      "name": "获得武功 +3.1%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 14259,
+      "value": 41,
+      "flags": 0,
+      "name": "打倒敌人时赋予幸运增加(41)",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 64160,
+      "value": 15,
+      "flags": 0,
+      "name": "幸运(绝境) +15",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 30870,
+      "value": 10,
+      "flags": 0,
+      "name": "幸运(地狱) +10",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 42507,
+      "value": 34,
+      "flags": 0,
+      "name": "吸收精华后赋予幸运增加(34)",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 51122,
+      "value": 2,
+      "flags": 0,
+      "name": "幸运反映(精华槽) D+",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 36607,
+      "value": 34,
+      "flags": 0,
+      "name": "强攻击获得精华 34",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 28631,
+      "value": 18,
+      "flags": 0,
+      "name": "(同名固定)获得精华 +1.8%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 20794,
+      "value": 31,
+      "flags": 0,
+      "name": "获得精华 +3.1%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 894,
+      "value": 40,
+      "flags": 0,
+      "name": "获得精华(地狱) +4.0%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 28922,
+      "value": 31,
+      "flags": 64,
+      "name": "(同名固定)道具掉落率 +3.1%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 40866,
+      "value": 100,
+      "flags": 0,
+      "name": "道具掉落率 +10.0%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 43316,
+      "value": 31,
+      "flags": 64,
+      "name": "(同名固定)装备品掉落率 +3.1%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 23624,
+      "value": 100,
+      "flags": 0,
+      "name": "装备品掉落率 +10.0%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 63393,
+      "value": 45,
+      "flags": 64,
+      "name": "(同名固定)魂核掉落率 +4.5%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 38132,
+      "value": 100,
+      "flags": 0,
+      "name": "魂核掉落率 +10.0%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 61277,
+      "value": 40,
+      "flags": 0,
+      "name": "地狱武器掉落率 +4.0%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 48620,
+      "value": 7,
+      "flags": 0,
+      "name": "幸运 +7",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 53280,
+      "value": 31,
+      "flags": 64,
+      "name": "(同名固定)感应精华",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 47686,
+      "value": 80,
+      "flags": 0,
+      "name": "仙药掉落率 +8.0%",
+      "category": "掉落"
+    },
+    {
+      "effect_id": 9339,
+      "value": 17,
+      "flags": 0,
+      "name": "背后攻击灵力增加量 +1.7%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 50731,
+      "value": 7,
+      "flags": 64,
+      "name": "(同名固定)造成火属性伤害时增加灵力 B",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 45663,
+      "value": 3,
+      "flags": 0,
+      "name": "造成水属性伤害时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 50153,
+      "value": 3,
+      "flags": 0,
+      "name": "造成雷属性伤害时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 1254,
+      "value": 3,
+      "flags": 0,
+      "name": "造成风属性伤害时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 47018,
+      "value": 3,
+      "flags": 0,
+      "name": "使敌人陷入水状态时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 58004,
+      "value": 3,
+      "flags": 0,
+      "name": "使敌人陷入风状态时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 22981,
+      "value": 3,
+      "flags": 0,
+      "name": "使敌人陷入毒状态时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 13648,
+      "value": 3,
+      "flags": 0,
+      "name": "使敌人陷入麻痹状态时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 44037,
+      "value": 3,
+      "flags": 0,
+      "name": "使敌人陷入异常状态时增加灵力 C-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 33183,
+      "value": 14,
+      "flags": 0,
+      "name": "近距离攻击的灵力增加量 +1.4%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 5426,
+      "value": 15,
+      "flags": 0,
+      "name": "强攻击灵力增加量 +1.5%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 34508,
+      "value": 15,
+      "flags": 0,
+      "name": "武技灵力增加量 +1.5%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 25643,
+      "value": 4,
+      "flags": 64,
+      "name": "(同名固定)灵力 +4.0",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 28943,
+      "value": 2,
+      "flags": 0,
+      "name": "灵力 +2.0",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 38186,
+      "value": 7,
+      "flags": 64,
+      "name": "(同名固定)获得精华增加灵力 B",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 18636,
+      "value": 4,
+      "flags": 0,
+      "name": "获得精华增加灵力 C",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 29127,
+      "value": 6,
+      "flags": 0,
+      "name": "获得精华增加灵力(绝境) B-",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 31773,
+      "value": 5,
+      "flags": 0,
+      "name": "获得精华增加灵力(无伤) C+",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 48153,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于毒状态的敌人增加灵力 C+",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 4970,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于火状态的敌人增加灵力 C+",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 17909,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于水状态的敌人增加灵力 C+",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 28231,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于雷状态的敌人增加灵力 C+",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 61877,
+      "value": 5,
+      "flags": 0,
+      "name": "追击和近身刺击增加灵力(C+)",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 39185,
+      "value": 14,
+      "flags": 64,
+      "name": "(同名固定)灵力增加量 +1.4%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 8,
+      "value": 14,
+      "flags": 0,
+      "name": "灵力增加量 +1.4%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 60551,
+      "value": 41,
+      "flags": 64,
+      "name": "(同名固定)灵力增加量(绝境) +4.1%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 37930,
+      "value": 41,
+      "flags": 0,
+      "name": "灵力增加量(绝境) +4.1%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 23343,
+      "value": 17,
+      "flags": 64,
+      "name": "(同名固定)灵力增加量(无伤) +1.7%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 25737,
+      "value": 17,
+      "flags": 0,
+      "name": "灵力增加量(无伤) +1.7%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 48151,
+      "value": 18,
+      "flags": 0,
+      "name": "灵力增加量(地狱) +1.8%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 19633,
+      "value": 18,
+      "flags": 0,
+      "name": "灵力增加量(负面效果时) +1.8%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 39110,
+      "value": 15,
+      "flags": 0,
+      "name": "灵力增加量(正面效果时) +1.5%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 36093,
+      "value": 4,
+      "flags": 0,
+      "name": "忍术命中增加灵力 C",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 26567,
+      "value": 4,
+      "flags": 0,
+      "name": "阴阳术命中增加灵力 C",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 39797,
+      "value": 4,
+      "flags": 0,
+      "name": "祓除常世增加灵力 +4",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 35735,
+      "value": 14,
+      "flags": 64,
+      "name": "(同名固定)使用仙药时增加灵力 +14",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 46971,
+      "value": 15,
+      "flags": 0,
+      "name": "使用仙药时增加灵力 +15",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 54363,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)格挡可增加灵力 +10",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 46077,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)识破可增加灵力 +10",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 52200,
+      "value": 14,
+      "flags": 64,
+      "name": "(同名固定)格挡可增加灵力 +14",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 35667,
+      "value": 14,
+      "flags": 64,
+      "name": "(同名固定)识破可增加灵力 +14",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 52291,
+      "value": 9,
+      "flags": 0,
+      "name": "以守护灵技打倒敌人可回收灵力 +0.9%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 61955,
+      "value": 15,
+      "flags": 0,
+      "name": "守护灵技灵力消耗减少 -1.5%",
+      "category": "灵力"
+    },
+    {
+      "effect_id": 12014,
+      "value": 33,
+      "flags": 0,
+      "name": "身处常世时恢复体力(33)",
+      "category": "其他"
+    },
+    {
+      "effect_id": 64763,
+      "value": 100,
+      "flags": 0,
+      "name": "不消耗御神水 10.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 50269,
+      "value": 50,
+      "flags": 64,
+      "name": "(同名固定)不消耗仙药 +5.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 43866,
+      "value": 80,
+      "flags": 0,
+      "name": "不消耗仙药 +8.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 37741,
+      "value": 120,
+      "flags": 4,
+      "name": "(星)不消耗仙药 +12.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 9197,
+      "value": 80,
+      "flags": 0,
+      "name": "爱用度增加量 +8.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 57048,
+      "value": 200,
+      "flags": 64,
+      "name": "(同名固定)死亡时自动回收刀冢 +20.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 16706,
+      "value": 80,
+      "flags": 0,
+      "name": "死亡时自动回收刀冢 +8.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 11874,
+      "value": 100,
+      "flags": 0,
+      "name": "死亡时自动回收一部分精华 +10.0%",
+      "category": "其他"
+    },
+    {
+      "effect_id": 27411,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)阴阳术 术力 +20",
+      "category": "其他"
+    },
+    {
+      "effect_id": 21460,
+      "value": 1,
+      "flags": 64,
+      "name": "(同名固定)组合效果的所需装备数 -1",
+      "category": "其他"
+    },
+    {
+      "effect_id": 20530,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)防御力 +10",
+      "category": "承受伤害"
+    },
+    {
+      "effect_id": 57661,
+      "value": 12,
+      "flags": 64,
+      "name": "(同名固定)承受的远距离伤害降低 -1.2%",
+      "category": "承受伤害"
+    },
+    {
+      "effect_id": 29078,
+      "value": 30,
+      "flags": 0,
+      "name": "近距离攻击打倒敌人时恢复体力 30",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 60746,
+      "value": 33,
+      "flags": 0,
+      "name": "打倒敌人时赋予自动恢复体力(33)",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 23194,
+      "value": 4,
+      "flags": 0,
+      "name": "造成火属性伤害时吸取体力 C",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 1314,
+      "value": 4,
+      "flags": 0,
+      "name": "造成水属性伤害时吸取体力 C",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 2615,
+      "value": 4,
+      "flags": 0,
+      "name": "造成雷属性伤害时吸取体力 C",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 25614,
+      "value": 4,
+      "flags": 0,
+      "name": "造成风属性伤害时吸取体力 C",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 38827,
+      "value": 31,
+      "flags": 0,
+      "name": "格挡成功时赋予自动恢复体力(31)",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 2884,
+      "value": 31,
+      "flags": 0,
+      "name": "成功识破时自动恢复体力(31)",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 35524,
+      "value": 30,
+      "flags": 0,
+      "name": "追击和近身刺击可恢复体力 30",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 64292,
+      "value": 50,
+      "flags": 0,
+      "name": "获得魂核时恢复体力 50",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 881,
+      "value": 33,
+      "flags": 0,
+      "name": "祓除常世可恢复体力 33",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 40666,
+      "value": 42,
+      "flags": 0,
+      "name": "箭弹命中弱点可恢复体力 42",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 40642,
+      "value": 4,
+      "flags": 64,
+      "name": "(同名固定)吸收精华可恢复体力 4",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 1001,
+      "value": 6,
+      "flags": 0,
+      "name": "吸收精华可恢复体力 6",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 25686,
+      "value": 28,
+      "flags": 64,
+      "name": "(同名固定)药物恢复体力效果 +2.8%",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 43713,
+      "value": 25,
+      "flags": 64,
+      "name": "(同名固定)体力恢复量 +2.5%",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 41074,
+      "value": 30,
+      "flags": 0,
+      "name": "箭弹命中可恢复体力 30",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 34302,
+      "value": 6,
+      "flags": 0,
+      "name": "阴阳术伤害吸取体力 B-",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 52030,
+      "value": 25,
+      "flags": 64,
+      "name": "(同名固定)体力 +25",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 28441,
+      "value": 25,
+      "flags": 0,
+      "name": "体力 +25",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 53239,
+      "value": 38,
+      "flags": 4,
+      "name": "(星)体力 +38",
+      "category": "恢复体力"
+    },
+    {
+      "effect_id": 58448,
+      "value": 30,
+      "flags": 0,
+      "name": "防御时精力恢复速度 +3.0%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 10938,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)精力恢复速度 +3.0%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 11268,
+      "value": 30,
+      "flags": 0,
+      "name": "精力恢复速度 +3.0%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 32562,
+      "value": 13,
+      "flags": 0,
+      "name": "残心精力恢复量 +1.3%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 56747,
+      "value": 45,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +4.5%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 177,
+      "value": 98,
+      "flags": 0,
+      "name": "绝境时赋予精力恢复速度增加(9.8%)",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 15537,
+      "value": 36,
+      "flags": 64,
+      "name": "(同名固定)精力恢复速度上升(无伤) +3.6%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 16191,
+      "value": 36,
+      "flags": 0,
+      "name": "精力恢复速度上升(无伤) +3.6%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 28765,
+      "value": 89,
+      "flags": 64,
+      "name": "(同名固定)精力恢复速度(绝境) +8.9%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 42122,
+      "value": 89,
+      "flags": 0,
+      "name": "精力恢复速度(绝境) +8.9%",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 622,
+      "value": 12,
+      "flags": 0,
+      "name": "残心初始量 +12",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 64603,
+      "value": 5,
+      "flags": 0,
+      "name": "抗常世 +0.5",
+      "category": "恢复精力"
+    },
+    {
+      "effect_id": 9715,
+      "value": 8,
+      "flags": 0,
+      "name": "打倒敌人时赋予昂灵(+0.8%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 54029,
+      "value": 6,
+      "flags": 0,
+      "name": "陷入异常状态时赋予昂灵(+0.6%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 36202,
+      "value": 6,
+      "flags": 0,
+      "name": "格挡成功时赋予昂灵(+0.6%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 29087,
+      "value": 6,
+      "flags": 0,
+      "name": "成功识破时昂灵(+0.6%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 41623,
+      "value": 8,
+      "flags": 0,
+      "name": "绝境时赋予昂灵(+0.8%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 50386,
+      "value": 8,
+      "flags": 0,
+      "name": "祓除常世赋予昂灵(+0.8%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 10684,
+      "value": 17,
+      "flags": 0,
+      "name": "吸收精华后赋予昂灵(+1.7%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 49187,
+      "value": 14,
+      "flags": 0,
+      "name": "(同名固定)精华槽增加量 +1.4%",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 61109,
+      "value": 14,
+      "flags": 0,
+      "name": "精华槽增加量 +1.4%",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 17594,
+      "value": 5,
+      "flags": 0,
+      "name": "阴阳术命中赋予昂灵(+0.5%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 45619,
+      "value": 5,
+      "flags": 0,
+      "name": "使用阴阳术时赋予昂灵(+0.5%)",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 55072,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入火状态时精华槽增加 D+",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 14248,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入水状态时精华槽增加 D+",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 58369,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入雷状态时精华槽增加 D+",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 62837,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入风状态时精华槽增加 D+",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 4859,
+      "value": 30,
+      "flags": 0,
+      "name": "九十九化身持续时间延长 +3.0%",
+      "category": "精华槽"
+    },
+    {
+      "effect_id": 13800,
+      "value": 120,
+      "flags": 0,
+      "name": "埋火计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 29750,
+      "value": 120,
+      "flags": 0,
+      "name": "火药弹计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 40867,
+      "value": 120,
+      "flags": 0,
+      "name": "焙烙弹计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 21868,
+      "value": 120,
+      "flags": 0,
+      "name": "大焙烙弹计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 18855,
+      "value": 120,
+      "flags": 0,
+      "name": "埋火·地胆计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 38803,
+      "value": 120,
+      "flags": 0,
+      "name": "埋火·水母计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 35298,
+      "value": 120,
+      "flags": 0,
+      "name": "埋火· 秽土计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 63334,
+      "value": 120,
+      "flags": 0,
+      "name": "喷火计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 58212,
+      "value": 120,
+      "flags": 0,
+      "name": "怪火计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 60098,
+      "value": 120,
+      "flags": 0,
+      "name": "怪水计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 2149,
+      "value": 120,
+      "flags": 0,
+      "name": "怪雷计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 9135,
+      "value": 120,
+      "flags": 0,
+      "name": "怪风计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 26193,
+      "value": 120,
+      "flags": 0,
+      "name": "猛炎祸计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 55236,
+      "value": 120,
+      "flags": 0,
+      "name": "冰蚀祸计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 14480,
+      "value": 120,
+      "flags": 0,
+      "name": "雷电祸计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 42730,
+      "value": 120,
+      "flags": 0,
+      "name": "暴风祸计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 27506,
+      "value": 120,
+      "flags": 0,
+      "name": "手里剑计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 26311,
+      "value": 120,
+      "flags": 0,
+      "name": "毒手里剑计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 20842,
+      "value": 120,
+      "flags": 0,
+      "name": "麻痹手里剑计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 8212,
+      "value": 120,
+      "flags": 0,
+      "name": "火药镖计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 48120,
+      "value": 120,
+      "flags": 0,
+      "name": "风车手里剑计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 33380,
+      "value": 120,
+      "flags": 0,
+      "name": "苦无计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 31029,
+      "value": 120,
+      "flags": 0,
+      "name": "散弹苦无计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 18420,
+      "value": 120,
+      "flags": 0,
+      "name": "撒菱计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 43588,
+      "value": 120,
+      "flags": 0,
+      "name": "菱钉弹计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 44254,
+      "value": 120,
+      "flags": 0,
+      "name": "盲目弹计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 27980,
+      "value": 120,
+      "flags": 0,
+      "name": "闪电一足计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 29199,
+      "value": 120,
+      "flags": 0,
+      "name": "雉子跳跃计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 64919,
+      "value": 120,
+      "flags": 0,
+      "name": "棘猫变身计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 62083,
+      "value": 120,
+      "flags": 0,
+      "name": "巨猫变身计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 15669,
+      "value": 120,
+      "flags": 0,
+      "name": "缝影计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 17667,
+      "value": 120,
+      "flags": 0,
+      "name": "土墙计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 47131,
+      "value": 120,
+      "flags": 0,
+      "name": "毒雾计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 42166,
+      "value": 120,
+      "flags": 0,
+      "name": "震地术计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 18826,
+      "value": 120,
+      "flags": 0,
+      "name": "土遁计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 34068,
+      "value": 120,
+      "flags": 0,
+      "name": "空蝉计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 26948,
+      "value": 120,
+      "flags": 0,
+      "name": "影分身计量槽增加量 +12.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 29764,
+      "value": 100,
+      "flags": 0,
+      "name": "埋火造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 9586,
+      "value": 100,
+      "flags": 0,
+      "name": "火药弹造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 6891,
+      "value": 100,
+      "flags": 0,
+      "name": "焙烙弹造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 12057,
+      "value": 100,
+      "flags": 0,
+      "name": "大焙烙弹造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 55628,
+      "value": 100,
+      "flags": 0,
+      "name": "喷火造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 17672,
+      "value": 100,
+      "flags": 0,
+      "name": "怪火造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 19497,
+      "value": 100,
+      "flags": 0,
+      "name": "怪水造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 2226,
+      "value": 100,
+      "flags": 0,
+      "name": "怪雷造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 63443,
+      "value": 100,
+      "flags": 0,
+      "name": "怪风造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 12198,
+      "value": 100,
+      "flags": 0,
+      "name": "猛炎祸造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 46576,
+      "value": 100,
+      "flags": 0,
+      "name": "冰蚀祸造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 7649,
+      "value": 100,
+      "flags": 0,
+      "name": "雷电祸造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 4604,
+      "value": 100,
+      "flags": 0,
+      "name": "暴风祸造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 31216,
+      "value": 100,
+      "flags": 0,
+      "name": "手里剑造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 61905,
+      "value": 100,
+      "flags": 0,
+      "name": "毒手里剑造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 9837,
+      "value": 100,
+      "flags": 0,
+      "name": "麻痹手里剑造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 3448,
+      "value": 100,
+      "flags": 0,
+      "name": "火药镖造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 56580,
+      "value": 100,
+      "flags": 0,
+      "name": "苦无造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 35354,
+      "value": 100,
+      "flags": 0,
+      "name": "散弹苦无造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 29012,
+      "value": 100,
+      "flags": 0,
+      "name": "撒菱造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 60715,
+      "value": 100,
+      "flags": 0,
+      "name": "菱钉弹造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 5601,
+      "value": 100,
+      "flags": 0,
+      "name": "罗汉币造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 59002,
+      "value": 100,
+      "flags": 0,
+      "name": "盲目弹造成的伤害 +10.0%",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 8526,
+      "value": 1,
+      "flags": 0,
+      "name": "闪电一足的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 36410,
+      "value": 1,
+      "flags": 0,
+      "name": "雉子跳跃的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 45947,
+      "value": 1,
+      "flags": 0,
+      "name": "棘猫变身的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 15782,
+      "value": 1,
+      "flags": 0,
+      "name": "巨猫变身的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 63277,
+      "value": 1,
+      "flags": 0,
+      "name": "缝影的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 16724,
+      "value": 1,
+      "flags": 0,
+      "name": "土墙的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 4134,
+      "value": 1,
+      "flags": 0,
+      "name": "毒雾的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 34757,
+      "value": 1,
+      "flags": 0,
+      "name": "震地术的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 13951,
+      "value": 1,
+      "flags": 0,
+      "name": "土遁的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 61691,
+      "value": 1,
+      "flags": 0,
+      "name": "空蝉的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 22114,
+      "value": 1,
+      "flags": 0,
+      "name": "影分身的持有上限 +1",
+      "category": "忍术"
+    },
+    {
+      "effect_id": 6414,
+      "value": 17,
+      "flags": 0,
+      "name": "弓伤害 +1.7%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 42615,
+      "value": 17,
+      "flags": 0,
+      "name": "火枪伤害 +1.7%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 24262,
+      "value": 17,
+      "flags": 0,
+      "name": "大炮伤害 +1.7%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 2194,
+      "value": 17,
+      "flags": 0,
+      "name": "远距离伤害 +1.7%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 11532,
+      "value": 17,
+      "flags": 0,
+      "name": "对极近距离敌人的弓箭伤害 +1.7%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 23426,
+      "value": 17,
+      "flags": 0,
+      "name": "对极近距离敌人的火枪伤害 +1.7%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 54452,
+      "value": 17,
+      "flags": 0,
+      "name": "对极近距离敌人的大炮伤害 +1.7%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 47081,
+      "value": 20,
+      "flags": 0,
+      "name": "箭弹伤害(无伤) +2.0%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 60744,
+      "value": 4,
+      "flags": 64,
+      "name": "(同名固定)不易被敌人发现 C",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 29979,
+      "value": 4,
+      "flags": 0,
+      "name": "不易被敌人发现 C",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 13531,
+      "value": 2,
+      "flags": 0,
+      "name": "箭矢持有数量上限 +2",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 5735,
+      "value": 2,
+      "flags": 0,
+      "name": "枪弹持有数量上限 +2",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 26423,
+      "value": 2,
+      "flags": 0,
+      "name": "炮弹持有数量上限 +2",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 50132,
+      "value": 50,
+      "flags": 0,
+      "name": "不消耗箭弹 +5.0%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 26218,
+      "value": 75,
+      "flags": 4,
+      "name": "(星)不消耗箭弹 +7.5%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 65105,
+      "value": 55,
+      "flags": 0,
+      "name": "不消耗枪弹与炮弹 +5.5%",
+      "category": "远距离"
+    },
+    {
+      "effect_id": 61384,
+      "value": 22,
+      "flags": 0,
+      "name": "格挡成功时赋予移动速度上升(2.2%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 190,
+      "value": 22,
+      "flags": 0,
+      "name": "成功识破时移动速度上升(2.2%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 23101,
+      "value": 20,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低 -2.0%",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 36327,
+      "value": 30,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低 -3.0%",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 15087,
+      "value": 60,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低(绝境) -6.0%",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 11921,
+      "value": 66,
+      "flags": 0,
+      "name": "绝境赋予移动速度上升(6.6%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 26642,
+      "value": 27,
+      "flags": 0,
+      "name": "打倒敌人时赋予移动速度上升(2.7%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 62843,
+      "value": 29,
+      "flags": 0,
+      "name": "祓除常世赋予移动速度上升(2.9%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 39201,
+      "value": 31,
+      "flags": 0,
+      "name": "陷入异常状态时赋予移动速度上升(3.1%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 32261,
+      "value": 0,
+      "flags": 0,
+      "name": "(同名固定)吸收精华后赋予移动速度上升(0.0%?)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 3495,
+      "value": 22,
+      "flags": 0,
+      "name": "吸收精华后赋予移动速度上升(2.2%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 33039,
+      "value": 28,
+      "flags": 0,
+      "name": "精力受到攻击降至50%以下时赋予移动速度上升(2.8%)",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 7394,
+      "value": 27,
+      "flags": 0,
+      "name": "阴阳术命中赋予移动速度上升（2.7%）",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 3063,
+      "value": 27,
+      "flags": 0,
+      "name": "忍术命中赋予移动速度上升（2.7%）",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 40194,
+      "value": 27,
+      "flags": 0,
+      "name": "恢复体力赋予移动速度上升（2.7%）",
+      "category": "移动、闪避"
+    },
+    {
+      "effect_id": 43695,
+      "value": 60,
+      "flags": 0,
+      "name": "火属性伤害 +6.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 7349,
+      "value": 33,
+      "flags": 64,
+      "name": "(同名固定)水属性伤害 +3.3%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 59133,
+      "value": 60,
+      "flags": 0,
+      "name": "水属性伤害 +6.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 60651,
+      "value": 60,
+      "flags": 0,
+      "name": "雷属性伤害 +6.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 41325,
+      "value": 60,
+      "flags": 0,
+      "name": "风属性伤害 +6.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 47473,
+      "value": 200,
+      "flags": 0,
+      "name": "赋予属性的持续时间延长 +20.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 24133,
+      "value": 80,
+      "flags": 0,
+      "name": "敌人的火状态累计 +8.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 10233,
+      "value": 80,
+      "flags": 0,
+      "name": "敌人的水状态累计 +8.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 60928,
+      "value": 80,
+      "flags": 0,
+      "name": "敌人的雷状态累计 +8.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 38550,
+      "value": 80,
+      "flags": 0,
+      "name": "敌人的风状态累计 +8.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 15774,
+      "value": 80,
+      "flags": 0,
+      "name": "敌人的毒状态累计 +8.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 8906,
+      "value": 80,
+      "flags": 0,
+      "name": "敌人的麻痹状态累计 +8.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 31904,
+      "value": 50,
+      "flags": 0,
+      "name": "异常状态累计 +5.0%",
+      "category": "造成异常状态"
+    },
+    {
+      "effect_id": 43689,
+      "value": 25,
+      "flags": 64,
+      "name": "(同名固定)效果持续力 +2",
+      "category": "造成异常状态"
+    }
+  ]
+}
