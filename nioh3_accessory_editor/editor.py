@@ -102,11 +102,49 @@ class AccessoryView:
     def occupied_effects(self) -> tuple[records.EffectSlot, ...]:
         return tuple(effect for effect in self.effects if not effect.is_empty)
 
+    def slot_role(self, slot_index: int, affix_db: AffixDb) -> str:
+        """What an occupied slot holds: 饰品词条 or 恩宠/套装词条."""
+        if slot_index not in self.grace_slots(affix_db):
+            return "饰品词条"
+        return "恩宠/套装词条"
+
+    def grace_slots(self, affix_db: AffixDb) -> frozenset[int]:
+        """Indices of trailing occupied slots whose id is outside the catalog.
+
+        In a real v2.21 save every accessory ends with a 恩宠 or 套装组合 affix
+        (confirmed in game: e.g. 稻荷神的恩宠 on a 龙笛).  Those ids are not in the
+        shipped 饰品词条 table, so a trailing slot outside the table is reported as
+        恩宠/套装 rather than as an unexplained "未知词条".
+
+        The record must hit the table at least once: a record whose affixes are all
+        outside it is not an accessory at all, and calling its affixes 恩宠/套装
+        would be a guess.
+        """
+        known = {entry.effect_id for entry in affix_db.all()}
+        if not any(effect.effect_id in known for effect in self.occupied_effects):
+            return frozenset()
+        trailing: list[int] = []
+        for effect in reversed(self.effects):
+            if effect.is_empty:
+                continue
+            if effect.effect_id in known:
+                break
+            trailing.append(effect.slot_index)
+        return frozenset(trailing)
+
     def describe_effects(self, affix_db: AffixDb) -> tuple[str, ...]:
         lines: list[str] = []
+        grace = self.grace_slots(affix_db)
         for effect in self.effects:
             if effect.is_empty:
                 lines.append(f"  [{effect.slot_index}] (空)")
+                continue
+            if effect.slot_index in grace:
+                name = f"恩宠/套装词条（不在饰品词条库，id={effect.effect_id:#06x}）"
+                lines.append(
+                    f"  [{effect.slot_index}] {name} (数值={effect.value} "
+                    f"标识={effect.metadata:#010x})"
+                )
                 continue
             lines.append(
                 f"  [{effect.slot_index}] {affix_db.describe(effect.effect_id)} "

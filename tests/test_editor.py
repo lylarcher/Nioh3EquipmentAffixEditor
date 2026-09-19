@@ -82,6 +82,68 @@ class ReadOnlyOperationTests(EditorTestCase):
         lines = list_accessories(save)[0].describe_effects(self.db)
         self.assertIn("未知词条", lines[0])
 
+
+class GraceSlotTests(EditorTestCase):
+    """Every real accessory ends with a 恩宠/套装组合 affix outside the table.
+
+    Confirmed in game (a 龙笛 shows 稻荷神的恩宠 as its last 特殊效果): those ids
+    are not in the shipped 饰品词条 table, so a trailing out-of-table slot is
+    reported as 恩宠/套装 instead of an unexplained unknown id.
+    """
+
+    def test_trailing_out_of_table_slot_is_reported_as_grace(self) -> None:
+        record = support.build_record(
+            record_type=ITEM_TYPE,
+            effects=((self.affix_a.effect_id, 20, 0x40),
+                     (0x0071F6, 0, 0x5C020C00)),
+        )
+        save = support.build_plain_save(records_by_slot={3: record})
+        view = list_accessories(save, known_ids=frozenset(
+            {self.affix_a.effect_id}))[0]
+        self.assertEqual(view.grace_slots(self.db), frozenset({1}))
+        self.assertEqual(view.slot_role(0, self.db), "饰品词条")
+        self.assertEqual(view.slot_role(1, self.db), "恩宠/套装词条")
+        lines = view.describe_effects(self.db)
+        self.assertIn("恩宠/套装词条", lines[1])
+        self.assertIn(f"{0x0071F6:#06x}", lines[1])
+
+    def test_out_of_table_slot_before_a_known_one_is_not_grace(self) -> None:
+        record = support.build_record(
+            record_type=ITEM_TYPE,
+            effects=((0xDEADBEEF, 7, 0x40), (self.affix_a.effect_id, 20, 0x40)),
+        )
+        save = support.build_plain_save(records_by_slot={3: record})
+        view = list_accessories(save)[0]
+        self.assertEqual(view.grace_slots(self.db), frozenset())
+        self.assertIn("未知词条", view.describe_effects(self.db)[0])
+
+    def test_two_trailing_out_of_table_slots_are_both_grace(self) -> None:
+        record = support.build_record(
+            record_type=ITEM_TYPE,
+            effects=((self.affix_a.effect_id, 20, 0x40),
+                     (0x0071F6, 0, 0), (0x004FA3, 0, 0)),
+        )
+        save = support.build_plain_save(records_by_slot={3: record})
+        view = list_accessories(save)[0]
+        self.assertEqual(view.grace_slots(self.db), frozenset({1, 2}))
+
+    def test_real_save_shape_reports_one_grace_slot(self) -> None:
+        """4 catalog effects + 1 trailing id: the common real-v2.21 layout."""
+        record = support.build_record(
+            record_type=ITEM_TYPE,
+            effects=((self.affix_a.effect_id, 20, 0x40),
+                     (self.affix_b.effect_id, 15, 0x40),
+                     (self.db.all()[2].effect_id, 30, 0x40),
+                     (self.db.all()[3].effect_id, 5, 0x40),
+                     (0x004FA3, 0, 0x29014C00)),
+        )
+        save = support.build_plain_save(records_by_slot={3: record})
+        view = list_accessories(save, known_ids=frozenset(
+            entry.effect_id for entry in self.db.all()))[0]
+        self.assertTrue(view.is_accessory)
+        self.assertEqual(view.catalog_hits, 4)
+        self.assertEqual(view.grace_slots(self.db), frozenset({4}))
+
     def test_checksum_is_valid_on_the_fixture(self) -> None:
         self.assertTrue(save_checksum_is_valid(self.plain))
 

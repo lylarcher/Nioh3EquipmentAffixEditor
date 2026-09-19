@@ -15,6 +15,7 @@ from __future__ import annotations
 import os
 import queue
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -74,6 +75,18 @@ TITLE = "仁王3 饰品词条修改器（仅供测试学习用）"
 SUBTITLE = "词条取自《仁王3词条装备库v2.21》 · 修改结果直接写回存档"
 EMPTY_LABEL = "(空)"
 
+#: Game-process state line.  Writing needs the game closed, so the state is shown
+#: continuously instead of only when a write is refused.
+GAME_STATUS_UNKNOWN = "游戏状态：检查中…"
+GAME_STATUS_CLOSED = "游戏状态：未检测到仁王3 进程 —— 可以写入存档"
+GAME_STATUS_RUNNING = (
+    "游戏状态：{names} 正在运行 —— 写入会被拒绝，请完全退出游戏"
+    "（或退回到标题界面且不加载存档）后重试"
+)
+#: How often the process list is re-checked (ms).  The check spawns tasklist, so
+#: it runs on the worker thread and never blocks the window.
+GAME_STATUS_INTERVAL_MS = 3000
+
 
 class UiEditError(ValueError):
     """Raised when the current widget selection cannot be turned into an edit."""
@@ -125,9 +138,11 @@ class AccessoryEditorApp(tk.Tk):
         self.selected_accessory: int | None = None
         self.checksum_ok = False
         self.worker_queue: queue.Queue[tuple[str, object]] = queue.Queue()
+        self._game_status_at = 0.0
 
         self._build_ui()
         self.after(80, self._poll_worker)
+        self.after(200, self._poll_game_status)
         self.refresh_saves()
 
     def _build_crypto(self) -> SaveCrypto:
@@ -185,7 +200,7 @@ class AccessoryEditorApp(tk.Tk):
         self._header_logo()
 
         top = ttk.Frame(self, padding=(8, 6))
-        top.pack(fill=tk.X)
+        top.pack(side=tk.TOP, fill=tk.X)
 
         ttk.Label(top, text="存档:").pack(side=tk.LEFT)
         self.save_combo = ttk.Combobox(top, state="readonly", width=60)
@@ -196,8 +211,72 @@ class AccessoryEditorApp(tk.Tk):
         ttk.Button(top, text="备份存档", command=self.backup_save).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="恢复备份", command=self.restore_save).pack(side=tk.LEFT, padx=2)
 
+        # Everything below the record list is packed from the *bottom* edge, in
+        # reverse visual order, before the expanding middle section.  pack()
+        # hands out space in call order, so a bar packed with side=BOTTOM keeps
+        # its height no matter how small the window is; previously a long status
+        # text in the same row pushed 应用修改/写入存档 off the right edge and a
+        # short window squeezed them to zero height.
+        ttk.Label(self, text=DISCLAIMER, foreground="#b30000",
+                  justify=tk.LEFT).pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=4)
+
+        footer = ttk.Frame(self, padding=(8, 2))
+        footer.pack(side=tk.BOTTOM, fill=tk.X)
+        self.version_var = tk.StringVar(value=self._version_text())
+        ttk.Label(footer, textvariable=self.version_var, foreground="#555555",
+                  justify=tk.LEFT, font=("Consolas", 8)).pack(side=tk.LEFT)
+        ttk.Button(footer, text="版本信息",
+                   command=self.show_version_info).pack(side=tk.RIGHT, padx=4)
+
+        ttk.Separator(self).pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Always visible (not only in the confirmation dialog): the write target
+        # is the save on disk, so the game must not hold that save in memory.
+        self.write_requirement_var = tk.StringVar(value=WRITE_REQUIREMENT_SHORT)
+        ttk.Label(self, textvariable=self.write_requirement_var, foreground="#b03030",
+                  wraplength=960, justify=tk.LEFT).pack(side=tk.BOTTOM, fill=tk.X,
+                                                        padx=8, pady=(2, 0))
+
+        # Live game-process state: the one condition that decides whether a write
+        # is even allowed, so it is reported continuously instead of only after a
+        # refused write.
+        self.game_status_var = tk.StringVar(value=GAME_STATUS_UNKNOWN)
+        self.game_status_label = ttk.Label(self, textvariable=self.game_status_var,
+                                           foreground="#666666")
+        self.game_status_label.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(2, 0))
+
+        controls = ttk.Frame(self, padding=(8, 2))
+        controls.pack(side=tk.BOTTOM, fill=tk.X)
+        self.controls = controls
+        self.dry_run_var = tk.BooleanVar(value=self.config.default_dry_run)
+        ttk.Checkbutton(controls, text="仅演练（不写回）",
+                        variable=self.dry_run_var).pack(side=tk.LEFT, padx=6)
+        self.verify_var = tk.BooleanVar(value=self.config.default_verify)
+        ttk.Checkbutton(controls, text="写入校验",
+                        variable=self.verify_var).pack(side=tk.LEFT, padx=6)
+        ttk.Button(controls, text="应用修改",
+                   command=self.apply_edits_to_selection).pack(side=tk.LEFT, padx=2)
+        self.write_button = ttk.Button(controls, text="写入存档", command=self.write_save)
+        self.write_button.pack(side=tk.LEFT, padx=2)
+
+        # Status line for the last action gets its own row (wrapping, so a long
+        # message cannot displace any control) and the record-table detail goes to
+        # a second, quieter row.
+        self.status_var = tk.StringVar(
+            value=self._backend_note if self._backend_note else "就绪"
+        )
+        self.status_label = ttk.Label(self, textvariable=self.status_var,
+                                     foreground="#0366d6", wraplength=960,
+                                     justify=tk.LEFT)
+        self.status_label.pack(side=tk.BOTTOM, fill=tk.X, padx=8)
+        self.table_var = tk.StringVar(value="")
+        self.table_label = ttk.Label(self, textvariable=self.table_var,
+                                     foreground="#666666", wraplength=960,
+                                     justify=tk.LEFT)
+        self.table_label.pack(side=tk.BOTTOM, fill=tk.X, padx=8)
+
         mid = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
-        mid.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+        mid.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         left = ttk.Frame(mid)
         ttk.Label(left, text="饰品记录（选择后编辑右侧词条槽）").pack(anchor=tk.W)
@@ -239,46 +318,13 @@ class AccessoryEditorApp(tk.Tk):
             right,
             text=("说明：词条选择来自《仁王3词条装备库v2.21》饰品词条表，"
                   "非表内词条一律拒绝。选择词条会写入该词条的 ID 与标称数值；"
-                  "标识(metadata) 位不会被改写，因为其在存档中的编码尚未核实。"),
+                  "标识(metadata) 位不会被改写，因为其在存档中的编码尚未核实。\n"
+                  "每件饰品的最后一个词条是「恩宠/套装组合」词条（如 稻荷神的恩宠），"
+                  "它不在饰品词条表内，因此显示为表外词条；给该槽选择表内词条会把它替换掉。"),
             foreground="#666666", wraplength=520, justify=tk.LEFT,
         )
         note.pack(anchor=tk.W, pady=(6, 0))
         mid.add(right, weight=3)
-
-        bottom = ttk.Frame(self, padding=(8, 4))
-        bottom.pack(fill=tk.X)
-        self.status_var = tk.StringVar(
-            value=self._backend_note if self._backend_note else "就绪"
-        )
-        ttk.Label(bottom, textvariable=self.status_var, foreground="#0366d6").pack(side=tk.LEFT)
-        self.dry_run_var = tk.BooleanVar(value=self.config.default_dry_run)
-        ttk.Checkbutton(bottom, text="仅演练（不写回）",
-                        variable=self.dry_run_var).pack(side=tk.LEFT, padx=6)
-        self.verify_var = tk.BooleanVar(value=self.config.default_verify)
-        ttk.Checkbutton(bottom, text="写入校验",
-                        variable=self.verify_var).pack(side=tk.LEFT, padx=6)
-        ttk.Button(bottom, text="应用修改",
-                   command=self.apply_edits_to_selection).pack(side=tk.LEFT, padx=2)
-        ttk.Button(bottom, text="写入存档", command=self.write_save).pack(side=tk.LEFT, padx=2)
-
-        # Always visible (not only in the confirmation dialog): the write target
-        # is the save on disk, so the game must not hold that save in memory.
-        self.write_requirement_var = tk.StringVar(value=WRITE_REQUIREMENT_SHORT)
-        ttk.Label(self, textvariable=self.write_requirement_var, foreground="#b03030",
-                  wraplength=960, justify=tk.LEFT).pack(fill=tk.X, padx=8, pady=(2, 0))
-
-        ttk.Separator(self).pack(fill=tk.X)
-
-        footer = ttk.Frame(self, padding=(8, 2))
-        footer.pack(fill=tk.X)
-        self.version_var = tk.StringVar(value=self._version_text())
-        ttk.Label(footer, textvariable=self.version_var, foreground="#555555",
-                  justify=tk.LEFT, font=("Consolas", 8)).pack(side=tk.LEFT)
-        ttk.Button(footer, text="版本信息",
-                   command=self.show_version_info).pack(side=tk.RIGHT, padx=4)
-
-        ttk.Label(self, text=DISCLAIMER, foreground="#b30000",
-                  justify=tk.LEFT).pack(fill=tk.X, padx=8, pady=4)
 
     # ------------------------------------------------------------- version
 
@@ -319,7 +365,32 @@ class AccessoryEditorApp(tk.Tk):
     def _status(self, text: str) -> None:
         self.status_var.set(text)
 
-    def _run_worker(self, function, *args) -> None:
+    def _poll_game_status(self) -> None:
+        """Refresh the game-process line, off the UI thread and rate-limited.
+
+        The check spawns ``tasklist``, so it must not run on the UI thread, and it
+        must not touch the status line (that one reports the user's own actions).
+        """
+        now = time.monotonic()
+        if now - self._game_status_at >= GAME_STATUS_INTERVAL_MS / 1000:
+            self._game_status_at = now
+            self._run_background(self._check_game_status)
+        self.after(GAME_STATUS_INTERVAL_MS, self._poll_game_status)
+
+    def _check_game_status(self) -> tuple[str, tuple[str, ...]]:
+        return "game_status", tuple(running_game_processes())
+
+    def _show_game_status(self, running: object) -> None:
+        names = tuple(str(name) for name in running) if running else ()
+        if names:
+            self.game_status_var.set(GAME_STATUS_RUNNING.format(names="、".join(names)))
+            self.game_status_label.configure(foreground="#b03030")
+        else:
+            self.game_status_var.set(GAME_STATUS_CLOSED)
+            self.game_status_label.configure(foreground="#1a7f37")
+
+    def _run_background(self, function, *args) -> None:
+        """Run ``function`` off the UI thread and deliver its result to the queue."""
         def runner() -> None:
             try:
                 self.worker_queue.put(("ok", function(*args)))
@@ -327,6 +398,9 @@ class AccessoryEditorApp(tk.Tk):
                 self.worker_queue.put(("error", error))
 
         threading.Thread(target=runner, daemon=True).start()
+
+    def _run_worker(self, function, *args) -> None:
+        self._run_background(function, *args)
         self._status("处理中…")
 
     def _poll_worker(self) -> None:
@@ -387,6 +461,8 @@ class AccessoryEditorApp(tk.Tk):
                 "未写入任何文件。\n\n"
                 f"将恢复自：{value.get('restored_from')}",
             )
+        elif tag == "game_status":
+            self._show_game_status(value)
 
     def _invalidate_loaded_save(self) -> None:
         """The file changed underneath us: force a re-read before any write."""
@@ -422,9 +498,11 @@ class AccessoryEditorApp(tk.Tk):
             self.save_combo.current(0)
             self.selected_save = self.saves[0]
             self._status(f"发现 {len(self.saves)} 个存档")
+            self.table_var.set("")
         else:
             self.selected_save = None
-            self._status(f"未发现存档 · 查找位置 {self._search_root_hint()}")
+            self._status("未发现存档")
+            self.table_var.set(f"查找位置 {self._search_root_hint()}")
 
     def _search_root_hint(self) -> Path:
         """Where the scan looked, so an empty list is actionable."""
@@ -498,7 +576,8 @@ class AccessoryEditorApp(tk.Tk):
         others = len(self.other_views)
         other_note = f" · 另有 {others} 条武器/防具/绘卷记录未列出" if others else ""
         if not self.accessory_views:
-            self._status(f"记录表里没有含饰品词条的记录{suffix} · 可用 scan 命令诊断")
+            self._status(f"记录表里没有含饰品词条的记录{suffix}")
+            self.table_var.set(layout.describe())
             messagebox.showinfo(
                 "未找到饰品记录",
                 "已在存档中找到记录表，但其中没有含饰品词条（词条 id 命中饰品词条库）"
@@ -510,8 +589,8 @@ class AccessoryEditorApp(tk.Tk):
                   "可在命令行运行 scan 命令查看完整诊断并反馈给作者。",
             )
             return
-        self._status(f"已读取 {len(self.accessory_views)} 件饰品{suffix}"
-                     f"{other_note} · {layout.describe()}")
+        self._status(f"已读取 {len(self.accessory_views)} 件饰品{suffix}{other_note}")
+        self.table_var.set(layout.describe())
 
     def _report_no_layout(self, payload: object) -> None:
         """Show why nothing could be read, with the raw diagnosis."""
@@ -526,6 +605,7 @@ class AccessoryEditorApp(tk.Tk):
             self.slot_labels[index].set("")
         suffix = "" if checksum_ok else "（校验和不一致，请谨慎）"
         self._status(f"未能定位物品记录表{suffix}")
+        self.table_var.set("\n".join(describe_diagnosis(diagnosis)))
         messagebox.showwarning(
             "未能定位物品记录表",
             f"{message}\n\n"
@@ -549,17 +629,24 @@ class AccessoryEditorApp(tk.Tk):
         view = self._selected_view()
         if view is None:
             return
+        grace = view.grace_slots(self.affix_db)
         for index, effect in enumerate(view.effects):
             if effect.is_empty:
                 self.slot_combos[index].set(EMPTY_LABEL)
                 self.slot_labels[index].set("")
+                continue
+            entry = self.affix_db.lookup(effect.effect_id)
+            if index in grace:
+                # 恩宠 / 套装组合 effect: not in the shipped 饰品词条 table, so it
+                # is reported by name instead of as an unexplained unknown id.
+                label = f"{effect.effect_id:#06x} 恩宠/套装词条（表外）"
+                detail = (f"数值={effect.value} 标识={effect.metadata:#010x}"
+                          " ← 改选表内词条会把它替换掉")
             else:
-                entry = self.affix_db.lookup(effect.effect_id)
                 label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
-                self.slot_combos[index].set(label)
-                self.slot_labels[index].set(
-                    f"数值={effect.value} 标识={effect.metadata:#010x}"
-                )
+                detail = f"数值={effect.value} 标识={effect.metadata:#010x}"
+            self.slot_combos[index].set(label)
+            self.slot_labels[index].set(detail)
 
     def _on_slot_picked(self, index: int) -> None:
         text = self.slot_combos[index].get()

@@ -120,6 +120,94 @@ class ConstructionTests(UiTestCase):
             self.assertIn(expected, body)
 
 
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class LayoutTests(UiTestCase):
+    """The action row must survive long status text and a short window.
+
+    Regression: the status label shared a row with 应用修改/写入存档, so after
+    读取饰品 a long message ("已读取 213 件饰品 · 另有 1243 条…") pushed the
+    checkboxes and buttons out of the window.
+    """
+
+    @staticmethod
+    def walk(widget):
+        yield widget
+        for child in widget.winfo_children():
+            yield from LayoutTests.walk(child)
+
+    def test_controls_are_in_their_own_row(self) -> None:
+        controls = self.app.controls
+        texts = [str(child.cget("text")) for child in controls.winfo_children()]
+        self.assertIn("仅演练（不写回）", texts)
+        self.assertIn("写入校验", texts)
+        self.assertIn("应用修改", texts)
+        self.assertIn("写入存档", texts)
+
+    def test_status_lines_are_not_inside_the_controls_row(self) -> None:
+        for label in (self.app.status_label, self.app.table_label,
+                      self.app.game_status_label):
+            self.assertNotIn(label, list(self.walk(self.app.controls)))
+            self.assertEqual(label.pack_info()["side"], "bottom")
+            self.assertIsNot(label.master, self.app.controls)
+
+    def test_bottom_bars_are_packed_from_the_bottom_edge(self) -> None:
+        """Bars packed BOTTOM keep their height when the window shrinks."""
+        self.assertEqual(self.app.controls.pack_info()["side"], "bottom")
+        self.assertEqual(self.app.status_label.pack_info()["side"], "bottom")
+        self.assertEqual(self.app.table_label.pack_info()["side"], "bottom")
+        self.assertEqual(self.app.game_status_label.pack_info()["side"], "bottom")
+        # The record list is the row that gives up space instead.
+        self.assertEqual(self.app.tree.pack_info()["side"], "top")
+
+    def test_a_very_long_status_still_leaves_the_buttons_in_place(self) -> None:
+        self.app._status("已读取 213 件饰品 · " + "另有 1243 条武器/防具/绘卷记录未列出 · " * 6)
+        self.assertTrue(self.app.write_button.winfo_exists())
+        self.assertEqual(self.app.write_button.cget("text"), "写入存档")
+        # The button lives in the controls row, never in the status row.
+        self.assertIs(self.app.write_button.master, self.app.controls)
+        self.assertIsNot(self.app.write_button.master, self.app.status_label.master)
+
+    def test_table_detail_uses_its_own_variable(self) -> None:
+        self.app.table_var.set("记录表 0x270066 起 2000 槽（步长 0xf0）")
+        self.assertIsNot(self.app.table_label, self.app.status_label)
+        # The label really renders the table variable (cget returns its value).
+        self.assertIn("步长 0xf0", str(self.app.table_label.cget("text")))
+
+
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class GameStatusTests(UiTestCase):
+    """The game-process state is shown continuously, since it gates every write."""
+
+    def test_initial_text_is_the_checking_placeholder(self) -> None:
+        self.app.game_status_var.set(ui.GAME_STATUS_UNKNOWN)
+        self.assertIn("检查中", self.app.game_status_var.get())
+
+    def test_closed_game_reports_writable(self) -> None:
+        self.app._show_game_status(())
+        self.assertEqual(self.app.game_status_var.get(), ui.GAME_STATUS_CLOSED)
+        self.assertIn("可以写入", self.app.game_status_var.get())
+
+    def test_running_game_reports_the_process_names(self) -> None:
+        self.app._show_game_status(("Nioh3.exe",))
+        text = self.app.game_status_var.get()
+        self.assertIn("Nioh3.exe", text)
+        self.assertIn("会被拒绝", text)
+
+    def test_status_check_reads_the_process_list_off_the_ui_thread(self) -> None:
+        with mock.patch.object(ui, "running_game_processes",
+                               return_value=("Nioh3.exe",)) as checker:
+            tag, names = self.app._check_game_status()
+        self.assertEqual(tag, "game_status")
+        self.assertEqual(names, ("Nioh3.exe",))
+        checker.assert_called_once()
+
+    def test_the_check_never_overwrites_the_action_status(self) -> None:
+        self.app._status("已读取 3 件饰品")
+        with mock.patch.object(ui, "running_game_processes", return_value=()):
+            self.app._poll_game_status()
+        self.assertEqual(self.app.status_var.get(), "已读取 3 件饰品")
+
+
 class SelectionTests(UiTestCase):
     def test_populate_saves_selects_the_first(self) -> None:
         descriptors = (
@@ -134,6 +222,8 @@ class SelectionTests(UiTestCase):
         self.app._populate_saves(())
         self.assertIsNone(self.app.selected_save)
         self.assertIn("未发现", self.app.status_var.get())
+        # The (long) search location goes to the quieter second line.
+        self.assertIn("查找位置", self.app.table_var.get())
 
     def test_populate_accessories_lists_records(self) -> None:
         self.app._populate_accessories((self.plan, ui.list_accessories(self.plan), True, records.locate_layout(self.plan)))
@@ -192,7 +282,8 @@ class SelectionTests(UiTestCase):
         self.assertEqual([view.slot_index for view in views], [3])
         self.assertEqual(layout.anchor, records.LEGACY_GROUP_OFFSET)
         self.app._populate_accessories(payload)
-        self.assertIn("记录表", self.app.status_var.get())
+        self.assertIn("饰品", self.app.status_var.get())
+        self.assertIn("记录表", self.app.table_var.get())
         # The type column keeps the raw record type and adds the catalog evidence.
         label = self.app.tree.item("3", "values")[2]
         self.assertIn(f"{0x4001:#06x}", label)
@@ -591,9 +682,10 @@ class StartupScanTests(unittest.TestCase):
         with mock.patch.object(ui.messagebox, "showerror") as failed:
             app._populate_saves(())
         failed.assert_not_called()
-        # The empty list is actionable: it says where the scan looked.
+        # The empty list is actionable: it says where the scan looked (on its own
+        # line, so a long path cannot squeeze the action row).
         self.assertIn("未发现存档", app.status_var.get())
-        self.assertIn("查找位置", app.status_var.get())
+        self.assertIn("查找位置", app.table_var.get())
 
 
 class StaticMethodTests(unittest.TestCase):

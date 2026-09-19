@@ -243,6 +243,20 @@ def inspect(decrypted: bytes, db: AffixDb, *, preview_records: int = 4) -> dict:
     payload["unknown_affix_ids"] = [{"effect_id": effect_id, "count": count}
                                     for effect_id, count in missing.most_common(40)]
     payload["unknown_affix_total"] = sum(missing.values())
+
+    # The trailing occupied slot of an accessory holds its 恩宠/套装组合 effect,
+    # which the shipped 饰品词条 table does not list; collect them separately so
+    # the table can be extended instead of guessed at.
+    grace = Counter()
+    for entry in payload["accessory_candidates"]:
+        slots = [slot for slot in entry["slots"] if not slot["empty"]]
+        for slot in reversed(slots):
+            if slot["in_catalog"]:
+                break
+            grace[slot["effect_id"]] += 1
+    payload["grace_affix_ids"] = [{"effect_id": effect_id, "count": count}
+                                  for effect_id, count in grace.most_common(40)]
+    payload["grace_affix_total"] = sum(grace.values())
     return payload
 
 
@@ -331,6 +345,15 @@ def _format_report(payload: dict, db: AffixDb, *, listing: int) -> str:
                      f"（{len(unknown)} 种，前 12 种）")
         lines.append("  " + " ".join(f"{item['effect_id']:#08x}×{item['count']}"
                                      for item in unknown[:12]))
+
+    grace = payload.get("grace_affix_ids") or []
+    if grace:
+        lines.append("")
+        lines.append("饰品末位槽（游戏内显示为恩宠/套装组合效果）的 id: "
+                     f"{payload['grace_affix_total']} 件"
+                     f"（{len(grace)} 种，前 12 种）")
+        lines.append("  " + " ".join(f"{item['effect_id']:#08x}×{item['count']}"
+                                     for item in grace[:12]))
     return "\n".join(lines)
 
 

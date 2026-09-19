@@ -34,7 +34,13 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   field at record+0x00 holds a per-item id instead of the captured category ids,
   so a record counts as an accessory when its effect slots name affixes from the
   shipped 饰品词条 catalog. One real save resolved to 213 accessories out of
-  1456 item records (the rest are weapons/armour/绘卷, listed separately).
+  1456 item records (the rest are weapons/armour/绘卷, listed separately). The
+  trailing slot of an accessory holds its 恩宠/套装组合 effect (confirmed in game),
+  which the table does not list, so that one slot is labelled accordingly instead
+  of as an unknown affix.
+* **Live write-condition display** — the GUI footer shows whether a Nioh 3
+  process is running (green = writable, red = the write would be refused), so the
+  game-closed requirement is visible before you click 写入存档.
 * **Legal-affix-only editing** — the affix catalog is built from the
   `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
   outside the table is rejected (fail closed).
@@ -512,12 +518,14 @@ nothing.
 > `effect_id` position (`slot+0x04`) and the value semantics (`slot+0x08`) are
 > now confirmed against a real decrypted v2.21 save, and a write to a copy of that
 > save changed **exactly 5 bytes** (3 in the target slot, 2 in the checksum
-> field). Still unverified: which record id belongs to which *item* (the game's
-> item-name table is not in the save), the meaning of the `metadata` bits, and
-> the affix ids that are absent from the shipped catalog — a real save shows
-> several `未知词条` per accessory, typically in the last occupied slot. **Run
-> `list` (or `scan`) on your own save first, confirm the listed records and
-> affixes look right, and keep the automatic backup** before writing.
+> field). A real save also confirms the in-game layout: every accessory ends with
+> a 恩宠 or 套装组合 effect (e.g. 稻荷神的恩宠 on a 龙笛), whose id is not in the
+> shipped 饰品词条 table — the tool labels those `恩宠/套装词条` instead of
+> `未知词条`. Still unverified: which record id belongs to which *item* (the
+> game's item-name table is not in the save), the meaning of the `metadata` bits,
+> and the ids behind 恩宠/套装 (collected, not named). **Run `list` (or `scan`) on
+> your own save first, confirm the listed records and affixes look right, and keep
+> the automatic backup** before writing.
 
 ## Safety model
 
@@ -526,7 +534,10 @@ nothing.
   at the **title screen** (no save loaded, not in-game) before writing; a save
   made in-game afterwards overwrites the edit and can corrupt the slot. The rule
   is stated before every write (`savefile.SAVE_WRITE_REQUIREMENT`): in the CLI
-  output, in the GUI notice line, and in the write-confirmation dialog.
+  output, in the GUI notice line, and in the write-confirmation dialog. The GUI
+  also shows the game-process state continuously (green/red line at the bottom,
+  re-checked every 3 s on a worker thread), so the condition is visible before you
+  click 写入存档 instead of only after a refusal.
 * Backups: `<state root>/_nioh3_accessory_backup/account-<id>/slot-<NN>/` holds a
   decrypted `SAVEDATA-<timestamp>-<random>-plain.bin` plus `backup-manifest.json`
   (schema, account, slot, main-save SHA-256, plaintext SHA-256); see
