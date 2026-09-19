@@ -136,11 +136,17 @@ def build_plain_save(
     seed: int = SAVE_CHECKSUM_SEED,
     pattern_body: bool = True,
     anchor: int | None = None,
+    stride: int = records.SCROLL_RECORD_SIZE,
+    capacity: int | None = None,
+    span: int | None = None,
 ) -> bytes:
     """Build a synthetic decrypted (RNNUSR) USR save of the exact real size.
 
-    ``anchor`` moves the inventory array, which is how the tests cover a game
-    build whose save layout shifted the array away from the captured 0x176CCE.
+    ``anchor`` moves the inventory array and ``stride`` changes the distance
+    between records; both are how the tests cover a game build whose save layout
+    differs from the captured 0x176CCE / 0xE8 one (v2.21 uses 0xF0 records).
+    ``capacity``/``span`` widen the written region so a sparse array can still be
+    addressed over many slots.
     """
     data = bytearray(USER_SAVE_SIZE)
     data[0:6] = b"RNNUSR"
@@ -152,13 +158,14 @@ def build_plain_save(
             state = (state * 1103515245 + 12345) & 0x7FFFFFFF
             data[index] = (state >> 16) & 0xFF
     # Keep the record region deterministic: only caller-provided slots are set.
-    data[records.SCROLL_GROUP_OFFSET:records.SCROLL_GROUP_END] = bytes(
-        records.SCROLL_GROUP_END - records.SCROLL_GROUP_OFFSET
-    )
-    layout = records.InventoryLayout(
-        anchor=records.LEGACY_GROUP_OFFSET if anchor is None else anchor,
-        slot_count=records.SCROLL_SLOT_COUNT,
-    )
+    base = records.SCROLL_GROUP_OFFSET if anchor is None else anchor
+    slots = records.SCROLL_SLOT_COUNT if capacity is None else capacity
+    if span is None:
+        span = records.SCROLL_GROUP_END - records.SCROLL_GROUP_OFFSET
+    region_end = min(USER_SAVE_SIZE, base + max(span, slots * stride))
+    region_start = min(base, records.SCROLL_GROUP_OFFSET)
+    data[region_start:region_end] = bytes(region_end - region_start)
+    layout = records.InventoryLayout(anchor=base, slot_count=slots, stride=stride)
     for slot_index, record in (records_by_slot or {}).items():
         if len(record) != records.SCROLL_RECORD_SIZE:
             raise ValueError("record must be 0xE8 bytes")
@@ -167,6 +174,26 @@ def build_plain_save(
     struct.pack_into("<I", data, SAVE_CHECKSUM_SEED_OFFSET, seed)
     patch_user_checksum(data)
     return bytes(data)
+
+
+def silence_dialogs(case: "unittest.TestCase") -> None:
+    """Stub every ``messagebox`` entry point for the rest of the test.
+
+    Any GUI test that reaches a dialog it did not expect would otherwise open a
+    real modal window: the suite would hang with a window on screen that nobody
+    can dismiss from the command line.  Individual tests still patch the method
+    they assert on, which shadows these stubs while they are active.
+    """
+    from unittest import mock
+
+    from nioh3_accessory_editor import ui
+
+    for name in ("showinfo", "showwarning", "showerror", "askyesno",
+                 "askokcancel", "askquestion"):
+        patcher = mock.patch.object(ui.messagebox, name, return_value=False,
+                                    autospec=True)
+        patcher.start()
+        case.addCleanup(patcher.stop)
 
 
 def make_fake_save_tree(root: Path, *, account: int = 76561198000000000, slots: int = 2) -> list[Path]:

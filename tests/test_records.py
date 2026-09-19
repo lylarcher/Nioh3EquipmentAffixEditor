@@ -6,6 +6,7 @@ import struct
 import unittest
 
 from nioh3_accessory_editor import records
+from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.records import (
     EFFECT_COUNT,
     EFFECT_START,
@@ -302,6 +303,7 @@ class LayoutLocationTests(unittest.TestCase):
         layout = locate_layout(save)
         # Records inside the captured array keep that array's own slot numbers.
         self.assertEqual(layout.anchor, records.LEGACY_GROUP_OFFSET)
+        self.assertEqual(layout.stride, 0xE8)
         self.assertTrue(layout.is_legacy_anchor)
         self.assertEqual(layout.slot_count, 400)
         self.assertEqual(layout.record_count, 1)
@@ -310,6 +312,61 @@ class LayoutLocationTests(unittest.TestCase):
         self.assertIn("对齐", layout.anchor_note)
         self.assertIn(f"{records.LEGACY_GROUP_OFFSET:#08x}", layout.describe())
         self.assertEqual(iter_item_records(save)[0].slot_index, 5)
+
+    def test_detects_a_wider_record_stride(self) -> None:
+        """v2.21 stores records 0xF0 apart; a 0xE8 scan reads almost nothing."""
+        anchor = 0x270066
+        save = support.build_plain_save(
+            records_by_slot={
+                index: support.build_record(record_type=0x4000 + index, level=170)
+                for index in range(0, 60)
+            },
+            anchor=anchor,
+            stride=0xF0,
+            capacity=200,
+            span=200 * 0xF0,
+        )
+        choice = records.detect_stride(records.header_candidates(save))
+        self.assertEqual(choice.stride, 0xF0)
+        self.assertEqual(choice.residue, anchor % 0xF0)
+        self.assertEqual(choice.dominant, 60)
+        self.assertFalse(choice.is_legacy_stride)
+        self.assertIn("0xf0", choice.describe())
+
+        layout = locate_layout(save)
+        self.assertEqual(layout.stride, 0xF0)
+        self.assertEqual(layout.anchor, anchor)
+        self.assertEqual(layout.record_count, 60)
+        self.assertFalse(layout.is_legacy_anchor)
+        self.assertIn("0xf0", layout.anchor_note)
+        found = iter_item_records(save)
+        self.assertEqual(len(found), 60)
+        self.assertEqual(found[7].offset, anchor + 7 * 0xF0)
+        self.assertEqual(found[7].level, 170)
+        # A 0xE8 view of the same bytes would miss nearly all of them.
+        legacy = iter_item_records(
+            save,
+            layout=records.InventoryLayout(anchor=anchor,
+                                           slot_count=200,
+                                           stride=0xE8),
+        )
+        self.assertLess(len(legacy), 5)
+
+    def test_a_tiny_sample_keeps_the_captured_stride(self) -> None:
+        """One or two records show no lattice, so nothing may be guessed."""
+        save = support.build_plain_save(
+            records_by_slot={3: support.build_record(record_type=ITEM_TYPE)}
+        )
+        choice = records.detect_stride(records.header_candidates(save))
+        self.assertEqual(choice.stride, 0xE8)
+        self.assertTrue(choice.is_legacy_stride)
+        self.assertEqual(locate_layout(save).stride, 0xE8)
+
+    def test_stride_detection_needs_candidates(self) -> None:
+        choice = records.detect_stride(())
+        self.assertEqual(choice.stride, 0xE8)
+        self.assertEqual(choice.dominant, 0)
+        self.assertEqual(choice.counts, ())
 
     def test_finds_an_array_that_moved(self) -> None:
         """A newer game build can move the array; the scan must still find it."""
@@ -387,6 +444,86 @@ class LayoutLocationTests(unittest.TestCase):
         candidates = header_candidates(save)
         self.assertEqual(len(candidates), 1)
         self.assertEqual(candidates[0], records.LEGACY_GROUP_OFFSET + 3 * 0xE8)
+
+
+class AccessoryEvidenceTests(unittest.TestCase):
+    """Which records are accessories is decided by the shipped catalog.
+
+    The reference build's category ids do not exist in v2.21 (the field at +0x00
+    holds a per-item id there), so a record is an accessory when its occupied
+    effect slots name 饰品词条 -- and that is what "读取饰品" must rely on.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.affixes = AffixDb().all()
+        cls.known = frozenset(entry.effect_id for entry in cls.affixes)
+
+    def test_catalog_hits_count_only_occupied_catalog_slots(self) -> None:
+        record = support.build_record(
+            record_type=0x4001,
+            effects=((self.affixes[0].effect_id, 20, 0x40),
+                     (self.affixes[1].effect_id, 30, 0x40),
+                     (0xDEADBEEF, 5, 0x40)),
+        )
+        self.assertEqual(records.record_catalog_hits(record, known_ids=self.known), 2)
+        self.assertEqual(records.record_catalog_hits(record, known_ids=frozenset()), 0)
+
+    def test_kind_name_uses_catalog_evidence_when_available(self) -> None:
+        accessory_id = self.affixes[0].effect_id
+        accessory = support.build_record(record_type=0x4001,
+                                         effects=((accessory_id, 20, 0x40),))
+        other = support.build_record(record_type=0x4002,
+                                     effects=((0xDEADBEEF, 20, 0x40),))
+        save = support.build_plain_save(
+            records_by_slot={1: accessory, 2: other},
+            stride=0xF0, capacity=60, span=60 * 0xF0,
+        )
+        found = iter_item_records(save, known_ids=self.known)
+        self.assertEqual([record.kind_name for record in found], ["饰品", "其他物品"])
+        self.assertEqual([record.is_accessory for record in found], [True, False])
+        self.assertEqual([record.catalog_hits for record in found], [1, 0])
+
+    def test_without_a_catalog_kind_names_keep_the_legacy_fallback(self) -> None:
+        save = support.build_plain_save(
+            records_by_slot={1: support.build_record(record_type=0x4001)}
+        )
+        found = iter_item_records(save)
+        self.assertEqual(found[0].kind_name, "装备/饰品")
+        self.assertIsNone(found[0].catalog_hits)
+        self.assertIsNone(found[0].is_accessory)
+
+    def test_layout_counts_accessories_and_prefers_the_richest_array(self) -> None:
+        accessory_id = self.affixes[0].effect_id
+        accessory = support.build_record(record_type=0x4001,
+                                         effects=((accessory_id, 20, 0x40),))
+        plain = support.build_record(record_type=0x4002,
+                                     effects=((0xDEADBEEF, 20, 0x40),))
+        # Six non-accessory records in the captured array, two accessories in a
+        # moved one: with the catalog supplied the locator must pick the array
+        # that actually holds 饰品词条.
+        save = support.build_plain_save(
+            records_by_slot={index: plain for index in range(6)},
+        )
+        moved = 0x600000
+        moved_save = bytearray(save)
+        moved_save[moved:moved + 0xE8] = accessory
+        moved_save[moved + 0xE8:moved + 2 * 0xE8] = accessory
+        struct.pack_into("<I", moved_save, support.SAVE_CHECKSUM_SEED_OFFSET,
+                         support.SAVE_CHECKSUM_SEED)
+        support.patch_user_checksum(moved_save)
+        data = bytes(moved_save)
+
+        without = locate_layout(data)
+        self.assertEqual(without.anchor, records.LEGACY_GROUP_OFFSET)
+        self.assertFalse(without.catalog_checked)
+        self.assertEqual(without.accessory_count, 0)
+
+        with_catalog = locate_layout(data, known_ids=self.known)
+        self.assertEqual(with_catalog.anchor, moved)
+        self.assertTrue(with_catalog.catalog_checked)
+        self.assertEqual(with_catalog.accessory_count, 2)
+        self.assertIn("饰品（词条命中库）2 件", with_catalog.describe())
 
     def test_diagnosis_reports_what_a_save_contains(self) -> None:
         save = support.build_plain_save(records_by_slot={

@@ -90,7 +90,15 @@ SCROLL_GROUP_END = SCROLL_GROUP_OFFSET + SCROLL_SLOT_COUNT * SCROLL_RECORD_SIZE
 
 #: The reference array holds 400 fixed slots; a located group is capped to that
 #: many so a shifted/misaligned cluster can never be reported as a longer array.
-MAX_GROUP_SLOTS = SCROLL_SLOT_COUNT
+#: A v2.21 save turned out to hold far more records than that (one real save had
+#: 1457 across 5248 slots), so the cap is a safety bound, not a layout fact.
+MAX_GROUP_SLOTS = 8192
+
+#: Record strides worth testing.  The captured v2.00.02/v2.01 stride is 0xE8, but
+#: a v2.21 save stores its item records 0xF0 bytes apart: probing 0xE8 there hits
+#: a real record only every 0xE8*30 == 0xF0*29 == 6960 bytes, which is why a
+#: hard-coded stride read 13 of 1457 records and looked like "no accessories".
+CANDIDATE_STRIDES = (0xE0, 0xE8, 0xF0, 0xF8, 0x100)
 
 EFFECT_START = 0x34
 EFFECT_STRIDE = 0x18
@@ -158,7 +166,14 @@ class EffectSlot:
 
 @dataclass(frozen=True, slots=True)
 class AccessoryRecord:
-    """A parsed equipment/accessory record from a located inventory array."""
+    """A parsed equipment/accessory record from a located inventory array.
+
+    ``catalog_hits`` is how many of the record's occupied effect slots name an
+    affix in the shipped 饰品词条 catalog.  It is ``None`` when the caller did not
+    supply a catalog, and it is the *evidence* that decides whether the record is
+    an accessory: the reference build's category ids do not exist in v2.21 (the
+    field at +0x00 holds a per-item id there), so type ids cannot classify.
+    """
 
     slot_index: int
     offset: int
@@ -169,14 +184,39 @@ class AccessoryRecord:
     rarity: int
     account_id: int
     effects: tuple[EffectSlot, ...]
+    catalog_hits: int | None = None
 
     @property
     def is_scroll(self) -> bool:
         return self.record_type in SCROLL_TYPES
 
     @property
+    def occupied_effect_ids(self) -> tuple[int, ...]:
+        return tuple(effect.effect_id for effect in self.effects
+                     if not effect.is_empty)
+
+    @property
+    def is_accessory(self) -> bool | None:
+        """Whether the record holds 饰品词条 (``None`` = catalog not supplied)."""
+        if self.catalog_hits is None:
+            return None
+        return self.catalog_hits > 0
+
+    @property
     def kind_name(self) -> str:
-        """Coarse family label (the fine item type is not recovered yet)."""
+        """Coarse family label.
+
+        With a catalog the label is evidence-based ("饰品" only when the record's
+        affixes really are 饰品词条); without one it falls back to the reference
+        build's category ids, which are meaningful only for captures that have
+        them.
+        """
+        if self.catalog_hits is not None:
+            if self.catalog_hits > 0:
+                return "饰品"
+            if self.is_scroll:
+                return "绘卷"
+            return "其他物品"
         if self.is_scroll:
             return "绘卷"
         if self.item_count == 1:
@@ -196,7 +236,7 @@ class AccessoryRecord:
 
 @dataclass(frozen=True, slots=True)
 class InventoryLayout:
-    """A located array of fixed 0xE8-byte item records.
+    """A located array of fixed-size item records (0xF0 in v2.21, 0xE8 before).
 
     ``anchor`` is the byte offset the tool actually found -- never a hard-coded
     constant -- and ``slot_count`` how many slots the array covers here.  The
@@ -204,6 +244,9 @@ class InventoryLayout:
     physical slot 0 sits is not recorded anywhere in the save, so slot numbers
     are reported relative to this anchor (they are stable for one save, and all
     reads and writes go through absolute offsets anyway).
+
+    ``accessory_count`` is how many records hold 饰品词条, and is only meaningful
+    when ``catalog_checked`` is true (the caller supplied the shipped catalog).
     """
 
     anchor: int
@@ -216,6 +259,8 @@ class InventoryLayout:
     truncated: bool = False
     candidate_total: int = 0
     residue_counts: tuple[tuple[int, int], ...] = ()
+    accessory_count: int = 0
+    catalog_checked: bool = False
 
     @property
     def end(self) -> int:
@@ -227,8 +272,11 @@ class InventoryLayout:
 
         Alignment (not an exact offset) is what matters: the captured array
         started at 0x176CCE, so an anchor a whole number of slots later is the
-        same array, just not starting on its first occupied slot.
+        same array, just not starting on its first occupied slot.  This is only
+        true when the stride is the captured one as well.
         """
+        if self.stride != SCROLL_RECORD_SIZE:
+            return False
         delta = self.anchor - LEGACY_GROUP_OFFSET
         return (delta % SCROLL_RECORD_SIZE == 0
                 and 0 <= delta < MAX_GROUP_SLOTS * SCROLL_RECORD_SIZE)
@@ -237,6 +285,9 @@ class InventoryLayout:
     def anchor_note(self) -> str:
         if self.is_legacy_anchor:
             return "与参考项目捕获的记录表对齐（v2.00.02/2.01 布局）"
+        if self.stride != SCROLL_RECORD_SIZE:
+            return (f"与参考项目捕获的记录表不对齐（本存档步长 {self.stride:#x}，"
+                    f"参考为 {SCROLL_RECORD_SIZE:#x}）")
         return "与参考项目捕获的记录表不对齐（存档布局版本不同）"
 
     def offset(self, slot_index: int) -> int:
@@ -255,9 +306,15 @@ class InventoryLayout:
         return index if index < self.slot_count else None
 
     def describe(self) -> str:
-        return (f"记录表 {self.anchor:#08x} 起 {self.slot_count} 槽（占用 "
-                f"{self.record_count}：绘卷 {self.scroll_count} / 其它物品 "
+        text = (f"记录表 {self.anchor:#08x} 起 {self.slot_count} 槽（步长 "
+                f"{self.stride:#x}，占用 {self.record_count}：绘卷 "
+                f"{self.scroll_count} / 其它物品 "
                 f"{self.record_count - self.scroll_count}）· {self.anchor_note}")
+        if self.catalog_checked:
+            text += f" · 饰品（词条命中库）{self.accessory_count} 件"
+        if self.truncated:
+            text += " · 已截断到槽位上限"
+        return text
 
 
 # --------------------------------------------------------------------------
@@ -435,7 +492,13 @@ def patch_effect_slots(
 # Region scanning
 # --------------------------------------------------------------------------
 
-def _parse_item_record(slot_index: int, record: bytes, offset: int) -> AccessoryRecord:
+def _parse_item_record(
+    slot_index: int,
+    record: bytes,
+    offset: int,
+    *,
+    known_ids: frozenset[int] | None = None,
+) -> AccessoryRecord:
     """Build an :class:`AccessoryRecord` from one already-validated record."""
     return AccessoryRecord(
         slot_index=slot_index,
@@ -447,6 +510,8 @@ def _parse_item_record(slot_index: int, record: bytes, offset: int) -> Accessory
         rarity=record_rarity(record),
         account_id=account_id_from_record(record),
         effects=read_effect_slots(record),
+        catalog_hits=(None if known_ids is None
+                      else record_catalog_hits(record, known_ids=known_ids)),
     )
 
 
@@ -455,12 +520,18 @@ def read_item_record(
     slot_index: int,
     *,
     layout: InventoryLayout | None = None,
+    known_ids: frozenset[int] | None = None,
 ) -> AccessoryRecord | None:
-    """Parse one slot of a located array, or ``None`` when it is not a record."""
+    """Parse one slot of a located array, or ``None`` when it is not a record.
+
+    The record *content* is always ``SCROLL_RECORD_SIZE`` (0xE8) bytes: in v2.21
+    the array advances by 0xF0 per record, but the fields still live inside the
+    first 0xE8 bytes, so the stride is only used to find the next record.
+    """
     if layout is None:
-        layout = locate_layout(decrypted)
+        layout = locate_layout(decrypted, known_ids=known_ids)
     offset = layout.offset(slot_index)
-    end = offset + layout.stride
+    end = offset + SCROLL_RECORD_SIZE
     if end > len(decrypted):
         raise RecordError(
             f"解密存档过小，无法读取记录槽 {slot_index}（需要到 {end:#x}，"
@@ -469,31 +540,35 @@ def read_item_record(
     record = bytes(decrypted[offset:end])
     if record_is_empty(record) or not looks_like_item_record(record):
         return None
-    return _parse_item_record(slot_index, record, offset)
+    return _parse_item_record(slot_index, record, offset, known_ids=known_ids)
 
 
 def iter_item_records(
     decrypted: bytes,
     *,
     layout: InventoryLayout | None = None,
+    known_ids: frozenset[int] | None = None,
 ) -> tuple[AccessoryRecord, ...]:
     """Return every non-scroll item record of the located inventory array.
 
     The array is located with :func:`locate_layout` when the caller does not
-    supply one, so a save whose layout moved relative to the captured constant
-    is read correctly instead of reporting nothing.
+    supply one, so a save whose layout moved (or whose record stride changed)
+    relative to the captured constant is read correctly instead of reporting
+    nothing.  ``known_ids`` attaches :attr:`AccessoryRecord.catalog_hits`, which
+    is what tells accessories apart from other equipment.
     """
     if layout is None:
-        layout = locate_layout(decrypted)
+        layout = locate_layout(decrypted, known_ids=known_ids)
     results: list[AccessoryRecord] = []
     for slot_index in range(layout.slot_count):
         offset = layout.offset(slot_index)
-        record = bytes(decrypted[offset:offset + layout.stride])
-        if len(record) < layout.stride:
+        record = bytes(decrypted[offset:offset + SCROLL_RECORD_SIZE])
+        if len(record) < SCROLL_RECORD_SIZE:
             break
         if record_is_empty(record) or not looks_like_item_record(record):
             continue
-        results.append(_parse_item_record(slot_index, record, offset))
+        results.append(_parse_item_record(slot_index, record, offset,
+                                          known_ids=known_ids))
     return tuple(results)
 
 
@@ -586,16 +661,90 @@ def header_candidates(decrypted: bytes) -> tuple[int, ...]:
 _MAX_ANCHOR_CANDIDATES = 24
 
 
-def locate_layout(decrypted: bytes) -> InventoryLayout:
-    """Find the save's array of 0xE8-byte item records.
+@dataclass(frozen=True, slots=True)
+class StrideChoice:
+    """Which record stride this save uses, and on which residue class."""
 
-    The array's start is **version-scoped** in the reference capture, so it is
-    searched for here: recognized records are grouped by their offset modulo
-    0xE8 (every slot of one array shares that residue), and the best-aligned
-    candidate is confirmed by counting how many of the following 400 slots
-    validate as records.  When the records lie inside the captured 0x176CCE
-    array, that array's own start is used as slot 0 so slot numbers stay stable;
-    otherwise the first occupied slot becomes the anchor.
+    stride: int
+    residue: int
+    dominant: int
+    candidate_total: int
+    counts: tuple[tuple[int, int], ...]
+
+    @property
+    def is_legacy_stride(self) -> bool:
+        return self.stride == SCROLL_RECORD_SIZE
+
+    def describe(self) -> str:
+        if self.is_legacy_stride:
+            return (f"记录步长 {self.stride:#x}（与参考捕获一致），"
+                    f"{self.dominant}/{self.candidate_total} 条候选落在同一对齐上")
+        return (f"记录步长 {self.stride:#x}（参考捕获为 {SCROLL_RECORD_SIZE:#x}，"
+                f"本存档不同），{self.dominant}/{self.candidate_total} 条候选"
+                f"落在同一对齐上")
+
+
+def detect_stride(
+    candidates: tuple[int, ...] | list[int],
+    *,
+    preferred: int = SCROLL_RECORD_SIZE,
+) -> StrideChoice:
+    """Derive the record stride from where the candidate records actually sit.
+
+    For a candidate stride ``S``, every slot of one array shares ``offset % S``.
+    A stride that does not describe the array scatters its records over ``S/2``
+    residue classes, so the size of the largest class separates the real stride
+    from the wrong ones by an order of magnitude (one real save: 1457 candidates
+    on 0xF0 versus 58 on 0xE8).
+
+    Ties and samples too small to show a lattice fall back to ``preferred`` (the
+    captured stride), so a save with one or two records keeps the documented
+    behaviour instead of guessing from noise.
+    """
+    cache: dict[int, tuple[tuple[int, int], ...]] = {}
+    for stride in CANDIDATE_STRIDES:
+        counts: dict[int, int] = {}
+        for offset in candidates:
+            residue = offset % stride
+            counts[residue] = counts.get(residue, 0) + 1
+        cache[stride] = tuple(sorted(counts.items(), key=lambda item: (-item[1],
+                                                                       item[0])))
+    usable = {stride: counts for stride, counts in cache.items() if counts}
+    if not usable:
+        return StrideChoice(preferred, 0, 0, len(candidates), ())
+    best_stride = max(
+        usable,
+        key=lambda stride: (usable[stride][0][1], stride == preferred, -stride),
+    )
+    dominant, residue = usable[best_stride][0][1], usable[best_stride][0][0]
+    if dominant < 2:
+        # No lattice evidence at all: keep the captured stride.
+        counts = cache.get(preferred, ())
+        return StrideChoice(preferred, counts[0][0] if counts else 0,
+                            counts[0][1] if counts else 0, len(candidates), counts)
+    return StrideChoice(best_stride, residue, dominant, len(candidates),
+                        cache[best_stride])
+
+
+def locate_layout(
+    decrypted: bytes,
+    *,
+    known_ids: frozenset[int] | None = None,
+) -> InventoryLayout:
+    """Find the save's array of item records and measure it.
+
+    Neither the array's start nor its stride is hard-coded: the captured
+    v2.00.02/v2.01 layout used ``0x176CCE`` with 0xE8-byte records, and a v2.21
+    save moved the array *and* widened the stride to 0xF0.  Recognized records
+    are therefore grouped by stride (see :func:`detect_stride`) and by residue
+    class, and each class is confirmed by counting how many of its slots validate
+    as records -- with ``known_ids`` (the shipped 饰品词条 catalog) also counting
+    how many carry real accessory affixes.
+
+    When the records lie inside the captured ``0x176CCE`` array *and* the stride
+    is the captured one, that array's own start is used as slot 0 so slot numbers
+    stay stable and match the reference numbering; otherwise the first occupied
+    slot becomes the anchor.
 
     Raises :class:`RecordError` with an actionable message when no array is
     found, so the caller fails closed instead of reading (or later writing)
@@ -604,69 +753,98 @@ def locate_layout(decrypted: bytes) -> InventoryLayout:
     candidates = header_candidates(decrypted)
     if not candidates:
         raise RecordError(
-            "未在存档中找到物品记录表：没有任何 0xE8 槽位满足记录头特征"
-            "（type==镜像 type、level==镜像 level，且 item_count==1 或为绘卷类型）。"
+            "未在存档中找到物品记录表：没有任何槽位满足记录头特征"
+            "（type==镜像 type、level==镜像 level，且账号中段==1 或为绘卷类型）。"
             "请运行 scan 查看诊断。"
         )
 
+    choice = detect_stride(candidates)
+    stride = choice.stride
     by_residue: dict[int, list[int]] = {}
     for offset in candidates:
-        by_residue.setdefault(offset % SCROLL_RECORD_SIZE, []).append(offset)
-    residue_counts = tuple(sorted(
-        ((residue, len(items)) for residue, items in by_residue.items()),
-        key=lambda item: (-item[1], item[0]),
-    ))
+        by_residue.setdefault(offset % stride, []).append(offset)
+    residue_counts = choice.counts
 
-    # Score the most promising alignments: the densest residue clusters first,
-    # the captured alignment first among equals (same evidence, comparable
-    # reports), then by offset so the result is deterministic.
-    legacy_residue = LEGACY_GROUP_OFFSET % SCROLL_RECORD_SIZE
+    # Rank the alignment classes.  Every class is a candidate: the densest one is
+    # usually the array, but a save can hold several tables on different residues
+    # (a big 绘卷/equipment table plus a smaller accessory one), so with a catalog
+    # the class holding the most 饰品词条 is preferred -- that is the array the
+    # user asked to edit.
+    def class_hits(offsets: list[int]) -> int:
+        if known_ids is None:
+            return 0
+        return sum(1 for offset in offsets
+                   if record_catalog_hits(decrypted[offset:offset + SCROLL_RECORD_SIZE],
+                                          known_ids=known_ids))
+
+    legacy_residue = LEGACY_GROUP_OFFSET % stride
     ranked = sorted(
         by_residue.items(),
-        key=lambda item: (-len(item[1]), item[0] != legacy_residue, item[1][0]),
+        key=lambda item: (-class_hits(item[1]), -len(item[1]),
+                          item[0] != legacy_residue, item[1][0]),
     )
-    probes: list[int] = []
-    for _residue, offsets in ranked:
-        for offset in offsets:
-            if offset not in probes:
-                probes.append(offset)
-        if len(probes) >= _MAX_ANCHOR_CANDIDATES:
-            break
+    probes: list[int] = [offsets[0] for _residue, offsets in ranked]
     probes = probes[:_MAX_ANCHOR_CANDIDATES]
 
     best: InventoryLayout | None = None
     for anchor in probes:
-        slot_count = min(MAX_GROUP_SLOTS,
-                         max(1, (len(decrypted) - anchor) // SCROLL_RECORD_SIZE))
-        window = _layout_from_window(decrypted, anchor, slot_count, False,
-                                     len(candidates), residue_counts)
+        window = _window_for_class(decrypted, anchor, stride, candidates,
+                                   residue_counts, known_ids)
         if best is None or _layout_score(window) > _layout_score(best):
             best = window
     assert best is not None  # probes is never empty when candidates exist
 
-    # When the records sit inside the array captured for v2.00.02/v2.01, use that
-    # array's own start as slot 0: slot numbers then stay stable (they do not
-    # shift when the first item is sold) and match the reference numbering.  A
-    # save whose array moved keeps the first occupied slot as its anchor.
+    # When the records sit inside the array captured for v2.00.02/v2.01 *and* use
+    # its stride, use that array's own start as slot 0: slot numbers then stay
+    # stable (they do not shift when the first item is sold) and match the
+    # reference numbering.  A save whose array moved or widened keeps the first
+    # occupied slot as its anchor.
     legacy_delta = best.anchor - LEGACY_GROUP_OFFSET
-    if (0 <= legacy_delta < MAX_GROUP_SLOTS * SCROLL_RECORD_SIZE
+    if (stride == SCROLL_RECORD_SIZE
+            and 0 <= legacy_delta < MAX_GROUP_SLOTS * SCROLL_RECORD_SIZE
             and legacy_delta % SCROLL_RECORD_SIZE == 0):
-        slot_count = min(MAX_GROUP_SLOTS,
-                         max(1, (len(decrypted) - LEGACY_GROUP_OFFSET)
-                             // SCROLL_RECORD_SIZE))
-        return _layout_from_window(decrypted, LEGACY_GROUP_OFFSET, slot_count,
-                                   False, len(candidates), residue_counts)
+        return _window_for_class(decrypted, LEGACY_GROUP_OFFSET, stride, candidates,
+                                 residue_counts, known_ids)
 
-    span = (candidates[-1] - best.anchor) // SCROLL_RECORD_SIZE + 1
-    if span > MAX_GROUP_SLOTS:
-        best = _layout_from_window(decrypted, best.anchor, best.slot_count, True,
-                                   len(candidates), residue_counts)
     return best
 
 
-def _layout_score(layout: InventoryLayout) -> tuple[int, int, int]:
-    """Rank candidate anchors: most records, then scrolls, then items."""
-    return (layout.record_count, layout.scroll_count, layout.item_count)
+def _window_for_class(
+    decrypted: bytes,
+    anchor: int,
+    stride: int,
+    candidates: tuple[int, ...],
+    residue_counts: tuple[tuple[int, int], ...],
+    known_ids: frozenset[int] | None,
+) -> InventoryLayout:
+    """Measure the residue class ``anchor`` belongs to.
+
+    ``slot_count`` covers the class's own extent, so ``record_count`` describes
+    this array and not every record elsewhere in the save that happens to share
+    the residue.  On the captured lattice (0xE8 aligned with 0x176CCE) it is
+    never smaller than the captured 400 slots, so slot numbers keep addressing
+    the whole captured array even when only a few of its slots are occupied.
+    """
+    residue = anchor % stride
+    last = max((offset for offset in candidates if offset % stride == residue),
+               default=anchor)
+    extent = (last - anchor) // stride + 1
+    floor = 0
+    delta = anchor - LEGACY_GROUP_OFFSET
+    if (stride == SCROLL_RECORD_SIZE and 0 <= delta
+            and delta < MAX_GROUP_SLOTS * SCROLL_RECORD_SIZE
+            and delta % SCROLL_RECORD_SIZE == 0):
+        floor = SCROLL_SLOT_COUNT
+    slot_count = min(MAX_GROUP_SLOTS, max(extent, floor, 1))
+    return _layout_from_window(decrypted, anchor, slot_count,
+                               extent > MAX_GROUP_SLOTS, len(candidates),
+                               residue_counts, stride, known_ids)
+
+
+def _layout_score(layout: InventoryLayout) -> tuple[int, int, int, int]:
+    """Rank candidate anchors: most accessory affixes, then most records."""
+    return (layout.accessory_count, layout.record_count, layout.scroll_count,
+            layout.item_count)
 
 
 def _layout_from_window(
@@ -676,12 +854,14 @@ def _layout_from_window(
     truncated: bool,
     candidate_total: int,
     residue_counts: tuple[tuple[int, int], ...],
+    stride: int = SCROLL_RECORD_SIZE,
+    known_ids: frozenset[int] | None = None,
 ) -> InventoryLayout:
     """Measure one located window: how many slots hold which record families."""
     type_counts: dict[int, int] = {}
-    scrolls = items = records = 0
+    scrolls = items = records = accessories = 0
     for slot_index in range(slot_count):
-        offset = anchor + slot_index * SCROLL_RECORD_SIZE
+        offset = anchor + slot_index * stride
         record_type = _recognized_type(decrypted, offset)
         if record_type is None:
             continue
@@ -691,9 +871,14 @@ def _layout_from_window(
             scrolls += 1
         else:
             items += 1
+        if known_ids is not None and record_catalog_hits(
+                decrypted[offset:offset + SCROLL_RECORD_SIZE],
+                known_ids=known_ids):
+            accessories += 1
     return InventoryLayout(
         anchor=anchor,
         slot_count=slot_count,
+        stride=stride,
         record_count=records,
         scroll_count=scrolls,
         item_count=items,
@@ -702,7 +887,21 @@ def _layout_from_window(
         truncated=truncated,
         candidate_total=candidate_total,
         residue_counts=residue_counts,
+        accessory_count=accessories,
+        catalog_checked=known_ids is not None,
     )
+
+
+def record_catalog_hits(record: bytes, *, known_ids: frozenset[int]) -> int:
+    """How many occupied effect slots of ``record`` name an affix in the catalog.
+
+    This is the evidence that identifies an accessory on a save whose record type
+    ids are per-item ids rather than the captured category ids: the shipped
+    catalog holds 饰品词条 only, so a record whose affixes are in it is an
+    accessory while a weapon/armour/绘卷 record is not.
+    """
+    return sum(1 for slot in read_effect_slots(record)
+               if not slot.is_empty and slot.effect_id in known_ids)
 
 
 def _effect_slot_is_incomplete(record: bytes) -> bool:
@@ -717,7 +916,8 @@ def _confidence_note(layout: InventoryLayout) -> str:
     """State plainly how strong the located evidence is."""
     count = layout.record_count
     if count >= 3 and not layout.truncated:
-        return f"证据充分：{count} 条记录落在同一 0xE8 对齐上"
+        return (f"证据充分：{count} 条记录落在同一 {layout.stride:#x} 步长"
+                f"（{layout.anchor:#08x} 起 {layout.slot_count} 槽）上")
     if count >= 1:
         return (f"证据较弱：只有 {count} 条记录命中；"
                 "若读取结果与游戏内不符，请把 scan 输出反馈给作者")
@@ -772,8 +972,10 @@ def layout_diagnosis(decrypted: bytes, *, preview_records: int = 4) -> dict[str,
     preview: list[dict[str, object]] = []
     for slot_index in range(layout.slot_count):
         offset = layout.offset(slot_index)
-        record = bytes(decrypted[offset:offset + layout.stride])
-        if len(record) < layout.stride or record_is_empty(record):
+        # A record's content is always SCROLL_RECORD_SIZE bytes; the stride only
+        # says how far the *next* record sits (v2.21 pads each record to 0xF0).
+        record = bytes(decrypted[offset:offset + SCROLL_RECORD_SIZE])
+        if len(record) < SCROLL_RECORD_SIZE or record_is_empty(record):
             continue
         if not looks_like_item_record(record):
             continue

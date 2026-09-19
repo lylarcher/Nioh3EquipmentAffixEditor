@@ -73,7 +73,12 @@ class SaveDescriptor:
 
 @dataclass(frozen=True, slots=True)
 class AccessoryView:
-    """User-facing view of one accessory record."""
+    """User-facing view of one accessory record.
+
+    ``catalog_hits`` is how many of the record's occupied effect slots name a
+    饰品词条 in the shipped catalog, or ``None`` when the caller supplied no
+    catalog; it is the evidence behind :attr:`kind_name`.
+    """
 
     slot_index: int
     offset: int
@@ -84,6 +89,14 @@ class AccessoryView:
     account_id: int
     effects: tuple[records.EffectSlot, ...]
     kind_name: str = "装备/饰品"
+    catalog_hits: int | None = None
+
+    @property
+    def is_accessory(self) -> bool | None:
+        """``True``/``False`` when a catalog was supplied, else ``None``."""
+        if self.catalog_hits is None:
+            return None
+        return self.catalog_hits > 0
 
     @property
     def occupied_effects(self) -> tuple[records.EffectSlot, ...]:
@@ -142,17 +155,27 @@ def open_save(save: SaveDescriptor, crypto: SaveCrypto) -> bytes:
     return decrypt_save_to_bytes(save.path, crypto)
 
 
-def inspect_layout(decrypted: bytes) -> records.InventoryLayout:
+def inspect_layout(
+    decrypted: bytes,
+    *,
+    known_ids: frozenset[int] | None = None,
+) -> records.InventoryLayout:
     """Locate the save's item-record array (raises when there is none)."""
-    return records.locate_layout(decrypted)
+    return records.locate_layout(decrypted, known_ids=known_ids)
 
 
 def list_accessories(
     decrypted: bytes,
     *,
     layout: records.InventoryLayout | None = None,
+    known_ids: frozenset[int] | None = None,
 ) -> tuple[AccessoryView, ...]:
-    """Parse item records from the save's located record array."""
+    """Parse item records from the save's located record array.
+
+    ``known_ids`` (the shipped 饰品词条 catalog) makes each view's
+    :attr:`AccessoryView.kind_name` evidence-based, so callers can tell real
+    accessories from the weapons/armour/绘卷 sharing the same array.
+    """
     return tuple(
         AccessoryView(
             slot_index=record.slot_index,
@@ -164,9 +187,16 @@ def list_accessories(
             account_id=record.account_id,
             effects=record.effects,
             kind_name=record.kind_name,
+            catalog_hits=record.catalog_hits,
         )
-        for record in records.iter_item_records(decrypted, layout=layout)
+        for record in records.iter_item_records(decrypted, layout=layout,
+                                               known_ids=known_ids)
     )
+
+
+def accessory_catalog_ids(affix_db: AffixDb) -> frozenset[int]:
+    """The effect ids of every 饰品词条 in the shipped catalog."""
+    return frozenset(entry.effect_id for entry in affix_db.all())
 
 
 def save_checksum_is_valid(decrypted: bytes) -> bool:
@@ -212,19 +242,29 @@ def plan_edits(
     edits: tuple[dict[str, int], ...] | list[dict[str, int]],
     *,
     affix_db: AffixDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
 ) -> tuple[EditPlan, ...]:
     """Validate edits against the live save and return per-record plans.
 
     Raises if a referenced record does not exist, if a slot index is invalid,
     or if the affix is outside the legal accessory table.
+
+    ``known_ids``/``layout`` must be the ones the caller *listed* the records
+    with: a record index only means something relative to one located array, so
+    re-locating with different evidence could silently edit another item.
     """
     if not edits:
         raise EditorError("至少需要一个编辑项")
     normalized = tuple(_validate_edit(dict(edit), affix_db) for edit in edits)
 
-    layout = records.locate_layout(decrypted)
+    if known_ids is None and layout is None:
+        known_ids = accessory_catalog_ids(affix_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
     known = {view.slot_index: view
-             for view in list_accessories(decrypted, layout=layout)}
+             for view in list_accessories(decrypted, layout=layout,
+                                          known_ids=known_ids)}
     missing = sorted({edit["record_index"] for edit in normalized} - set(known))
     if missing:
         raise EditorError(
@@ -264,9 +304,16 @@ def apply_edits(
     edits: tuple[dict[str, int], ...] | list[dict[str, int]],
     *,
     affix_db: AffixDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
 ) -> bytes:
-    """Return new save bytes with validated effect edits applied."""
-    plans = plan_edits(decrypted, edits, affix_db=affix_db)
+    """Return new save bytes with validated effect edits applied.
+
+    ``known_ids``/``layout`` must be the ones the records were listed with, so a
+    record index cannot resolve to a different item here than it did in the UI.
+    """
+    plans = plan_edits(decrypted, edits, affix_db=affix_db, known_ids=known_ids,
+                       layout=layout)
     output = bytearray(decrypted)
     for plan in plans:
         offset = plan.offset

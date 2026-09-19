@@ -22,12 +22,19 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   the save with a plaintext backup + manifest.
 * **Reads only the save file** — the game never has to be running to list or
   edit accessories; the tool never touches game memory.
-* **Locates the record table instead of assuming it** — the record array's
-  offset is version-scoped, so the tool finds the array by its record-header
-  signature in *your* save and reports where it found it. `scan` prints that
-  diagnosis (engine offsets, record-type and rarity histograms, raw effect-slot
+* **Locates the record table instead of assuming it** — both the record array's
+  offset *and* its record stride are version-scoped (the captured v2.00.02/v2.01
+  layout is `0x176CCE` with `0xE8` records; a real v2.21 save uses `0x270066`
+  with `0xF0` records), so the tool derives both from *your* save's own record
+  headers and reports what it found. `scan` prints that diagnosis (engine
+  offsets, detected stride, record-type and rarity histograms, raw effect-slot
   bytes) so a save from a build the tool has not seen can be reported back
   instead of silently reading nothing.
+* **Accessories identified by evidence, not by a type table** — in v2.21 the
+  field at record+0x00 holds a per-item id instead of the captured category ids,
+  so a record counts as an accessory when its effect slots name affixes from the
+  shipped 饰品词条 catalog. One real save resolved to 213 accessories out of
+  1456 item records (the rest are weapons/armour/绘卷, listed separately).
 * **Legal-affix-only editing** — the affix catalog is built from the
   `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
   outside the table is rejected (fail closed).
@@ -96,20 +103,50 @@ python launch_editor.py version --json
 ### If 读取饰品 (or `list`) finds no records
 
 The game does **not** need to be running — reading only touches the save file.
-An empty result means the tool could not recognise the save's record table, and
-the array offset *is* version-scoped, so a save from a build newer than the
-captured layout can move it. The tool therefore searches for the table instead
-of trusting a constant, and reports what it found:
+An empty or near-empty result means the tool could not recognise the save's
+record table, and *both* the array offset and the record stride are
+version-scoped: the captured v2.00.02/v2.01 layout puts 400 records of `0xE8`
+bytes at `0x176CCE`, while a real v2.21 save keeps 2000 records of `0xF0` bytes
+at `0x270066`. Scanning such a save with the captured stride hits a real record
+only every `0xE8 × 30 == 0xF0 × 29` bytes, which looks exactly like "no
+accessories". The tool therefore derives both from the save's own headers and
+reports what it found:
 
 ```powershell
 python launch_editor.py scan          # human-readable diagnosis
 python launch_editor.py scan --json   # same, machine-readable
 ```
 
-The report states where (or whether) the record table was located, how strong
-the evidence is, the record-type and rarity histograms, the level range and a
-few records' raw effect-slot bytes. Please send that output back with your save
-version if the numbers do not match what the game shows.
+The report states where (or whether) the record table was located, which stride
+it uses, how strong the evidence is, the record-type and rarity histograms, the
+level range and a few records' raw effect-slot bytes. Please send that output
+back with your save version if the numbers do not match what the game shows.
+
+When you have the save file itself (no in-game reference needed), the deep
+read-only inspector answers the next two questions with statistics instead of
+assumptions:
+
+```powershell
+# where is the table, which effect-slot base is real, which records are accessories?
+python tools\inspect_save.py --config D:\path\to\editor.json --records 10
+python tools\inspect_save.py --save "D:\...\SAVEDATA00\SAVEDATA.BIN" --json report.json
+```
+
+* **Effect-slot base sweep** — for every candidate base it counts how many of
+  the u32 values at `base + k*0x18 + 4` are *known 饰品词条 ids* from the shipped
+  catalog. Arbitrary bytes hit that catalog ~`276/2**32` of the time, so a real
+  base stands out by orders of magnitude, and the captured `0x34` is confirmed
+  rather than trusted. Bases a whole stride apart read the same lattice shifted
+  (they miss the first or last real slot), so they are labelled
+  `与 0x34 同格` instead of being silently ranked as independent evidence.
+* **Accessory candidates** — records whose occupied slots *all* name catalog
+  entries, listed with slot-by-slot `名称 / id / 数值 / 标识`; records holding
+  unknown ids are reported separately.
+* **Per-type summary** — count, level range, rarities, occupied-slot histogram
+  and catalog hit rate for every record type in the array.
+
+Everything is read-only: the save is decrypted in memory, no state directory is
+created, and the report ends by saying so.
 
 ### Release build: one single-file executable
 
@@ -433,22 +470,35 @@ Useful crypto findings (documented because they are easy to get wrong):
 |---|---|
 | Save size | `0x9001B0` (header `0x158` + body `0x900058`) |
 | Crypto coverage | `[0, 0x158 + 0x900050)`; last 8 bytes preserved verbatim |
-| Record region | located at runtime (captured reference layout: `0x176CCE`, 400 slots × `0xE8`) |
-| Effect slots | 7 slots × `0x18`, starting at `0x34` |
+| Record region | located at runtime (captured reference layout: `0x176CCE`, 400 slots × `0xE8`; real v2.21 save: `0x270066`, 2000 slots × `0xF0`) |
+| Record stride | detected per save from the recognized records (`0xE0`/`0xE8`/`0xF0`/`0xF8`/`0x100` are swept) |
+| Effect slots | 7 slots × `0x18`, starting at `0x34` — confirmed on a real v2.21 save |
 | Slot fields | `<6I`: prefix@0, effect_id@4, value@8, metadata@0xC, tail_0@0x10, tail_1@0x14 |
+| Value semantics | slot `+0x08` equals the catalog's own `value` (e.g. `精力恢复速度 +3.0%` → 30) — confirmed 13/13 on a real save |
 | Checksum | body `[0x190, 0x900190)` in `0x400` blocks; seed@`0x900190`, value@`0x900194` |
 | Affix code | bytes0-3 effect id, bytes4-7 value, byte9 bit6 固定, byte10 bit2 星|
 
 How the record region is found: a slot is recognised by the reference project's
 own test — the type word and the level word each mirror themselves (`type@0 ==
 type@2`, `level@6 == level@8`), the type is not zero, and the slot is either a
-scroll type or an item with `item_count == 1` at `@4`. Recognised slots are
-grouped by offset modulo `0xE8` (one array shares one residue) and the strongest
-alignment is confirmed by counting how many of the following 400 slots validate.
-Requiring `item_count == 1` matters: a free effect slot holds `0xFFFFFFFF` and
+scroll type or has `1` at `@4`. That `@4` word is the middle 16 bits of the
+account id (Steam64 ids of this magnitude always carry `0x0001` there), which is
+what keeps the predicate stable. Recognised slots are grouped by offset modulo a
+candidate stride; the stride whose largest residue class holds an order of
+magnitude more records than any other is the save's real stride (one save: 1457
+records on `0xF0` versus 58 on `0xE8`), and that class's extent gives the array.
+Requiring the mirrored words matters: a free effect slot holds `0xFFFFFFFF` and
 would otherwise mirror itself into a fake nested record. A random block passes
 with probability ≈ `1/2^48`, so hits are evidence, and a save with no such
 evidence fails closed instead of editing guessed bytes.
+
+Which records are accessories: the shipped catalog contains 饰品词条 only, so a
+record whose occupied effect slots name catalog ids is an accessory, and one
+whose affixes never hit the catalog (weapons, armour, 绘卷) is not. In v2.21 this
+is the only workable rule, because the field at record+`0x00` holds a per-item id
+(`a5 6f a5 6f` = `0x6FA5` self-duplicated) rather than the captured category ids.
+One real save therefore resolves to **213 accessories out of 1456 item
+records**.
 
 What an edit actually writes: the slot's `effect_id` and `value` fields. The
 `metadata` field (which is where the 固定/星 flag bits are expected to live) is
@@ -458,14 +508,16 @@ not been confirmed against a real save; the CLI can set it explicitly with
 词条 whose id already occupies the slot is treated as "no change" and writes
 nothing.
 
-> **⚠️ Honest boundary:** the exact accessory effect-slot layout inside a
-> *real* Nioh 3 v2.21 save has **not** been confirmed against a real decrypted
-> save yet. The effect-slot offsets above come from the reference scroll-layout
-> work and the Cheat Table's equipment structure, and the record array contains
-> all equipment families (not only accessories), so `list` shows every record
-> that matches the captured record header. The editor fails closed on any header
-> mismatch. **Run `list` (or `scan`) on your own save first, confirm the listed
-> records and affixes look right, and keep the automatic backup** before writing.
+> **⚠️ Honest boundary:** the record stride, the effect-slot base (`0x34`), the
+> `effect_id` position (`slot+0x04`) and the value semantics (`slot+0x08`) are
+> now confirmed against a real decrypted v2.21 save, and a write to a copy of that
+> save changed **exactly 5 bytes** (3 in the target slot, 2 in the checksum
+> field). Still unverified: which record id belongs to which *item* (the game's
+> item-name table is not in the save), the meaning of the `metadata` bits, and
+> the affix ids that are absent from the shipped catalog — a real save shows
+> several `未知词条` per accessory, typically in the last occupied slot. **Run
+> `list` (or `scan`) on your own save first, confirm the listed records and
+> affixes look right, and keep the automatic backup** before writing.
 
 ## Safety model
 

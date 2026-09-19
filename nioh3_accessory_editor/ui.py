@@ -26,6 +26,7 @@ from .config import ConfigError, EditorConfig, load_config
 from .editor import (
     AccessoryView,
     SaveDescriptor,
+    accessory_catalog_ids,
     apply_edits,
     commit_save,
     discover_saves,
@@ -41,6 +42,7 @@ from .records import (
     EFFECT_COUNT,
     EMPTY_EFFECT_ID,
     EffectSlot,
+    InventoryLayout,
     RecordError,
     describe_diagnosis,
     layout_diagnosis,
@@ -115,6 +117,9 @@ class AccessoryEditorApp(tk.Tk):
         self.crypto = self._build_crypto()
         self.saves: list[SaveDescriptor] = []
         self.accessory_views: list[AccessoryView] = []
+        self.other_views: list[AccessoryView] = []
+        # The array the listing came from: edits must reuse exactly this one.
+        self.layout: InventoryLayout | None = None
         self.decrypted: bytes | None = None
         self.selected_save: SaveDescriptor | None = None
         self.selected_accessory: int | None = None
@@ -387,6 +392,8 @@ class AccessoryEditorApp(tk.Tk):
         """The file changed underneath us: force a re-read before any write."""
         self.decrypted = None
         self.accessory_views = []
+        self.other_views = []
+        self.layout = None
         self.selected_accessory = None
         self.checksum_ok = False
         self.tree.delete(*self.tree.get_children())
@@ -439,28 +446,47 @@ class AccessoryEditorApp(tk.Tk):
     def _load_accessories_worker(self, save: SaveDescriptor) -> tuple[str, tuple]:
         data = open_save(save, self.crypto)
         checksum_ok = save_checksum_is_valid(data)
+        known_ids = accessory_catalog_ids(self.affix_db)
         try:
-            layout = inspect_layout(data)
+            layout = inspect_layout(data, known_ids=known_ids)
         except RecordError as error:
             # No array at all: report the diagnosis instead of a silent empty
             # table, so the user can send it back and the layout can be fixed.
             return "accessories_failed", (data, checksum_ok, str(error),
                                           layout_diagnosis(data))
-        return "accessories", (data, list_accessories(data, layout=layout),
-                               checksum_ok, layout)
+        views = list_accessories(data, layout=layout, known_ids=known_ids)
+        return "accessories", (data, views, checksum_ok, layout)
 
     def _populate_accessories(self, payload: object, *, keep_selection: bool = False) -> None:
         data, views, checksum_ok, layout = payload
         self.decrypted = data
         self.checksum_ok = bool(checksum_ok)
-        self.accessory_views = list(views)
+        self.layout = layout
+        # Only records whose affixes really are 饰品词条 are editable accessories;
+        # weapons/armour/绘卷 share the same array and are reported separately.
+        # ``is_accessory is None`` means no catalog evidence was supplied, so the
+        # record is kept (that is the legacy behaviour) instead of being dropped.
+        self.accessory_views = [view for view in views if view.is_accessory is not False]
+        self.other_views = [view for view in views if view.is_accessory is False]
+        # Clearing a record's last 饰品词条 would otherwise make it drop out of the
+        # list while the user is still editing it, so the record being edited is
+        # always kept visible.
+        if keep_selection and self.selected_accessory is not None:
+            listed = {view.slot_index for view in self.accessory_views}
+            retained = next((view for view in views
+                             if view.slot_index == self.selected_accessory
+                             and view.slot_index not in listed), None)
+            if retained is not None:
+                self.accessory_views.append(retained)
         self.tree.delete(*self.tree.get_children())
         for view in self.accessory_views:
+            label = f"{view.kind_name} {view.record_type:#06x}"
+            if view.catalog_hits is not None:
+                label += f" 词条命中 {view.catalog_hits}"
             self.tree.insert(
                 "", "end", iid=str(view.slot_index),
                 text=f"#{view.slot_index} @ {view.offset:#x}",
-                values=(view.level, view.rarity_name,
-                        f"{view.kind_name} {view.record_type:#06x}"),
+                values=(view.level, view.rarity_name, label),
             )
         known = {view.slot_index for view in self.accessory_views}
         if not keep_selection or self.selected_accessory not in known:
@@ -469,22 +495,30 @@ class AccessoryEditorApp(tk.Tk):
             self.slot_combos[index].set("")
             self.slot_labels[index].set("")
         suffix = "" if self.checksum_ok else "（校验和不一致，请谨慎）"
+        others = len(self.other_views)
+        other_note = f" · 另有 {others} 条武器/防具/绘卷记录未列出" if others else ""
         if not self.accessory_views:
-            self._status(f"记录表里没有可编辑的物品记录{suffix} · 可用 scan 命令诊断")
+            self._status(f"记录表里没有含饰品词条的记录{suffix} · 可用 scan 命令诊断")
             messagebox.showinfo(
-                "未找到可编辑记录",
-                "已在存档中找到记录表，但其中没有可编辑的非绘卷物品记录。\n\n"
+                "未找到饰品记录",
+                "已在存档中找到记录表，但其中没有含饰品词条（词条 id 命中饰品词条库）"
+                "的记录。\n\n"
                 + layout.describe()
-                + "\n\n提示：读取存档文件即可，游戏无需运行。\n"
+                + f"\n\n记录表内共 {len(views)} 条物品记录，均未命中饰品词条库，"
+                  "可能都是武器/防具/绘卷。\n\n"
+                  "提示：读取存档文件即可，游戏无需运行。\n"
                   "可在命令行运行 scan 命令查看完整诊断并反馈给作者。",
             )
             return
-        self._status(f"已读取 {len(self.accessory_views)} 条记录{suffix} · {layout.describe()}")
+        self._status(f"已读取 {len(self.accessory_views)} 件饰品{suffix}"
+                     f"{other_note} · {layout.describe()}")
 
     def _report_no_layout(self, payload: object) -> None:
         """Show why nothing could be read, with the raw diagnosis."""
         _data, checksum_ok, message, diagnosis = payload
         self.accessory_views = []
+        self.other_views = []
+        self.layout = None
         self.selected_accessory = None
         self.tree.delete(*self.tree.get_children())
         for index in range(EFFECT_COUNT):
@@ -590,17 +624,24 @@ class AccessoryEditorApp(tk.Tk):
         if not edits:
             messagebox.showwarning("提示", "当前没有检测到改动")
             return
+        known_ids = accessory_catalog_ids(self.affix_db)
         try:
-            self.decrypted = apply_edits(self.decrypted, edits, affix_db=self.affix_db)
+            # Same catalog evidence and same located array as the listing, so a
+            # record index cannot resolve to a different item while editing.
+            self.decrypted = apply_edits(self.decrypted, edits,
+                                         affix_db=self.affix_db,
+                                         known_ids=known_ids,
+                                         layout=self.layout)
         except Exception as error:  # noqa: BLE001 - surfaced through the GUI
             messagebox.showerror("错误", str(error))
             return
         # Refresh the tree from the patched memory image so the display matches
         # exactly what a write would persist.  The on-disk checksum is stale by
         # definition until commit, so keep the checksum verdict from load time.
-        layout = inspect_layout(self.decrypted)
+        layout = inspect_layout(self.decrypted, known_ids=known_ids)
         self._populate_accessories(
-            (self.decrypted, list_accessories(self.decrypted, layout=layout),
+            (self.decrypted,
+             list_accessories(self.decrypted, layout=layout, known_ids=known_ids),
              self.checksum_ok, layout),
             keep_selection=True,
         )

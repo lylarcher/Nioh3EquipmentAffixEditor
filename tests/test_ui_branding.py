@@ -21,6 +21,7 @@ from pathlib import Path
 from unittest import mock
 
 from nioh3_accessory_editor import paths, ui
+from tests import support
 
 try:  # pragma: no cover - environment dependent
     _probe = tkinter.Tk()
@@ -40,10 +41,20 @@ def make_app() -> ui.AccessoryEditorApp:
         return ui.AccessoryEditorApp()
 
 
-@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
-class WindowIconTests(unittest.TestCase):
+class DialogSilencingMixin:
+    """No test may leave a real modal dialog on screen (see support.silence_dialogs)."""
+
     def setUp(self) -> None:
+        support.silence_dialogs(self)
+        super().setUp()
+
+
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class WindowIconTests(DialogSilencingMixin, unittest.TestCase):
+    def setUp(self) -> None:
+        super().setUp()
         self.app = make_app()
+        self.app.withdraw()
         self.addCleanup(self.app.destroy)
 
     def test_assets_exist_where_the_gui_expects_them(self) -> None:
@@ -72,9 +83,11 @@ class WindowIconTests(unittest.TestCase):
 
 
 @unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
-class HeaderLogoTests(unittest.TestCase):
+class HeaderLogoTests(DialogSilencingMixin, unittest.TestCase):
     def setUp(self) -> None:
+        super().setUp()
         self.app = make_app()
+        self.app.withdraw()
         self.addCleanup(self.app.destroy)
 
     def labelled_widgets(self) -> list[tkinter.Widget]:

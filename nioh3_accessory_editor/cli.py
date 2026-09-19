@@ -22,6 +22,7 @@ from .config import ConfigError, EditorConfig, load_config, write_default_config
 from .editor import (
     EditorError,
     SaveDescriptor,
+    accessory_catalog_ids,
     apply_edits,
     commit_save,
     discover_saves,
@@ -114,6 +115,7 @@ def _select_save(args: argparse.Namespace) -> SaveDescriptor:
 
 def cmd_list(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
+    known_ids = accessory_catalog_ids(affix_db)
     crypto = _crypto(args)
     save = _select_save(args)
     print(f"存档: {save.display}")
@@ -121,25 +123,31 @@ def cmd_list(args: argparse.Namespace) -> int:
     data = open_save(save, crypto)
     print(f"校验和一致: {'是' if save_checksum_is_valid(data) else '否（存档可能来自其他版本或被修改过）'}")
     try:
-        layout = records.locate_layout(data)
+        layout = records.locate_layout(data, known_ids=known_ids)
     except RecordError as error:
         print(f"\n未找到物品记录表：{error}")
         print("请运行 scan 命令查看诊断，并把输出反馈给作者。")
         return 1
     print(f"记录表: {layout.describe()}")
-    accessories = list_accessories(data, layout=layout)
-    print(f"\n找到 {len(accessories)} 条疑似饰品/装备记录\n")
+    views = list_accessories(data, layout=layout, known_ids=known_ids)
+    accessories = [view for view in views if view.is_accessory is not False]
+    print(f"\n记录表内 {len(views)} 条物品记录，其中 {len(accessories)} 条含饰品词条")
+    print(f"列出 {len(accessories)} 条饰品记录\n")
     for view in accessories:
         print(
             f"记录 #{view.slot_index} @ {view.offset:#x}  "
             f"type={view.record_type:#06x} Lv{view.level} {view.rarity_name}"
+            f"  词条命中 {view.catalog_hits}"
         )
         for line in view.describe_effects(affix_db):
             print(line)
         print()
     if not accessories:
-        print("该存档的记录表里没有可编辑的非绘卷物品记录。")
+        print("该存档的记录表里没有含饰品词条的记录。")
         print("请运行 scan 命令查看记录表诊断，并把输出反馈给作者。")
+    elif len(views) > len(accessories):
+        print(f"（另有 {len(views) - len(accessories)} 条武器/防具/绘卷等记录，"
+              f"其词条不在饰品词条库内，未列出）")
     return 0
 
 
@@ -177,7 +185,10 @@ def cmd_check(args: argparse.Namespace) -> int:
     crypto = _crypto(args)
     save = _select_save(args)
     data = open_save(save, crypto)
-    accessories = list_accessories(data)
+    affix_db = AffixDb()
+    known_ids = accessory_catalog_ids(affix_db)
+    views = list_accessories(data, known_ids=known_ids)
+    accessories = [view for view in views if view.is_accessory]
     print(json.dumps({
         "path": str(save.path),
         "account_id": save.account_id,
@@ -185,7 +196,9 @@ def cmd_check(args: argparse.Namespace) -> int:
         "size": len(data),
         "magic": data[:6].decode("ascii", "replace"),
         "checksum_consistent": save_checksum_is_valid(data),
+        "item_records": len(views),
         "accessory_records": len(accessories),
+        "other_records": len(views) - len(accessories),
     }, ensure_ascii=False, indent=2))
     return 0
 
@@ -229,9 +242,12 @@ def cmd_edit(args: argparse.Namespace) -> int:
     print(DISCLAIMER)
     print(f"存档: {save.display}")
     data = open_save(save, crypto)
-    patched = apply_edits(data, edits, affix_db=affix_db)
+    known_ids = accessory_catalog_ids(affix_db)
+    layout = records.locate_layout(data, known_ids=known_ids)
+    patched = apply_edits(data, edits, affix_db=affix_db, known_ids=known_ids,
+                          layout=layout)
 
-    for view in list_accessories(patched):
+    for view in list_accessories(patched, layout=layout, known_ids=known_ids):
         if view.slot_index != args.record:
             continue
         print(f"修改后记录 #{view.slot_index}:")

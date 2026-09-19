@@ -32,7 +32,12 @@ except Exception as error:  # pragma: no cover - environment dependent
 
 
 class UiTestCase(unittest.TestCase):
-    """Builds one window per test with save discovery stubbed out."""
+    """Builds one window per test with save discovery stubbed out.
+
+    ``support.silence_dialogs`` stubs every ``messagebox`` entry point, so a test
+    that reaches a dialog it did not expect cannot leave a blocking window on
+    screen; tests that assert on a dialog patch it themselves (inner patch wins).
+    """
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -50,9 +55,13 @@ class UiTestCase(unittest.TestCase):
     def setUp(self) -> None:
         if not TK_AVAILABLE:
             self.skipTest(f"Tk unavailable ({TK_ERROR})")
+        support.silence_dialogs(self)
         with mock.patch.object(ui.AccessoryEditorApp, "refresh_saves",
                                lambda self: None):
             self.app = ui.AccessoryEditorApp()
+        # Keep the window off screen: the suite runs a few dozen windows and each
+        # one flashing up is pure noise for whoever is using the machine.
+        self.app.withdraw()
         self.addCleanup(self.app.destroy)
         self._temp = tempfile.TemporaryDirectory(prefix="nioh3-ui-")
         self.addCleanup(self._temp.cleanup)
@@ -130,7 +139,7 @@ class SelectionTests(UiTestCase):
         self.app._populate_accessories((self.plan, ui.list_accessories(self.plan), True, records.locate_layout(self.plan)))
         self.assertEqual(self.app.tree.get_children(), ("3",))
         self.assertTrue(self.app.checksum_ok)
-        self.assertIn("1 条记录", self.app.status_var.get())
+        self.assertIn("1 件饰品", self.app.status_var.get())
 
     def test_populate_accessories_flags_a_bad_checksum(self) -> None:
         self.app._populate_accessories((self.plan, ui.list_accessories(self.plan), False, records.locate_layout(self.plan)))
@@ -184,10 +193,11 @@ class SelectionTests(UiTestCase):
         self.assertEqual(layout.anchor, records.LEGACY_GROUP_OFFSET)
         self.app._populate_accessories(payload)
         self.assertIn("记录表", self.app.status_var.get())
-        self.assertEqual(
-            self.app.tree.item("3", "values")[2],
-            f"装备/饰品 {0x4001:#06x}",
-        )
+        # The type column keeps the raw record type and adds the catalog evidence.
+        label = self.app.tree.item("3", "values")[2]
+        self.assertIn(f"{0x4001:#06x}", label)
+        self.assertIn("词条命中 1", label)
+        self.assertEqual([view.kind_name for view in views], ["饰品"])
 
     def test_selecting_an_accessory_fills_the_slots(self) -> None:
         self._select()

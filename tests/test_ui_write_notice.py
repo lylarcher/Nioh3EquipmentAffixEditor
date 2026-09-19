@@ -31,9 +31,11 @@ except Exception as error:  # pragma: no cover - environment dependent
 @unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
 class WriteRequirementTests(unittest.TestCase):
     def setUp(self) -> None:
+        support.silence_dialogs(self)
         with mock.patch.object(ui.AccessoryEditorApp, "refresh_saves",
                                lambda self: None):
             self.app = ui.AccessoryEditorApp()
+        self.app.withdraw()
         self.addCleanup(self.app.destroy)
         self._temp = tempfile.TemporaryDirectory(prefix="nioh3-ui-notice-")
         self.addCleanup(self._temp.cleanup)
