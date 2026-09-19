@@ -83,6 +83,7 @@ class AccessoryView:
     rarity_name: str
     account_id: int
     effects: tuple[records.EffectSlot, ...]
+    kind_name: str = "装备/饰品"
 
     @property
     def occupied_effects(self) -> tuple[records.EffectSlot, ...]:
@@ -107,6 +108,7 @@ class EditPlan:
     """Validated edit set plus the record it targets."""
 
     record_index: int
+    offset: int
     edits: tuple[dict[str, int], ...]
     before: tuple[records.EffectSlot, ...]
     after: tuple[records.EffectSlot, ...]
@@ -140,8 +142,17 @@ def open_save(save: SaveDescriptor, crypto: SaveCrypto) -> bytes:
     return decrypt_save_to_bytes(save.path, crypto)
 
 
-def list_accessories(decrypted: bytes) -> tuple[AccessoryView, ...]:
-    """Parse accessory-like records from the fixed record region."""
+def inspect_layout(decrypted: bytes) -> records.InventoryLayout:
+    """Locate the save's item-record array (raises when there is none)."""
+    return records.locate_layout(decrypted)
+
+
+def list_accessories(
+    decrypted: bytes,
+    *,
+    layout: records.InventoryLayout | None = None,
+) -> tuple[AccessoryView, ...]:
+    """Parse item records from the save's located record array."""
     return tuple(
         AccessoryView(
             slot_index=record.slot_index,
@@ -152,8 +163,9 @@ def list_accessories(decrypted: bytes) -> tuple[AccessoryView, ...]:
             rarity_name=record.rarity_name,
             account_id=record.account_id,
             effects=record.effects,
+            kind_name=record.kind_name,
         )
-        for record in records.iter_item_records(decrypted)
+        for record in records.iter_item_records(decrypted, layout=layout)
     )
 
 
@@ -210,7 +222,9 @@ def plan_edits(
         raise EditorError("至少需要一个编辑项")
     normalized = tuple(_validate_edit(dict(edit), affix_db) for edit in edits)
 
-    known = {view.slot_index: view for view in list_accessories(decrypted)}
+    layout = records.locate_layout(decrypted)
+    known = {view.slot_index: view
+             for view in list_accessories(decrypted, layout=layout)}
     missing = sorted({edit["record_index"] for edit in normalized} - set(known))
     if missing:
         raise EditorError(
@@ -225,7 +239,7 @@ def plan_edits(
     plans: list[EditPlan] = []
     for record_index, record_edits in sorted(by_record.items()):
         view = known[record_index]
-        record = records.read_item_record(decrypted, record_index)
+        record = records.read_item_record(decrypted, record_index, layout=layout)
         if record is None:
             raise EditorError(f"记录 #{record_index} 无法解析为饰品记录")
         patched = records.patch_effect_slots(
@@ -236,6 +250,7 @@ def plan_edits(
         plans.append(
             EditPlan(
                 record_index=record_index,
+                offset=record.offset,
                 edits=tuple(record_edits),
                 before=view.effects,
                 after=records.read_effect_slots(patched),
@@ -254,7 +269,7 @@ def apply_edits(
     plans = plan_edits(decrypted, edits, affix_db=affix_db)
     output = bytearray(decrypted)
     for plan in plans:
-        offset = records.record_offset(plan.record_index)
+        offset = plan.offset
         record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
         patched = records.patch_effect_slots(
             record,
@@ -265,7 +280,7 @@ def apply_edits(
 
     # Verify the write landed exactly where the plan said it would.
     for plan in plans:
-        offset = records.record_offset(plan.record_index)
+        offset = plan.offset
         applied = records.read_effect_slots(
             bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
         )

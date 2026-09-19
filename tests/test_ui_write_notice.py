@@ -41,12 +41,16 @@ class WriteRequirementTests(unittest.TestCase):
 
     def _load(self) -> None:
         """Populate the window so 写入存档 has something to write."""
+        from nioh3_accessory_editor import records
         from nioh3_accessory_editor.editor import SaveDescriptor, list_accessories
 
+        plain = support.build_plain_save(
+            records_by_slot={3: support.build_record(record_type=0x4001)}
+        )
         self.app._populate_saves((SaveDescriptor(
             self.root / "SAVEDATA.BIN", 1234, 0, support.USER_SAVE_SIZE),))
         self.app._populate_accessories(
-            (support.build_plain_save(), list_accessories(support.build_plain_save()), True)
+            (plain, list_accessories(plain), True, records.locate_layout(plain))
         )
 
     def test_footer_always_shows_the_requirement(self) -> None:

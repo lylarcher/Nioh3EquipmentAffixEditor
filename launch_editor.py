@@ -24,7 +24,7 @@ from nioh3_accessory_editor import bootstrap
 #: Any of these as the first argument means "run the CLI, not the GUI".
 #: Kept in sync with the CLI subcommands by tests/test_entrypoints.py.
 CLI_COMMANDS = frozenset(
-    {"list", "check", "edit", "backup", "restore", "version", "config",
+    {"list", "scan", "check", "edit", "backup", "restore", "version", "config",
      "-h", "--help", "--version", "--config", "--python-crypto"}
 )
 

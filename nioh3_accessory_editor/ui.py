@@ -29,6 +29,7 @@ from .editor import (
     apply_edits,
     commit_save,
     discover_saves,
+    inspect_layout,
     list_accessories,
     list_backups,
     open_save,
@@ -36,7 +37,14 @@ from .editor import (
     save_checksum_is_valid,
 )
 from .paths import resource_root
-from .records import EFFECT_COUNT, EMPTY_EFFECT_ID, EffectSlot
+from .records import (
+    EFFECT_COUNT,
+    EMPTY_EFFECT_ID,
+    EffectSlot,
+    RecordError,
+    describe_diagnosis,
+    layout_diagnosis,
+)
 from .savefile import (
     SAVE_WRITE_REQUIREMENT,
     BackupEntry,
@@ -336,6 +344,8 @@ class AccessoryEditorApp(tk.Tk):
             self._populate_saves(value)
         elif tag == "accessories":
             self._populate_accessories(value)
+        elif tag == "accessories_failed":
+            self._report_no_layout(value)
         elif tag == "written" and isinstance(value, dict):
             self._status(f"已写入，SHA-256 {value.get('new_sha256', '')}")
             messagebox.showinfo("完成", "修改已写入存档。\n请在游戏中重新加载存档查看效果。")
@@ -428,11 +438,19 @@ class AccessoryEditorApp(tk.Tk):
 
     def _load_accessories_worker(self, save: SaveDescriptor) -> tuple[str, tuple]:
         data = open_save(save, self.crypto)
-        return "accessories", (data, list_accessories(data),
-                              save_checksum_is_valid(data))
+        checksum_ok = save_checksum_is_valid(data)
+        try:
+            layout = inspect_layout(data)
+        except RecordError as error:
+            # No array at all: report the diagnosis instead of a silent empty
+            # table, so the user can send it back and the layout can be fixed.
+            return "accessories_failed", (data, checksum_ok, str(error),
+                                          layout_diagnosis(data))
+        return "accessories", (data, list_accessories(data, layout=layout),
+                               checksum_ok, layout)
 
     def _populate_accessories(self, payload: object, *, keep_selection: bool = False) -> None:
-        data, views, checksum_ok = payload
+        data, views, checksum_ok, layout = payload
         self.decrypted = data
         self.checksum_ok = bool(checksum_ok)
         self.accessory_views = list(views)
@@ -441,7 +459,8 @@ class AccessoryEditorApp(tk.Tk):
             self.tree.insert(
                 "", "end", iid=str(view.slot_index),
                 text=f"#{view.slot_index} @ {view.offset:#x}",
-                values=(view.level, view.rarity_name, f"{view.record_type:#06x}"),
+                values=(view.level, view.rarity_name,
+                        f"{view.kind_name} {view.record_type:#06x}"),
             )
         known = {view.slot_index for view in self.accessory_views}
         if not keep_selection or self.selected_accessory not in known:
@@ -450,7 +469,36 @@ class AccessoryEditorApp(tk.Tk):
             self.slot_combos[index].set("")
             self.slot_labels[index].set("")
         suffix = "" if self.checksum_ok else "（校验和不一致，请谨慎）"
-        self._status(f"已读取 {len(self.accessory_views)} 条记录{suffix}")
+        if not self.accessory_views:
+            self._status(f"记录表里没有可编辑的物品记录{suffix} · 可用 scan 命令诊断")
+            messagebox.showinfo(
+                "未找到可编辑记录",
+                "已在存档中找到记录表，但其中没有可编辑的非绘卷物品记录。\n\n"
+                + layout.describe()
+                + "\n\n提示：读取存档文件即可，游戏无需运行。\n"
+                  "可在命令行运行 scan 命令查看完整诊断并反馈给作者。",
+            )
+            return
+        self._status(f"已读取 {len(self.accessory_views)} 条记录{suffix} · {layout.describe()}")
+
+    def _report_no_layout(self, payload: object) -> None:
+        """Show why nothing could be read, with the raw diagnosis."""
+        _data, checksum_ok, message, diagnosis = payload
+        self.accessory_views = []
+        self.selected_accessory = None
+        self.tree.delete(*self.tree.get_children())
+        for index in range(EFFECT_COUNT):
+            self.slot_combos[index].set("")
+            self.slot_labels[index].set("")
+        suffix = "" if checksum_ok else "（校验和不一致，请谨慎）"
+        self._status(f"未能定位物品记录表{suffix}")
+        messagebox.showwarning(
+            "未能定位物品记录表",
+            f"{message}\n\n"
+            + "\n".join(describe_diagnosis(diagnosis))
+            + "\n\n提示：读取存档文件即可，游戏无需运行。\n"
+              "请把以上诊断（或用 scan --json 的输出）反馈给作者。",
+        )
 
     def _selected_view(self) -> AccessoryView | None:
         return next(
@@ -550,8 +598,10 @@ class AccessoryEditorApp(tk.Tk):
         # Refresh the tree from the patched memory image so the display matches
         # exactly what a write would persist.  The on-disk checksum is stale by
         # definition until commit, so keep the checksum verdict from load time.
+        layout = inspect_layout(self.decrypted)
         self._populate_accessories(
-            (self.decrypted, list_accessories(self.decrypted), self.checksum_ok),
+            (self.decrypted, list_accessories(self.decrypted, layout=layout),
+             self.checksum_ok, layout),
             keep_selection=True,
         )
         # Restore the selection explicitly: <<TreeviewSelect>> is not guaranteed

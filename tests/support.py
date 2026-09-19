@@ -122,13 +122,26 @@ def expected_account_id(record_type: int = 0x4001, account_low32: int = 0x89ABCD
     return (record_type << 48) | (1 << 32) | account_low32
 
 
+def legacy_layout() -> "records.InventoryLayout":
+    """The layout the synthetic fixtures write: the captured 0x176CCE array."""
+    return records.InventoryLayout(
+        anchor=records.LEGACY_GROUP_OFFSET,
+        slot_count=records.SCROLL_SLOT_COUNT,
+    )
+
+
 def build_plain_save(
     *,
     records_by_slot: dict[int, bytes] | None = None,
     seed: int = SAVE_CHECKSUM_SEED,
     pattern_body: bool = True,
+    anchor: int | None = None,
 ) -> bytes:
-    """Build a synthetic decrypted (RNNUSR) USR save of the exact real size."""
+    """Build a synthetic decrypted (RNNUSR) USR save of the exact real size.
+
+    ``anchor`` moves the inventory array, which is how the tests cover a game
+    build whose save layout shifted the array away from the captured 0x176CCE.
+    """
     data = bytearray(USER_SAVE_SIZE)
     data[0:6] = b"RNNUSR"
     for index in range(6, HEADER_SIZE):
@@ -142,10 +155,14 @@ def build_plain_save(
     data[records.SCROLL_GROUP_OFFSET:records.SCROLL_GROUP_END] = bytes(
         records.SCROLL_GROUP_END - records.SCROLL_GROUP_OFFSET
     )
+    layout = records.InventoryLayout(
+        anchor=records.LEGACY_GROUP_OFFSET if anchor is None else anchor,
+        slot_count=records.SCROLL_SLOT_COUNT,
+    )
     for slot_index, record in (records_by_slot or {}).items():
         if len(record) != records.SCROLL_RECORD_SIZE:
             raise ValueError("record must be 0xE8 bytes")
-        offset = records.record_offset(slot_index)
+        offset = records.record_offset(slot_index, layout=layout)
         data[offset:offset + records.SCROLL_RECORD_SIZE] = record
     struct.pack_into("<I", data, SAVE_CHECKSUM_SEED_OFFSET, seed)
     patch_user_checksum(data)

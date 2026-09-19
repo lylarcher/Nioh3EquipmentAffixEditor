@@ -20,6 +20,14 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 * **Persistent edits** — decrypt the PC user save, patch accessory effect
   slots, recompute the user checksum, re-encrypt, verify, and atomically replace
   the save with a plaintext backup + manifest.
+* **Reads only the save file** — the game never has to be running to list or
+  edit accessories; the tool never touches game memory.
+* **Locates the record table instead of assuming it** — the record array's
+  offset is version-scoped, so the tool finds the array by its record-header
+  signature in *your* save and reports where it found it. `scan` prints that
+  diagnosis (engine offsets, record-type and rarity histograms, raw effect-slot
+  bytes) so a save from a build the tool has not seen can be reported back
+  instead of silently reading nothing.
 * **Legal-affix-only editing** — the affix catalog is built from the
   `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
   outside the table is rejected (fail closed).
@@ -60,6 +68,9 @@ python launch_editor.py
 # CLI: list saves and their accessory records
 python launch_editor.py list
 
+# CLI: diagnose the record table of a save (read-only; no game needed)
+python launch_editor.py scan
+
 # CLI: read-only integrity report (JSON)
 python launch_editor.py check
 
@@ -81,6 +92,24 @@ python launch_editor.py restore --from latest
 python launch_editor.py --version
 python launch_editor.py version --json
 ```
+
+### If 读取饰品 (or `list`) finds no records
+
+The game does **not** need to be running — reading only touches the save file.
+An empty result means the tool could not recognise the save's record table, and
+the array offset *is* version-scoped, so a save from a build newer than the
+captured layout can move it. The tool therefore searches for the table instead
+of trusting a constant, and reports what it found:
+
+```powershell
+python launch_editor.py scan          # human-readable diagnosis
+python launch_editor.py scan --json   # same, machine-readable
+```
+
+The report states where (or whether) the record table was located, how strong
+the evidence is, the record-type and rarity histograms, the level range and a
+few records' raw effect-slot bytes. Please send that output back with your save
+version if the numbers do not match what the game shows.
 
 ### Release build: one single-file executable
 
@@ -291,18 +320,20 @@ Every version surface reports the same four facts:
 ```text
 Nioh3AccessoryEditor v0.1.0
 commit    : 34cca8de (工作区有未提交改动)
-来源      : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
-加密组件  : D:\...\bin\Nioh_Savefile_decrypt.exe
+来源      : D:\wherever-you-put-it\Nioh3AccessoryEditor
+加密组件  : D:\wherever-you-put-it\Nioh3AccessoryEditor\bin\Nioh_Savefile_decrypt.exe
 构建时间  : 2026-09-19T11:01:52+08:00
 语言      : CPython 3.10.10 (仅标准库 / stdlib only, 含 tkinter GUI)
+构建来源  : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
 ```
 
 | Fact | Meaning |
 |---|---|
 | `commit` | the **last 8 characters** of the git commit id (project convention, not the usual prefix) |
-| `来源` / `加密组件` | where the build came from: the project root plus the crypto executable it uses |
+| `来源` / `加密组件` | where the running copy **is right now**: the folder holding the executable and the crypto component it reads from there. Move the exe and this follows it — no rebuild needed |
 | `构建时间` | local build time, ISO-8601 with UTC offset |
 | `语言` | language/runtime the build targets (CPython + stdlib only) |
+| `构建来源` | only shown when the folder the build ran in differs from where the copy runs now; `BUILD-INFO.txt` always records the build-time path |
 
 Where it shows up:
 
@@ -324,7 +355,7 @@ build artifacts: a fresh checkout reports live git information
 ## Tests
 
 ```powershell
-# Whole suite (502 tests, ~4 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (528 tests, ~5.5 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter
@@ -402,11 +433,22 @@ Useful crypto findings (documented because they are easy to get wrong):
 |---|---|
 | Save size | `0x9001B0` (header `0x158` + body `0x900058`) |
 | Crypto coverage | `[0, 0x158 + 0x900050)`; last 8 bytes preserved verbatim |
-| Record region | `0x176CCE`, 400 slots × `0xE8` |
+| Record region | located at runtime (captured reference layout: `0x176CCE`, 400 slots × `0xE8`) |
 | Effect slots | 7 slots × `0x18`, starting at `0x34` |
 | Slot fields | `<6I`: prefix@0, effect_id@4, value@8, metadata@0xC, tail_0@0x10, tail_1@0x14 |
 | Checksum | body `[0x190, 0x900190)` in `0x400` blocks; seed@`0x900190`, value@`0x900194` |
 | Affix code | bytes0-3 effect id, bytes4-7 value, byte9 bit6 固定, byte10 bit2 星|
+
+How the record region is found: a slot is recognised by the reference project's
+own test — the type word and the level word each mirror themselves (`type@0 ==
+type@2`, `level@6 == level@8`), the type is not zero, and the slot is either a
+scroll type or an item with `item_count == 1` at `@4`. Recognised slots are
+grouped by offset modulo `0xE8` (one array shares one residue) and the strongest
+alignment is confirmed by counting how many of the following 400 slots validate.
+Requiring `item_count == 1` matters: a free effect slot holds `0xFFFFFFFF` and
+would otherwise mirror itself into a fake nested record. A random block passes
+with probability ≈ `1/2^48`, so hits are evidence, and a save with no such
+evidence fails closed instead of editing guessed bytes.
 
 What an edit actually writes: the slot's `effect_id` and `value` fields. The
 `metadata` field (which is where the 固定/星 flag bits are expected to live) is
@@ -418,12 +460,12 @@ nothing.
 
 > **⚠️ Honest boundary:** the exact accessory effect-slot layout inside a
 > *real* Nioh 3 v2.21 save has **not** been confirmed against a real decrypted
-> save yet. The offsets above come from the reference scroll-layout work and the
-> Cheat Table's equipment structure, and the record region contains all
-> equipment families (not only accessories), so `list` shows every record that
-> matches the captured header. The editor fails closed on any header mismatch.
-> **Run `list` (or `check`) on your own save first, confirm the listed records
-> and affixes look right, and keep the automatic backup** before writing.
+> save yet. The effect-slot offsets above come from the reference scroll-layout
+> work and the Cheat Table's equipment structure, and the record array contains
+> all equipment families (not only accessories), so `list` shows every record
+> that matches the captured record header. The editor fails closed on any header
+> mismatch. **Run `list` (or `scan`) on your own save first, confirm the listed
+> records and affixes look right, and keep the automatic backup** before writing.
 
 ## Safety model
 

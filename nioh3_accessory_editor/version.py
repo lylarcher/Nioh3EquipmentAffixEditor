@@ -4,7 +4,9 @@ Four facts are always reported, in this order:
 
 1. ``commit``   -- the **last 8 characters** of the git commit id.
 2. ``built_from`` / ``crypto_exe`` -- where this build came from: the project
-   root and the crypto executable it uses.
+   root and the crypto executable path at build time.  The user-visible banner
+   reports the *run-time* counterparts (see ``version_lines``) and only mentions
+   the build-time root when the two differ.
 3. ``built_at`` -- the local build timestamp (ISO-8601 with UTC offset).
 4. ``language`` -- the Python implementation/runtime the build targets.
 
@@ -272,24 +274,57 @@ def _pad_to(text: str, width: int) -> str:
     return text + " " * max(0, width - _display_width(text))
 
 
-def version_lines(info: BuildInfo | None = None) -> tuple[str, ...]:
+def version_lines(
+    info: BuildInfo | None = None,
+    *,
+    location: str | Path | None = None,
+    crypto_exe: str | Path | None = None,
+) -> tuple[str, ...]:
     """Human-readable version block, one entry per line.
 
     Field labels are padded by display width so the colons line up even in a
     mixed ASCII/CJK terminal.
+
+    ``来源`` and ``加密组件`` are resolved **at run time**: the directory the
+    running executable actually sits in and the crypto component it reads from
+    there.  The build-time project root is only shown as an extra ``构建来源``
+    line when it differs from the run-time location, so copying the exe
+    elsewhere (or building on another machine) no longer prints a stale path.
+    ``location``/``crypto_exe`` override the resolution (used by tests).
     """
     if info is None:
         info = version_info()
     label_width = 10
     built_at = info.built_at if info.built_at != UNKNOWN else "未构建（源码运行）"
-    return (
+    runtime_root = Path(location) if location is not None else paths.application_root()
+    runtime_crypto = (Path(crypto_exe) if crypto_exe is not None
+                      else paths.default_crypto_exe())
+    lines = [
         f"Nioh3AccessoryEditor v{info.version}",
         f"{_pad_to('commit', label_width)}: {info.commit}{info.dirty_suffix}",
-        f"{_pad_to('来源', label_width)}: {_elide(info.built_from)}",
-        f"{_pad_to('加密组件', label_width)}: {_elide(info.crypto_exe)}",
+        f"{_pad_to('来源', label_width)}: {_elide(str(runtime_root))}",
+        f"{_pad_to('加密组件', label_width)}: {_elide(str(runtime_crypto))}",
         f"{_pad_to('构建时间', label_width)}: {built_at}",
         f"{_pad_to('语言', label_width)}: {info.language}",
-    )
+    ]
+    if location is None and crypto_exe is None:
+        build_root = info.built_from
+        if build_root and build_root != UNKNOWN and not _same_path(
+                build_root, runtime_root):
+            lines.append(
+                f"{_pad_to('构建来源', label_width)}: {_elide(build_root)}")
+    return tuple(lines)
+
+
+def _same_path(left: str | Path, right: str | Path) -> bool:
+    """Compare two paths as text (no filesystem access; Windows-aware case)."""
+    import os
+
+    def normalize(value: str | Path) -> str:
+        text = os.path.normpath(str(value)).replace("/", "\\")
+        return os.path.normcase(text)
+
+    return normalize(left) == normalize(right)
 
 
 def version_banner(info: BuildInfo | None = None) -> str:

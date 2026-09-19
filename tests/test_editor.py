@@ -208,10 +208,13 @@ class ApplyTests(EditorTestCase):
             [{"record_index": 3, "slot_index": 0, "value": 999}],
             affix_db=self.db,
         )
-        other = records.record_offset(11)
-        self.assertEqual(
-            patched[other:other + 0xE8], self.plain[other:other + 0xE8]
-        )
+        layout = records.locate_layout(self.plain)
+        target = records.record_offset(3, layout=layout)
+        # Exactly one 0xE8-byte record may differ, at the located offset.
+        self.assertNotEqual(patched[target:target + 0xE8],
+                            self.plain[target:target + 0xE8])
+        self.assertEqual(patched[:target], self.plain[:target])
+        self.assertEqual(patched[target + 0xE8:], self.plain[target + 0xE8:])
 
     def test_apply_is_idempotent(self) -> None:
         edits = [{"record_index": 3, "slot_index": 1, "value": 5}]

@@ -20,7 +20,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import version as version_module
+from nioh3_accessory_editor import paths, version as version_module
 from nioh3_accessory_editor.version import (
     UNKNOWN,
     BuildInfo,
@@ -141,9 +141,33 @@ PYTHON_VERSION = '3.11.9'
     def test_banner_shows_all_four_required_facts(self) -> None:
         text = version_banner()
         self.assertIn("cafebabe", text)
-        self.assertIn(r"D:\ci\checkout\bin\Nioh_Savefile_decrypt.exe", text)
+        self.assertIn("Nioh_Savefile_decrypt.exe", text)
         self.assertIn("2026-05-06T07:08:09+08:00", text)
         self.assertIn("CPython 3.11.9", text)
+
+    def test_frozen_banner_points_at_run_time_locations(self) -> None:
+        """来源 must be where the exe runs from, not where it was built."""
+        text = version_banner()
+        runtime_root = paths.application_root()
+        self.assertIn(str(runtime_root), text)
+        self.assertIn(str(paths.default_crypto_exe()), text)
+        # The build-time root is still visible, but labelled as such.
+        self.assertIn(r"D:\ci\checkout", text)
+        self.assertIn("构建来源", text)
+        self.assertNotIn(r"来源      : D:\ci\checkout", text)
+
+    def test_run_time_location_is_where_the_exe_lives(self) -> None:
+        """Copying the exe elsewhere must change 来源 without a rebuild."""
+        version_info(refresh=True)
+        fake = Path(r"D:\copy\elsewhere\Nioh3AccessoryEditor")
+        with mock.patch.object(paths, "application_root", lambda: fake), \
+                mock.patch.object(
+                    paths, "default_crypto_exe",
+                    lambda: fake / "bin" / "Nioh_Savefile_decrypt.exe"):
+            text = version_banner()
+        self.assertIn(str(fake), text)
+        self.assertIn(str(fake / "bin" / "Nioh_Savefile_decrypt.exe"), text)
+        self.assertIn("构建来源", text)
 
 
 class BannerRenderingTests(unittest.TestCase):
@@ -160,10 +184,11 @@ class BannerRenderingTests(unittest.TestCase):
         text = version_banner(info)
         self.assertIn(f"v{info.version}", text)
         self.assertIn(info.commit, text)
-        self.assertIn(info.built_from, text)
-        self.assertIn(info.crypto_exe, text)
+        self.assertIn(str(paths.application_root()), text)
+        self.assertIn(str(paths.default_crypto_exe()), text)
         self.assertIn(info.built_at, text)
         self.assertIn(info.language, text)
+        self.assertIn(info.built_from, text)  # kept, as 构建来源
 
     def test_dirty_worktree_is_called_out(self) -> None:
         self.assertIn("未提交改动", version_banner(sample_info(dirty=True)))
@@ -173,15 +198,21 @@ class BannerRenderingTests(unittest.TestCase):
         info = sample_info(source="git", built_at=UNKNOWN)
         self.assertIn("未构建", version_banner(info))
 
+    def test_no_extra_line_when_the_build_root_is_the_run_time_root(self) -> None:
+        info = sample_info(built_from=str(paths.application_root()))
+        self.assertNotIn("构建来源", version_banner(info))
+
     def test_long_paths_are_elided(self) -> None:
-        info = sample_info(built_from="D:\\" + "x" * 200)
-        line = next(line for line in version_lines(info) if line.startswith("来源"))
+        long_root = "D:\\" + "x" * 200
+        lines = version_lines(sample_info(), location=long_root,
+                              crypto_exe=long_root + "\\bin\\crypto.exe")
+        line = next(line for line in lines if line.startswith("来源"))
         self.assertIn("...", line)
         self.assertLessEqual(display_width(line), 90)
 
     def test_elision_respects_cjk_width(self) -> None:
-        info = sample_info(built_from="D:\\构建\\" + "宽" * 100)
-        line = next(line for line in version_lines(info) if line.startswith("来源"))
+        lines = version_lines(sample_info(), location="D:\\构建\\" + "宽" * 100)
+        line = next(line for line in lines if line.startswith("来源"))
         self.assertIn("...", line)
         self.assertLessEqual(display_width(line), 90)
         self.assertNotIn("\ufffd", line)

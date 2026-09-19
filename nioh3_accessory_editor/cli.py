@@ -2,6 +2,7 @@
 
 Commands:
     list    Discover saves and list accessory-like records with their affixes.
+    scan    Report the record-array diagnosis of a save (read-only, no game).
     edit    Apply effect-slot edits to a selected save (persisted to disk).
     backup  Create a plaintext backup of a save.
     check   Decrypt a save and report integrity without modifying anything.
@@ -14,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import paths
+from . import paths, records, version
 from .affixdb import AffixDb, AffixError
 from .bootstrap import ensure_once
 from .config import ConfigError, EditorConfig, load_config, write_default_config
@@ -119,7 +120,14 @@ def cmd_list(args: argparse.Namespace) -> int:
     print(f"路径: {save.path}")
     data = open_save(save, crypto)
     print(f"校验和一致: {'是' if save_checksum_is_valid(data) else '否（存档可能来自其他版本或被修改过）'}")
-    accessories = list_accessories(data)
+    try:
+        layout = records.locate_layout(data)
+    except RecordError as error:
+        print(f"\n未找到物品记录表：{error}")
+        print("请运行 scan 命令查看诊断，并把输出反馈给作者。")
+        return 1
+    print(f"记录表: {layout.describe()}")
+    accessories = list_accessories(data, layout=layout)
     print(f"\n找到 {len(accessories)} 条疑似饰品/装备记录\n")
     for view in accessories:
         print(
@@ -129,6 +137,39 @@ def cmd_list(args: argparse.Namespace) -> int:
         for line in view.describe_effects(affix_db):
             print(line)
         print()
+    if not accessories:
+        print("该存档的记录表里没有可编辑的非绘卷物品记录。")
+        print("请运行 scan 命令查看记录表诊断，并把输出反馈给作者。")
+    return 0
+
+
+def cmd_scan(args: argparse.Namespace) -> int:
+    """Report what the tool can see in a save, for diagnosis."""
+    crypto = _crypto(args)
+    save = _select_save(args)
+    data = open_save(save, crypto)
+    diagnosis = records.layout_diagnosis(data, preview_records=args.preview)
+    payload = {
+        "path": str(save.path),
+        "account_id": save.account_id,
+        "slot_index": save.slot_index,
+        "checksum_consistent": save_checksum_is_valid(data),
+        "magic": data[:6].decode("ascii", "replace"),
+        **diagnosis,
+    }
+    if args.json:
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    print(f"存档      : {save.display}")
+    print(f"路径      : {save.path}")
+    print(f"校验和一致: {'是' if payload['checksum_consistent'] else '否'}")
+    print(f"版本标识  : {version.version_info().commit}")
+    print()
+    for line in records.describe_diagnosis(diagnosis):
+        print(line)
+    print()
+    print("提示：本诊断只读取存档文件，游戏无需运行。")
+    print("若结果不符预期，请把以上输出（可用 scan --json）反馈给作者。")
     return 0
 
 
@@ -430,6 +471,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser_list = sub.add_parser("list", help="列出存档中的饰品记录与词条")
     parser_list.set_defaults(func=cmd_list)
+
+    parser_scan = sub.add_parser(
+        "scan", help="诊断存档的物品记录表（只读，游戏无需运行）")
+    parser_scan.add_argument("--json", action="store_true", help="输出 JSON 格式诊断")
+    parser_scan.add_argument("--preview", type=int, default=4,
+                             help="附带几条记录的效果槽原始字节（默认 4，0 为不附带）")
+    parser_scan.set_defaults(func=cmd_scan)
 
     parser_check = sub.add_parser("check", help="只读检查存档完整性与饰品数量")
     parser_check.set_defaults(func=cmd_check)

@@ -11,7 +11,7 @@ import sys
 from . import bootstrap
 
 CLI_COMMANDS = frozenset(
-    {"list", "check", "edit", "backup", "restore", "version", "config",
+    {"list", "scan", "check", "edit", "backup", "restore", "version", "config",
      "-h", "--help", "--version", "--config", "--python-crypto"}
 )
 

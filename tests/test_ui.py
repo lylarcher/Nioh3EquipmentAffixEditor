@@ -11,7 +11,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import ui
+from nioh3_accessory_editor import records, ui
 from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.editor import SaveDescriptor
 from nioh3_accessory_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID
@@ -62,7 +62,7 @@ class UiTestCase(unittest.TestCase):
         self.app._populate_saves((SaveDescriptor(
             self.root / "SAVEDATA.BIN", 1234, 0, len(self.plan)),))
         self.app._populate_accessories(
-            (self.plan, ui.list_accessories(self.plan), True)
+            (self.plan, ui.list_accessories(self.plan), True, records.locate_layout(self.plan))
         )
         self.app.tree.selection_set("3")
         self.app._on_accessory_selected()
@@ -127,15 +127,67 @@ class SelectionTests(UiTestCase):
         self.assertIn("未发现", self.app.status_var.get())
 
     def test_populate_accessories_lists_records(self) -> None:
-        self.app._populate_accessories((self.plan, ui.list_accessories(self.plan), True))
+        self.app._populate_accessories((self.plan, ui.list_accessories(self.plan), True, records.locate_layout(self.plan)))
         self.assertEqual(self.app.tree.get_children(), ("3",))
         self.assertTrue(self.app.checksum_ok)
         self.assertIn("1 条记录", self.app.status_var.get())
 
     def test_populate_accessories_flags_a_bad_checksum(self) -> None:
-        self.app._populate_accessories((self.plan, ui.list_accessories(self.plan), False))
+        self.app._populate_accessories((self.plan, ui.list_accessories(self.plan), False, records.locate_layout(self.plan)))
         self.assertFalse(self.app.checksum_ok)
         self.assertIn("校验和不一致", self.app.status_var.get())
+
+    def test_a_save_without_records_reports_the_diagnosis(self) -> None:
+        """No silent empty table: the user gets the diagnosis to send back."""
+        plain = support.build_plain_save(pattern_body=False)
+        with mock.patch.object(ui.messagebox, "showwarning") as warned, \
+                mock.patch.object(ui.messagebox, "showinfo"):
+            self.app._report_no_layout(
+                (plain, True, "未在存档中找到物品记录表",
+                 records.layout_diagnosis(plain))
+            )
+        warned.assert_called_once()
+        _title, body = warned.call_args[0]
+        self.assertIn("未在存档中找到物品记录表", body)
+        self.assertIn("记录表定位: 失败", body)
+        self.assertIn("游戏无需运行", body)
+        self.assertEqual(self.app.accessory_views, [])
+        self.assertEqual(self.app.tree.get_children(), ())
+        self.assertIn("未能定位物品记录表", self.app.status_var.get())
+
+    def test_reading_a_save_without_records_uses_the_failure_path(self) -> None:
+        """The worker must not raise: it reports a diagnosable failure."""
+        plain = support.build_plain_save(pattern_body=False)
+        descriptor = SaveDescriptor(self.root / "SAVEDATA.BIN", 1234, 0,
+                                    len(plain))
+        self.app.crypto = mock.Mock()
+        with mock.patch.object(ui, "open_save", return_value=plain), \
+                mock.patch.object(ui, "save_checksum_is_valid", return_value=True):
+            tag, payload = self.app._load_accessories_worker(descriptor)
+        self.assertEqual(tag, "accessories_failed")
+        self.assertEqual(payload[0], plain)
+        self.assertTrue(payload[1])
+        self.assertIn("未在存档中找到物品记录表", payload[2])
+        self.assertIsNone(payload[3]["layout"])
+
+    def test_reading_a_save_reports_the_located_table(self) -> None:
+        descriptor = SaveDescriptor(self.root / "SAVEDATA.BIN", 1234, 0,
+                                    len(self.plan))
+        self.app.crypto = mock.Mock()
+        with mock.patch.object(ui, "open_save", return_value=self.plan), \
+                mock.patch.object(ui, "save_checksum_is_valid", return_value=True):
+            tag, payload = self.app._load_accessories_worker(descriptor)
+        self.assertEqual(tag, "accessories")
+        _data, views, checksum_ok, layout = payload
+        self.assertTrue(checksum_ok)
+        self.assertEqual([view.slot_index for view in views], [3])
+        self.assertEqual(layout.anchor, records.LEGACY_GROUP_OFFSET)
+        self.app._populate_accessories(payload)
+        self.assertIn("记录表", self.app.status_var.get())
+        self.assertEqual(
+            self.app.tree.item("3", "values")[2],
+            f"装备/饰品 {0x4001:#06x}",
+        )
 
     def test_selecting_an_accessory_fills_the_slots(self) -> None:
         self._select()
@@ -150,7 +202,7 @@ class SelectionTests(UiTestCase):
                 record_type=0x4001, effects=((0xDEADBEEF, 1, 0),))}
         )
         self.app.decrypted = plan
-        self.app._populate_accessories((plan, ui.list_accessories(plan), True))
+        self.app._populate_accessories((plan, ui.list_accessories(plan), True, records.locate_layout(plan)))
         self.app.tree.selection_set("0")
         self.app._on_accessory_selected()
         self.assertIn("非表内词条", self.app.slot_combos[0].get())
@@ -184,7 +236,7 @@ class EditCollectionTests(UiTestCase):
             )}
         )
         self.app.decrypted = plan
-        self.app._populate_accessories((plan, ui.list_accessories(plan), True))
+        self.app._populate_accessories((plan, ui.list_accessories(plan), True, records.locate_layout(plan)))
         self.app.tree.selection_set("3")
         self.app._on_accessory_selected()
         other = self.db.all()[1]
@@ -368,7 +420,7 @@ class WriteFlowTests(UiTestCase):
             self.root / "76561198000000001" / "SAVEDATA02" / "SAVEDATA.BIN",
             76561198000000001, 2, len(self.plan)),))
         self.app._populate_accessories(
-            (self.plan, ui.list_accessories(self.plan), True))
+            (self.plan, ui.list_accessories(self.plan), True, records.locate_layout(self.plan)))
         self.app.tree.selection_set("3")
         self.app._on_accessory_selected()
 

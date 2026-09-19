@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import cli
+from nioh3_accessory_editor import cli, records
 from nioh3_accessory_editor import savefile as savefile_module
 from nioh3_accessory_editor.affixdb import AffixDb
 from nioh3_accessory_editor.editor import EditorError, SaveDescriptor
@@ -72,7 +72,7 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, 0)
 
     def test_subcommand_help(self) -> None:
-        for command in ("list", "check", "edit", "backup", "restore"):
+        for command in ("list", "scan", "check", "edit", "backup", "restore"):
             with self.assertRaises(SystemExit) as caught:
                 with contextlib.redirect_stdout(io.StringIO()):
                     cli.main([command, "--help"])
@@ -380,6 +380,61 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertIn("记录 #3", out)
         self.assertIn(self.affix.name, out)
         self.assertIn("校验和一致: 是", out)
+
+    def test_list_reports_the_located_record_table(self) -> None:
+        code, out, err = run_cli(["list"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("记录表:", out)
+        self.assertIn("400 槽", out)
+        self.assertIn("对齐", out)
+
+    def test_scan_reports_the_diagnosis(self) -> None:
+        code, out, err = run_cli(["scan"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("记录表定位", out)
+        self.assertIn("记录头命中", out)
+        self.assertIn("证据", out)
+        self.assertIn("游戏无需运行", out)
+        self.assertIn("0x4001", out)
+
+    def test_scan_json_is_machine_readable(self) -> None:
+        import json
+
+        code, out, err = run_cli(["scan", "--json"])
+        self.assertEqual(code, 0, err)
+        payload = json.loads(out)
+        self.assertEqual(payload["candidate_count"], 1)
+        self.assertEqual(payload["layout"]["anchor"],
+                         records.LEGACY_GROUP_OFFSET)
+        self.assertEqual(payload["layout"]["item_count"], 1)
+        self.assertEqual(payload["level_range"], [160, 160])
+        self.assertTrue(payload["checksum_consistent"])
+
+    def test_scan_preview_can_be_disabled(self) -> None:
+        import json
+
+        code, out, _err = run_cli(["scan", "--json", "--preview", "0"])
+        self.assertEqual(code, 0)
+        self.assertEqual(json.loads(out)["effect_preview"], [])
+
+    def test_scan_on_a_save_without_records_explains_itself(self) -> None:
+        """A different save layout must be diagnosed, not silently empty."""
+        bad = support.build_plain_save(pattern_body=False)
+        staged_plain = self.root / "no-records.bin"
+        staged_enc = self.root / "no-records.enc"
+        staged_plain.write_bytes(bad)
+        self.crypto.encrypt(staged_plain, staged_enc)
+        self.save_path.write_bytes(staged_enc.read_bytes())
+
+        code, out, err = run_cli(["scan"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("记录表定位: 失败", out)
+        self.assertIn("记录头命中: 0 处", out)
+
+        code, out, err = run_cli(["list"])
+        self.assertEqual(code, 1)
+        self.assertIn("未找到物品记录表", out)
+        self.assertIn("scan", out)
 
     def test_check_reports_json(self) -> None:
         code, out, err = run_cli(["check"])
