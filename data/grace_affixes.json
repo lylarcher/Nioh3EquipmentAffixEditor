@@ -1,0 +1,547 @@
+{
+  "schema": "nioh3-grace-affixes/v1",
+  "count": 77,
+  "source": "仁王3词条装备库v2.21.xlsx / 词条总目录（恩宠·套装）",
+  "conflicts": [],
+  "affixes": [
+    {
+      "effect_id": 27010,
+      "value": 0,
+      "flags": 64,
+      "name": "横行天下的倾奇者",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 34437,
+      "value": 0,
+      "flags": 64,
+      "name": "东国无双的荣耀",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 58464,
+      "value": 0,
+      "flags": 64,
+      "name": "怪童丸",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 34153,
+      "value": 0,
+      "flags": 64,
+      "name": "军神的明鉴",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 44682,
+      "value": 0,
+      "flags": 64,
+      "name": "风流才智之士",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 23267,
+      "value": 0,
+      "flags": 64,
+      "name": "七难八苦",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 52507,
+      "value": 0,
+      "flags": 64,
+      "name": "三恶妄为",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 17066,
+      "value": 0,
+      "flags": 64,
+      "name": "刚勇流离",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 14347,
+      "value": 0,
+      "flags": 64,
+      "name": "赖光四天王之首",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 58519,
+      "value": 0,
+      "flags": 64,
+      "name": "十一面观音的庇佑",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 7480,
+      "value": 0,
+      "flags": 64,
+      "name": "坂上党的骄傲",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 16774,
+      "value": 0,
+      "flags": 64,
+      "name": "赤备的骄傲",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 12965,
+      "value": 0,
+      "flags": 64,
+      "name": "梦想一刀",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 38051,
+      "value": 0,
+      "flags": 64,
+      "name": "剑禅一致",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 9063,
+      "value": 0,
+      "flags": 64,
+      "name": "自得院流枪术",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 51117,
+      "value": 0,
+      "flags": 64,
+      "name": "高岛流炮术",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 32001,
+      "value": 0,
+      "flags": 64,
+      "name": "今川执权",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 29274,
+      "value": 0,
+      "flags": 64,
+      "name": "太平先驱",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 55467,
+      "value": 0,
+      "flags": 64,
+      "name": "聪慧心鬼",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 61003,
+      "value": 0,
+      "flags": 64,
+      "name": "凋零勇将",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 43475,
+      "value": 0,
+      "flags": 64,
+      "name": "神君再临",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 62493,
+      "value": 0,
+      "flags": 64,
+      "name": "二心将领",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 58120,
+      "value": 0,
+      "flags": 64,
+      "name": "殿军名将",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 54564,
+      "value": 0,
+      "flags": 64,
+      "name": "风林火山",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 26650,
+      "value": 0,
+      "flags": 64,
+      "name": "一人当千之精锐",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 29628,
+      "value": 0,
+      "flags": 64,
+      "name": "武家政权之基石",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 64884,
+      "value": 0,
+      "flags": 64,
+      "name": "薄命之剑",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 39233,
+      "value": 0,
+      "flags": 64,
+      "name": "甲斐的副将",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 30154,
+      "value": 0,
+      "flags": 64,
+      "name": "柳生表里剑",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 11526,
+      "value": 0,
+      "flags": 64,
+      "name": "才智卓越",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 54115,
+      "value": 0,
+      "flags": 64,
+      "name": "加贺百万石的荣华",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 28845,
+      "value": 0,
+      "flags": 64,
+      "name": "天下副将军",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 38383,
+      "value": 0,
+      "flags": 64,
+      "name": "烈火般的反骨",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 55489,
+      "value": 0,
+      "flags": 64,
+      "name": "伊贺越复仇的主导者",
+      "category": "武士套装"
+    },
+    {
+      "effect_id": 45263,
+      "value": 0,
+      "flags": 64,
+      "name": "屠妖者",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 37367,
+      "value": 0,
+      "flags": 64,
+      "name": "神之祝子",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 25585,
+      "value": 0,
+      "flags": 64,
+      "name": "实行祓除者",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 20488,
+      "value": 0,
+      "flags": 64,
+      "name": "伊贺忍者首领",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 46886,
+      "value": 0,
+      "flags": 64,
+      "name": "幻惑吞牛",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 36356,
+      "value": 0,
+      "flags": 64,
+      "name": "百鬼化身",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 47387,
+      "value": 0,
+      "flags": 64,
+      "name": "一射专心",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 31299,
+      "value": 0,
+      "flags": 64,
+      "name": "悲剧英雄",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 40232,
+      "value": 0,
+      "flags": 64,
+      "name": "显净土真实",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 42913,
+      "value": 0,
+      "flags": 64,
+      "name": "怨恨盖世",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 61119,
+      "value": 0,
+      "flags": 64,
+      "name": "机智勇士",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 24268,
+      "value": 0,
+      "flags": 64,
+      "name": "命运一射",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 19078,
+      "value": 0,
+      "flags": 64,
+      "name": "狡狯忠臣",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 24986,
+      "value": 0,
+      "flags": 64,
+      "name": "绝景哉",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 46984,
+      "value": 0,
+      "flags": 64,
+      "name": "伊贺后裔",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 19651,
+      "value": 0,
+      "flags": 64,
+      "name": "奇策百出",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 4680,
+      "value": 0,
+      "flags": 64,
+      "name": "肉户八重垣流",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 63556,
+      "value": 0,
+      "flags": 64,
+      "name": "弘法利生",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 37997,
+      "value": 0,
+      "flags": 64,
+      "name": "风魔的威名",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 50768,
+      "value": 0,
+      "flags": 64,
+      "name": "幕府密探总管",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 2964,
+      "value": 0,
+      "flags": 64,
+      "name": "柳生的暗行者",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 59332,
+      "value": 0,
+      "flags": 64,
+      "name": "里体舍流总帅",
+      "category": "忍者套装"
+    },
+    {
+      "effect_id": 9189,
+      "value": 0,
+      "flags": 0,
+      "name": "毘沙门天的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 10982,
+      "value": 0,
+      "flags": 0,
+      "name": "弁才天的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 36044,
+      "value": 0,
+      "flags": 0,
+      "name": "惠比寿的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 45647,
+      "value": 0,
+      "flags": 0,
+      "name": "寿老人的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 20498,
+      "value": 0,
+      "flags": 0,
+      "name": "大黑天的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 31722,
+      "value": 0,
+      "flags": 0,
+      "name": "福禄寿的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 22796,
+      "value": 0,
+      "flags": 0,
+      "name": "布袋尊的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 20387,
+      "value": 0,
+      "flags": 0,
+      "name": "稻荷神的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 45545,
+      "value": 0,
+      "flags": 0,
+      "name": "八幡神的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 59627,
+      "value": 0,
+      "flags": 0,
+      "name": "九头龙的恩宠",
+      "category": "恩宠"
+    },
+    {
+      "effect_id": 25939,
+      "value": 0,
+      "flags": 0,
+      "name": "天照大神的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 52840,
+      "value": 0,
+      "flags": 0,
+      "name": "素盏鸣尊的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 47805,
+      "value": 0,
+      "flags": 0,
+      "name": "月读的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 5858,
+      "value": 0,
+      "flags": 0,
+      "name": "迦具土的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 18412,
+      "value": 0,
+      "flags": 0,
+      "name": "大绵津见的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 61162,
+      "value": 0,
+      "flags": 0,
+      "name": "建御雷的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 16786,
+      "value": 0,
+      "flags": 0,
+      "name": "志那都彦的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 20452,
+      "value": 0,
+      "flags": 0,
+      "name": "天钿女的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 60257,
+      "value": 0,
+      "flags": 0,
+      "name": "祸津日的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 32462,
+      "value": 0,
+      "flags": 0,
+      "name": "摩利支天的恩宠",
+      "category": "上位恩宠"
+    },
+    {
+      "effect_id": 29174,
+      "value": 0,
+      "flags": 0,
+      "name": "不动明王的恩宠",
+      "category": "上位恩宠"
+    }
+  ]
+}

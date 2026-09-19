@@ -10,7 +10,7 @@ from unittest import mock
 from nioh3_accessory_editor import editor as editor_module
 from nioh3_accessory_editor import records
 from nioh3_accessory_editor import savefile as savefile_module
-from nioh3_accessory_editor.affixdb import AffixDb, AffixError
+from nioh3_accessory_editor.affixdb import AffixDb, AffixError, GraceDb
 from nioh3_accessory_editor.editor import (
     EditorError,
     SaveDescriptor,
@@ -143,6 +143,31 @@ class GraceSlotTests(EditorTestCase):
         self.assertTrue(view.is_accessory)
         self.assertEqual(view.catalog_hits, 4)
         self.assertEqual(view.grace_slots(self.db), frozenset({4}))
+
+    def test_grace_slot_is_named_from_the_grace_table(self) -> None:
+        """0x71f6 ends record #3 of the reporting user's save (不动明王的恩宠)."""
+        record = support.build_record(
+            record_type=ITEM_TYPE,
+            effects=((self.affix_a.effect_id, 20, 0x40), (0x0071F6, 0, 0x5C020C00)),
+        )
+        save = support.build_plain_save(records_by_slot={3: record})
+        view = list_accessories(save)[0]
+        grace_db = GraceDb.best_effort()
+        line = view.describe_effects(self.db, grace_db)[1]
+        self.assertIn("不动明王的恩宠", line)
+        self.assertIn("上位恩宠", line)
+        self.assertIn("0x71f6", line)
+
+    def test_grace_slot_falls_back_when_the_table_is_missing(self) -> None:
+        record = support.build_record(
+            record_type=ITEM_TYPE,
+            effects=((self.affix_a.effect_id, 20, 0x40), (0x0071F6, 0, 0)),
+        )
+        save = support.build_plain_save(records_by_slot={3: record})
+        view = list_accessories(save)[0]
+        line = view.describe_effects(self.db)[1]
+        self.assertIn("恩宠/套装词条", line)
+        self.assertIn("0x71f6", line)
 
     def test_checksum_is_valid_on_the_fixture(self) -> None:
         self.assertTrue(save_checksum_is_valid(self.plain))

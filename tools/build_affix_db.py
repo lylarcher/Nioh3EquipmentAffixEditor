@@ -1,15 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Build data/accessory_affixes.json from the 仁王3词条装备库 xlsx.
+"""Build the shipped JSON catalogs from the 仁王3词条装备库 xlsx.
 
 Usage:
     python tools/build_affix_db.py [path-to-xlsx]
 
-The workbook's 饰品词条 sheet has columns:
-    A=类别  B=词条代码 (12 bytes as space-separated hex)
-    C=词条名称  D=备注
+Two files are written:
+
+* ``data/accessory_affixes.json`` from the 饰品词条 sheet — the **legal edit**
+  catalog.  Columns: A=类别  B=词条代码 (12 bytes as space-separated hex)
+  C=词条名称  D=备注.
+* ``data/grace_affixes.json`` from the 词条总目录 sheet — the 恩宠/套装组合
+  **name table** (display only; 归属 = [恩宠] / [上位恩宠] / [武士套装] /
+  [忍者套装]).  Every real accessory ends with one of these, and they must never
+  enter the legal catalog because armour carries 套装 codes as well.
 
 The parser is stdlib-only (xlsx = zip + XML).  It accepts either the real
-xlsx or the pre-dumped TSV form (A=../B=.. lines) to stay robust.
+xlsx or the pre-dumped TSV form (A=../B=.. lines) to stay robust; the TSV form
+only has the 饰品词条 sheet, so it writes just the accessory catalog.
 """
 
 from __future__ import annotations
@@ -22,7 +29,11 @@ from xml.etree import ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nioh3_accessory_editor.affixdb import AffixEntry, save_catalog
+from nioh3_accessory_editor.affixdb import (
+    AffixEntry,
+    save_catalog,
+    save_grace_catalog,
+)
 
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
@@ -40,6 +51,13 @@ LEGACY_SOURCES = (
     Path(r"D:\AIWorkspace\DSHWorkSpcae\Nioh3Trainer\仁王3词条装备库v2.21.xlsx"),
 )
 TARGET_SHEET = "饰品词条"
+
+#: 恩宠 / 套装组合 names live in the 词条总目录 sheet (columns: 词条代码 / 词条名称 /
+#: 词条归属).  Every real accessory's last affix is one of these; they are *not*
+#: accessory affixes (armour carries 套装 codes too), so they go into a separate,
+#: display-only table instead of the legal-edit catalog.
+GRACE_SHEET = "词条总目录"
+GRACE_OWNERS = ("恩宠", "上位恩宠", "武士套装", "忍者套装")
 
 
 def resolve_source(explicit: str | Path | None = None) -> Path:
@@ -77,7 +95,7 @@ def parse_code(code: str) -> tuple[int, int, int]:
     return effect_id, value, flags
 
 
-def _rows_from_xlsx(path: Path) -> list[list[str]]:
+def _rows_from_xlsx(path: Path, sheet_name: str = TARGET_SHEET) -> list[list[str]]:
     z = zipfile.ZipFile(path)
     names = z.namelist()
 
@@ -97,7 +115,7 @@ def _rows_from_xlsx(path: Path) -> list[list[str]]:
         )
     }
     for sheet in wb.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet"):
-        if sheet.get("name") == TARGET_SHEET:
+        if sheet.get("name") == sheet_name:
             target = rel_map.get(sheet.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"))
             if target:
                 if not target.startswith("xl/"):
@@ -105,7 +123,7 @@ def _rows_from_xlsx(path: Path) -> list[list[str]]:
                 target_file = target
             break
     if target_file is None or target_file not in names:
-        raise FileNotFoundError(f"找不到工作表 {TARGET_SHEET} 或文件 {target_file}")
+        raise FileNotFoundError(f"找不到工作表 {sheet_name} 或文件 {target_file}")
 
     root = ET.fromstring(z.read(target_file))
     rows: list[list[str]] = []
@@ -146,6 +164,42 @@ def _rows_from_tsv(path: Path) -> list[list[str]]:
     if current:
         rows.append([current.get(i, "") for i in range(max(current) + 1)])
     return rows
+
+
+def parse_grace_owner(owner: str) -> str | None:
+    """``[上位恩宠]`` -> ``上位恩宠``; ``None`` when it is not a grace/set row."""
+    text = owner.strip().strip("[]").strip()
+    return text if text in GRACE_OWNERS else None
+
+
+def collect_grace_entries(source: Path) -> tuple[list[AffixEntry], int]:
+    """Read the 恩宠/套装 rows of 词条总目录 as display-only name entries."""
+    rows = _rows_from_xlsx(source, GRACE_SHEET)
+    entries: list[AffixEntry] = []
+    by_id: dict[int, AffixEntry] = {}
+    skipped = 0
+    for row in rows[1:]:  # skip header
+        if len(row) < 3:
+            skipped += 1
+            continue
+        code, name, owner = row[0].strip(), row[1].strip(), row[2].strip()
+        kind = parse_grace_owner(owner)
+        if kind is None or not name:
+            skipped += 1
+            continue
+        if not re.fullmatch(r"([0-9A-Fa-f]{2} ){11}[0-9A-Fa-f]{2}", code):
+            skipped += 1
+            continue
+        effect_id, value, flags = parse_code(code)
+        if effect_id == 0xFFFFFFFF or effect_id in by_id:
+            skipped += 1
+            continue
+        entry = AffixEntry(
+            effect_id=effect_id, value=value, flags=flags, name=name, category=kind,
+        )
+        by_id[effect_id] = entry
+        entries.append(entry)
+    return entries, skipped
 
 
 def main() -> int:
@@ -216,6 +270,28 @@ def main() -> int:
         print(f"    同一词条 ID 多值冲突: {len(conflicts)} 处（已保留首个）")
         for item in conflicts[:10]:
             print("      -", item)
+
+    # 恩宠/套装组合 name table (display only).  Only an xlsx has the 词条总目录
+    # sheet; the TSV fallback carries just the 饰品词条 rows.
+    grace: list[AffixEntry] = []
+    grace_skipped = 0
+    if source.suffix.lower() != ".tsv":
+        try:
+            grace, grace_skipped = collect_grace_entries(source)
+        except (FileNotFoundError, KeyError, zipfile.BadZipFile) as error:
+            print(f"    警告：未能读取 {GRACE_SHEET}（{error}）；恩宠/套装名表未更新")
+    if not grace:
+        return 0
+    if dry_run:
+        print(f"演练：将生成 {len(grace)} 条恩宠/套装名称（未写入）")
+    else:
+        save_grace_catalog(grace, source=f"{source.name} / {GRACE_SHEET}（恩宠·套装）")
+        print(f"OK: 已生成恩宠/套装名表，共 {len(grace)} 条")
+    kinds: dict[str, int] = {}
+    for entry in grace:
+        kinds[entry.category] = kinds.get(entry.category, 0) + 1
+    print("    分类:", "，".join(f"{name} {count}" for name, count in sorted(kinds.items())))
+    print(f"    跳过行: {grace_skipped}")
     return 0
 
 

@@ -22,21 +22,32 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import default_catalog_path
+from .paths import default_catalog_path, default_grace_path
 
 __all__ = [
     "DEFAULT_CATALOG",
+    "DEFAULT_GRACE_CATALOG",
     "FLAG_FIXED",
     "FLAG_STAR",
     "AffixDb",
     "AffixEntry",
     "AffixError",
+    "GraceDb",
     "load_catalog",
+    "load_grace_catalog",
     "save_catalog",
+    "save_grace_catalog",
 ]
 
 DEFAULT_CATALOG = default_catalog_path()
 CATALOG_SCHEMA = "nioh3-accessory-affixes/v1"
+
+#: 恩宠 / 套装组合 names.  These ids are **not** legal accessory affixes (armour
+#: carries 套装 codes), so they live in their own table used for display only:
+#: every real accessory ends with one of them (e.g. 稻荷神的恩宠 on a 龙笛), and
+#: without the table the editor could only call that slot an unknown affix.
+DEFAULT_GRACE_CATALOG = default_grace_path()
+GRACE_CATALOG_SCHEMA = "nioh3-grace-affixes/v1"
 
 # Metadata flag bits decoded from the 词条代码 byte layout:
 # byte 9 bit6 = 固定 (同名固定 variants carry 0x43/0x45/0x46), byte 10 bit2 = 星.
@@ -154,28 +165,40 @@ def _require_uint32(payload: dict[str, object], key: str, where: str) -> int:
 
 def load_catalog(path: Path = DEFAULT_CATALOG) -> list[AffixEntry]:
     """Load entries from the generated JSON catalog, validating every field."""
+    payload = _load_payload(path, "词条库")
+    return _entries_from_payload(payload, path)
+
+
+def load_grace_catalog(path: Path = DEFAULT_GRACE_CATALOG) -> list[AffixEntry]:
+    """Load the 恩宠/套装 name table (display only, never used for legality)."""
+    payload = _load_payload(path, "恩宠/套装名表")
+    return _entries_from_payload(payload, path)
+
+
+def _load_payload(path: Path, what: str) -> dict:
     if not path.is_file():
-        raise AffixError(
-            f"缺少词条库文件 {path}；请先运行 tools/build_affix_db.py 生成"
-        )
+        raise AffixError(f"缺少{what}文件 {path}；请先运行 tools/build_affix_db.py 生成")
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
-        raise AffixError(f"词条库文件无法解析：{path}（{error}）") from error
+        raise AffixError(f"{what}文件无法解析：{path}（{error}）") from error
     if not isinstance(payload, dict):
-        raise AffixError(f"词条库文件格式错误：{path} 顶层必须是对象")
+        raise AffixError(f"{what}文件格式错误：{path} 顶层必须是对象")
     raw_entries = payload.get("affixes")
     if not isinstance(raw_entries, list) or not raw_entries:
-        raise AffixError(f"词条库文件没有 affixes 列表：{path}")
+        raise AffixError(f"{what}文件没有 affixes 列表：{path}")
 
     declared = payload.get("count")
     if isinstance(declared, int) and declared != len(raw_entries):
         raise AffixError(
-            f"词条库文件自述 {declared} 条但实际包含 {len(raw_entries)} 条：{path}"
+            f"{what}文件自述 {declared} 条但实际包含 {len(raw_entries)} 条：{path}"
         )
+    return payload
 
+
+def _entries_from_payload(payload: dict, path: Path) -> list[AffixEntry]:
     entries: list[AffixEntry] = []
-    for index, item in enumerate(raw_entries):
+    for index, item in enumerate(payload["affixes"]):
         where = f"第 {index + 1} 条"
         if not isinstance(item, dict):
             raise AffixError(f"{where}: 词条条目必须是对象")
@@ -203,6 +226,8 @@ def save_catalog(
     *,
     source: str = "",
     conflicts: list[str] | None = None,
+    schema: str = CATALOG_SCHEMA,
+    default_source: str = "仁王3词条装备库v2.21.xlsx / 饰品词条",
 ) -> None:
     """Write entries as the JSON catalog (used by the build tool)."""
     seen: set[int] = set()
@@ -211,9 +236,9 @@ def save_catalog(
             raise AffixError(f"拒绝写出含重复词条 ID 的词条库：{entry.effect_id:#x}")
         seen.add(entry.effect_id)
     payload = {
-        "schema": CATALOG_SCHEMA,
+        "schema": schema,
         "count": len(entries),
-        "source": source or "仁王3词条装备库v2.21.xlsx / 饰品词条",
+        "source": source or default_source,
         "conflicts": conflicts or [],
         "affixes": [
             {
@@ -227,4 +252,84 @@ def save_catalog(
         ],
     }
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # newline="\n": the catalog is a committed text file, so its bytes must not
+    # depend on the platform that regenerated it.
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
+
+
+def save_grace_catalog(
+    entries: list[AffixEntry],
+    path: Path = DEFAULT_GRACE_CATALOG,
+    *,
+    source: str = "",
+) -> None:
+    """Write the 恩宠/套装 name table (same JSON shape, its own schema)."""
+    save_catalog(
+        entries, path, source=source, schema=GRACE_CATALOG_SCHEMA,
+        default_source="仁王3词条装备库v2.21.xlsx / 词条总目录（恩宠·套装）",
+    )
+
+
+class GraceDb:
+    """Name lookup for the 恩宠/套装 ids that end an accessory's affix list.
+
+    Display only: :class:`AffixDb` still decides what may be *written*.  Missing
+    or unreadable table degrades to "no names" instead of failing the app, so a
+    user who never regenerated the data still gets the earlier wording.
+    """
+
+    __slots__ = ("_entries", "_by_id", "catalog_path", "error")
+
+    def __init__(
+        self,
+        entries: list[AffixEntry] | None = None,
+        catalog_path: Path = DEFAULT_GRACE_CATALOG,
+        *,
+        error: str = "",
+    ) -> None:
+        self.catalog_path = catalog_path
+        self.error = error
+        self._entries = tuple(entries) if entries is not None else ()
+        by_id: dict[int, AffixEntry] = {}
+        for entry in self._entries:
+            by_id.setdefault(entry.effect_id, entry)
+        self._by_id = by_id
+
+    @classmethod
+    def from_file(cls, catalog_path: Path = DEFAULT_GRACE_CATALOG) -> "GraceDb":
+        return cls(load_grace_catalog(catalog_path), catalog_path)
+
+    @classmethod
+    def best_effort(cls, catalog_path: Path | None = None) -> "GraceDb":
+        """Load the table, or return an empty one carrying the reason."""
+        path = DEFAULT_GRACE_CATALOG if catalog_path is None else catalog_path
+        try:
+            return cls.from_file(path)
+        except AffixError as error:
+            return cls(catalog_path=path, error=str(error))
+
+    @property
+    def is_loaded(self) -> bool:
+        return bool(self._entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __contains__(self, effect_id: object) -> bool:
+        return effect_id in self._by_id
+
+    def lookup(self, effect_id: int) -> AffixEntry | None:
+        return self._by_id.get(effect_id)
+
+    def describe(self, effect_id: int) -> str | None:
+        """``稻荷神的恩宠（恩宠）`` — ``None`` when the id is not in the table."""
+        entry = self.lookup(effect_id)
+        if entry is None:
+            return None
+        if entry.category:
+            return f"{entry.name}（{entry.category}）"
+        return entry.name
+
+    def all(self) -> tuple[AffixEntry, ...]:
+        return self._entries

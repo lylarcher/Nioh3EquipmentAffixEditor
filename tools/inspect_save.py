@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from nioh3_accessory_editor import records, savefile  # noqa: E402
-from nioh3_accessory_editor.affixdb import AffixDb  # noqa: E402
+from nioh3_accessory_editor.affixdb import AffixDb, GraceDb  # noqa: E402
 from nioh3_accessory_editor.config import load_config  # noqa: E402
 from nioh3_accessory_editor.editor import (  # noqa: E402
     SaveDescriptor,
@@ -260,7 +260,8 @@ def inspect(decrypted: bytes, db: AffixDb, *, preview_records: int = 4) -> dict:
     return payload
 
 
-def _format_report(payload: dict, db: AffixDb, *, listing: int) -> str:
+def _format_report(payload: dict, db: AffixDb, *, listing: int,
+                   grace_db: GraceDb | None = None) -> str:
     lines: list[str] = []
     lines.append(f"存档大小      : {payload['save_size']:#x} 字节")
     lines.append(f"词条库条目    : {payload['catalog_size']}（仅饰品词条）")
@@ -352,8 +353,17 @@ def _format_report(payload: dict, db: AffixDb, *, listing: int) -> str:
         lines.append("饰品末位槽（游戏内显示为恩宠/套装组合效果）的 id: "
                      f"{payload['grace_affix_total']} 件"
                      f"（{len(grace)} 种，前 12 种）")
-        lines.append("  " + " ".join(f"{item['effect_id']:#08x}×{item['count']}"
-                                     for item in grace[:12]))
+        for item in grace[:12]:
+            effect_id = item["effect_id"]
+            named = grace_db.describe(effect_id) if grace_db else None
+            suffix = named if named else "名表里没有这个 id"
+            lines.append(f"  {effect_id:#08x} × {item['count']:<3} {suffix}")
+        unknown = [item for item in grace
+                   if not (grace_db and grace_db.describe(item["effect_id"]))]
+        if unknown:
+            lines.append(f"  其中名表未收录: {len(unknown)} 种 "
+                         f"（共 {sum(item['count'] for item in unknown)} 件），"
+                         "可反馈给作者补全")
     return "\n".join(lines)
 
 
@@ -390,6 +400,7 @@ def main(argv: list[str] | None = None) -> int:
     crypto = savefile.SaveCrypto(prefer_python=args.python_crypto)
     decrypted = open_save(descriptor, crypto)
     db = AffixDb()
+    grace_db = GraceDb.best_effort()
     payload = inspect(decrypted, db, preview_records=4)
     payload["path"] = str(descriptor.path)
     payload["account_id"] = descriptor.account_id
@@ -402,7 +413,8 @@ def main(argv: list[str] | None = None) -> int:
     print()
     print(_format_report(payload, db,
                          listing=len(payload["records"]) if args.all
-                         else max(0, args.records)))
+                         else max(0, args.records),
+                         grace_db=grace_db))
 
     if args.json:
         target = Path(args.json)

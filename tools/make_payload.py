@@ -8,6 +8,7 @@ run :mod:`nioh3_accessory_editor.bootstrap` writes those files into the same
 relative directories they occupy in a checkout:
 
     data/accessory_affixes.json     词条库（合法词条，可自行查看）
+    data/grace_affixes.json         恩宠/套装组合名表（仅用于显示槽位名称）
     config/editor.json              参数配置（改完后重启生效）
     assets/app.ico, logo*.png       程序图标与 logo（GUI 使用，可替换）
     bin/Nioh_Savefile_decrypt.exe   随附的加解密组件（可替换）

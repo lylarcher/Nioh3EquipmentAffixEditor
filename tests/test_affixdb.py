@@ -9,13 +9,17 @@ from pathlib import Path
 
 from nioh3_accessory_editor.affixdb import (
     DEFAULT_CATALOG,
+    DEFAULT_GRACE_CATALOG,
     FLAG_FIXED,
     FLAG_STAR,
     AffixDb,
     AffixEntry,
     AffixError,
+    GraceDb,
     load_catalog,
+    load_grace_catalog,
     save_catalog,
+    save_grace_catalog,
 )
 
 
@@ -162,6 +166,73 @@ class ValidationTests(unittest.TestCase):
         entry = AffixEntry(0x20, 7, 0, "测试", "类别")
         with self.assertRaises(AffixError):
             save_catalog([entry, entry], directory / "out.json")
+
+
+class GraceCatalogTests(unittest.TestCase):
+    """恩宠/套装 names, used to label an accessory's last effect slot.
+
+    The workbook lists them in 词条总目录 (归属 = [恩宠] / [上位恩宠] / [武士套装] /
+    [忍者套装]); they are not legal accessory affixes, so they must never end up in
+    the edit catalog.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.db = GraceDb.best_effort()
+
+    def test_table_is_present_and_parses(self) -> None:
+        self.assertTrue(DEFAULT_GRACE_CATALOG.is_file())
+        self.assertTrue(self.db.is_loaded, self.db.error)
+        self.assertEqual(self.db.error, "")
+        self.assertGreater(len(self.db), 50)
+
+    def test_names_the_id_seen_in_a_real_save(self) -> None:
+        # Record #3 of the reporting user's save holds 0x71f6 in its last slot.
+        self.assertEqual(self.db.describe(0x71F6), "不动明王的恩宠（上位恩宠）")
+        self.assertEqual(self.db.describe(0x4FA3), "稻荷神的恩宠（恩宠）")
+
+    def test_covers_both_grace_and_set_kinds(self) -> None:
+        kinds = {entry.category for entry in self.db.all()}
+        self.assertEqual(kinds, {"恩宠", "上位恩宠", "武士套装", "忍者套装"})
+
+    def test_unknown_id_has_no_name(self) -> None:
+        self.assertIsNone(self.db.describe(0xDEADBEEF))
+        self.assertNotIn(0xDEADBEEF, self.db)
+
+    def test_grace_ids_are_not_legal_edits(self) -> None:
+        """Display must not widen what may be written."""
+        legal = AffixDb()
+        for entry in self.db.all():
+            self.assertNotIn(entry.effect_id, legal, f"{entry.effect_id:#x}")
+
+    def test_duplicate_ids_in_the_table_are_deduped_not_fatal(self) -> None:
+        entry = AffixEntry(0x11, 0, 0, "稻荷神的恩宠", "恩宠")
+        db = GraceDb([entry, entry])
+        self.assertEqual(len(db), 2)
+        self.assertEqual(db.describe(0x11), "稻荷神的恩宠（恩宠）")
+
+    def test_empty_table_reports_no_names_instead_of_failing(self) -> None:
+        db = GraceDb.best_effort(Path(tempfile.gettempdir()) / "missing-grace.json")
+        self.assertFalse(db.is_loaded)
+        self.assertTrue(db.error)
+        self.assertIsNone(db.describe(0x71F6))
+
+    def test_save_grace_catalog_round_trip(self) -> None:
+        directory = Path(tempfile.mkdtemp(prefix="nioh3-grace-"))
+        path = directory / "grace.json"
+        entries = [AffixEntry(0x4FA3, 0, 0, "稻荷神的恩宠", "恩宠")]
+        save_grace_catalog(entries, path, source="unit-test")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["schema"], "nioh3-grace-affixes/v1")
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(load_grace_catalog(path), entries)
+
+    def test_a_missing_affix_list_is_rejected(self) -> None:
+        directory = Path(tempfile.mkdtemp(prefix="nioh3-grace-"))
+        path = directory / "bad.json"
+        path.write_text('{"count": 0}', encoding="utf-8")
+        with self.assertRaises(AffixError):
+            load_grace_catalog(path)
 
 
 if __name__ == "__main__":

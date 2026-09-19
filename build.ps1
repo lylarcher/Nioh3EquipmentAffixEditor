@@ -560,6 +560,7 @@ function Invoke-Build {
         }
 
         foreach ($relative in @('config\editor.json', 'data\accessory_affixes.json',
+                'data\grace_affixes.json',
                 'assets\app.ico', 'assets\logo-32.png', 'assets\logo.png',
                 'bin\Nioh_Savefile_decrypt.exe', 'README.md', 'CHANGELOG.md',
                 'third_party\source-data')) {

@@ -185,6 +185,37 @@ class ReportTests(unittest.TestCase):
         self.assertIn("未定位到", text)
         self.assertIn("scan", text)
 
+    def test_report_names_the_trailing_grace_slot_and_flags_the_rest(self) -> None:
+        from nioh3_accessory_editor.affixdb import GraceDb
+
+        save = support.build_plain_save(records_by_slot={
+            1: support.build_record(
+                record_type=0x4001,
+                effects=((self.affixes[0].effect_id, 20, 0x40), (0x004FA3, 0, 0))),
+            2: support.build_record(
+                record_type=0x4001,
+                effects=((self.affixes[1].effect_id, 20, 0x40), (0x00FB1D, 0, 0))),
+        })
+        payload = inspect_save.inspect(save, self.db)
+        self.assertEqual(payload["grace_affix_total"], 2)
+        text = inspect_save._format_report(payload, self.db, listing=2,
+                                           grace_db=GraceDb.best_effort())
+        self.assertIn("稻荷神的恩宠", text)
+        self.assertIn("名表未收录", text)
+        self.assertIn("0x00fb1d", text)
+
+    def test_report_without_a_name_table_still_lists_the_ids(self) -> None:
+        save = support.build_plain_save(records_by_slot={
+            1: support.build_record(
+                record_type=0x4001,
+                effects=((self.affixes[0].effect_id, 20, 0x40), (0x004FA3, 0, 0))),
+        })
+        payload = inspect_save.inspect(save, self.db)
+        text = inspect_save._format_report(payload, self.db, listing=2)
+        self.assertIn("末位槽", text)
+        self.assertIn("0x004fa3", text)
+        self.assertIn("名表里没有这个 id", text)
+
     def test_report_states_the_read_only_guarantee(self) -> None:
         with tempfile.TemporaryDirectory(prefix="nioh3-inspect-") as temp:
             root = Path(temp)

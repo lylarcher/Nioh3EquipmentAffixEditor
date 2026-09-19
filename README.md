@@ -180,6 +180,7 @@ design, so you can read and edit them):
 | `config/editor.json` | parameter file: save root, account/slot filter, crypto backend, backup root, GUI defaults |
 | `assets/` | program icon (`app.ico`) and logos (`logo.png`, `logo-64.png`, `logo-32.png`) |
 | `data/accessory_affixes.json` | the legal affix catalogue the editor validates against |
+| `data/grace_affixes.json` | 恩宠/套装组合 name table — labels an accessory's last slot, never used to allow an edit |
 | `bin/Nioh_Savefile_decrypt.exe` | bundled crypto helper (fast path; pure Python is the fallback) |
 | `third_party/source-data/` | the original `.xlsx` / `.CT` inputs (regenerate the catalogue yourself) |
 | `README.md`, `CHANGELOG.md` | documentation, copied for offline reading |
@@ -437,6 +438,7 @@ crypto change.
 
 ```powershell
 python tools/build_affix_db.py            # writes data/accessory_affixes.json
+                                          #   and data/grace_affixes.json
 python tools/build_affix_db.py --dry-run  # parse + report only
 ```
 
@@ -446,6 +448,16 @@ provenance and licensing); pass an explicit path (xlsx or the `A1=...` TSV dump)
 to override. The builder de-duplicates by effect id and records any
 same-id/different-value conflict in the catalog's `conflicts` field instead of
 silently picking one.
+
+Two tables come out of one workbook, deliberately kept apart:
+
+* **`data/accessory_affixes.json`** — the 饰品词条 sheet (276 ids). This is what
+  the editor accepts as an edit; anything else fails closed.
+* **`data/grace_affixes.json`** — the 恩宠/套装组合 rows of 词条总目录 (77 ids:
+  恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22). Display only: it names the last
+  effect slot of an accessory (`0x71f6 不动明王的恩宠（上位恩宠）`) instead of
+  showing an unknown id. It can never authorise a write — armour carries 套装
+  codes too, so those ids are not accessory-affix evidence.
 
 ## Verified facts vs. unverified boundaries
 
@@ -519,13 +531,16 @@ nothing.
 > now confirmed against a real decrypted v2.21 save, and a write to a copy of that
 > save changed **exactly 5 bytes** (3 in the target slot, 2 in the checksum
 > field). A real save also confirms the in-game layout: every accessory ends with
-> a 恩宠 or 套装组合 effect (e.g. 稻荷神的恩宠 on a 龙笛), whose id is not in the
-> shipped 饰品词条 table — the tool labels those `恩宠/套装词条` instead of
-> `未知词条`. Still unverified: which record id belongs to which *item* (the
-> game's item-name table is not in the save), the meaning of the `metadata` bits,
-> and the ids behind 恩宠/套装 (collected, not named). **Run `list` (or `scan`) on
-> your own save first, confirm the listed records and affixes look right, and keep
-> the automatic backup** before writing.
+> a 恩宠 or 套装组合 effect (e.g. 稻荷神的恩宠 on a 龙笛), named from the
+> workbook's 词条总目录 — of the 231 trailing slots in that save, 215 were named
+> and 16 ids across 12 kinds were not in the workbook at all, so an unnamed slot
+> still reads `恩宠/套装词条（表外，id=…）`. Still unverified: which record id
+> belongs to which *item* (the game's item-name table is not in the save), and the
+> meaning of the `metadata` bits (the workbook's byte 9/10 do match what the save
+> holds for 恩宠 (`0x0C 0x02`) and 套装 (`0x4C 0x01`) codes, but that is a
+> single-save observation, not a confirmation). **Run `list` (or `scan`) on your
+> own save first, confirm the listed records and affixes look right, and keep the
+> automatic backup** before writing.
 
 ## Safety model
 

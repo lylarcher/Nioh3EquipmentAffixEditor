@@ -388,6 +388,41 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertIn("400 槽", out)
         self.assertIn("对齐", out)
 
+    def test_list_names_the_trailing_grace_slot(self) -> None:
+        """An accessory's last affix is a 恩宠/套装 id from 词条总目录."""
+        record = support.build_record(
+            record_type=0x4001,
+            effects=((self.affix.effect_id, 20, 0x40), (0x004FA3, 0, 0x29014C00)),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        staged = self.root / "grace-plain.bin"
+        staged.write_bytes(plain)
+        encrypted = self.root / "grace-enc.bin"
+        self.crypto.encrypt(staged, encrypted)
+        self.save_path.write_bytes(encrypted.read_bytes())
+
+        code, out, err = run_cli(["list"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("稻荷神的恩宠", out)
+        self.assertIn("末位槽", out)
+
+    def test_list_keeps_the_unknown_wording_without_the_name_table(self) -> None:
+        record = support.build_record(
+            record_type=0x4001,
+            effects=((self.affix.effect_id, 20, 0x40), (0xDEADBEEF, 0, 0)),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        staged = self.root / "anon-plain.bin"
+        staged.write_bytes(plain)
+        encrypted = self.root / "anon-enc.bin"
+        self.crypto.encrypt(staged, encrypted)
+        self.save_path.write_bytes(encrypted.read_bytes())
+
+        code, out, err = run_cli(["list"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("恩宠/套装词条", out)
+        self.assertIn("0xdeadbeef", out)
+
     def test_scan_reports_the_diagnosis(self) -> None:
         code, out, err = run_cli(["scan"])
         self.assertEqual(code, 0, err)

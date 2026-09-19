@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import paths, records, version
-from .affixdb import AffixDb, AffixError
+from .affixdb import AffixDb, AffixError, GraceDb
 from .bootstrap import ensure_once
 from .config import ConfigError, EditorConfig, load_config, write_default_config
 from .editor import (
@@ -115,6 +115,7 @@ def _select_save(args: argparse.Namespace) -> SaveDescriptor:
 
 def cmd_list(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
+    grace_db = GraceDb.best_effort()
     known_ids = accessory_catalog_ids(affix_db)
     crypto = _crypto(args)
     save = _select_save(args)
@@ -139,7 +140,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             f"type={view.record_type:#06x} Lv{view.level} {view.rarity_name}"
             f"  词条命中 {view.catalog_hits}"
         )
-        for line in view.describe_effects(affix_db):
+        for line in view.describe_effects(affix_db, grace_db):
             print(line)
         print()
     if not accessories:
@@ -228,6 +229,7 @@ def _parse_edit_spec(spec: str) -> dict[str, int]:
 
 def cmd_edit(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
+    grace_db = GraceDb.best_effort()
     crypto = _crypto(args)
     save = _select_save(args)
     if args.record < 0:
@@ -251,7 +253,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         if view.slot_index != args.record:
             continue
         print(f"修改后记录 #{view.slot_index}:")
-        for line in view.describe_effects(affix_db):
+        for line in view.describe_effects(affix_db, grace_db):
             print(line)
 
     # State the requirement before touching the file, and say whether the gate

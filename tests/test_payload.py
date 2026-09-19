@@ -35,6 +35,7 @@ class CollectorTests(unittest.TestCase):
 
     def test_ships_the_editable_resources(self) -> None:
         for expected in ("data/accessory_affixes.json",
+                         "data/grace_affixes.json",
                          "config/editor.json",
                          "assets/app.ico",
                          "assets/logo.png",
@@ -61,6 +62,11 @@ class CollectorTests(unittest.TestCase):
     def test_affix_catalogue_in_the_payload_is_the_real_one(self) -> None:
         shipped = self.payload["data/accessory_affixes.json"]
         on_disk = (PROJECT_ROOT / "data" / "accessory_affixes.json").read_bytes()
+        self.assertEqual(shipped, on_disk)
+
+    def test_grace_catalogue_in_the_payload_is_the_real_one(self) -> None:
+        shipped = self.payload["data/grace_affixes.json"]
+        on_disk = (PROJECT_ROOT / "data" / "grace_affixes.json").read_bytes()
         self.assertEqual(shipped, on_disk)
 
     def test_missing_directories_are_tolerated(self) -> None:

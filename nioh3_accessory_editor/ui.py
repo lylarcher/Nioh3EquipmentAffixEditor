@@ -21,7 +21,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from . import paths
-from .affixdb import AffixDb
+from .affixdb import AffixDb, GraceDb
 from .bootstrap import ensure_once, last_report
 from .config import ConfigError, EditorConfig, load_config
 from .editor import (
@@ -126,6 +126,9 @@ class AccessoryEditorApp(tk.Tk):
         self._apply_window_icon()
 
         self.affix_db = AffixDb()
+        # 恩宠/套装 name table: display only (see affixdb.GraceDb).  A missing or
+        # stale file must not stop the editor from running, it only costs names.
+        self.grace_db = GraceDb.best_effort()
         self._backend_note = ""
         self.crypto = self._build_crypto()
         self.saves: list[SaveDescriptor] = []
@@ -637,9 +640,11 @@ class AccessoryEditorApp(tk.Tk):
                 continue
             entry = self.affix_db.lookup(effect.effect_id)
             if index in grace:
-                # 恩宠 / 套装组合 effect: not in the shipped 饰品词条 table, so it
-                # is reported by name instead of as an unexplained unknown id.
-                label = f"{effect.effect_id:#06x} 恩宠/套装词条（表外）"
+                # 恩宠 / 套装组合 effect: named from the workbook's 词条总目录 when
+                # the table is present, otherwise reported honestly as out-of-table.
+                named = self.grace_db.describe(effect.effect_id)
+                label = (f"{effect.effect_id:#06x} {named}" if named
+                         else f"{effect.effect_id:#06x} 恩宠/套装词条（表外）")
                 detail = (f"数值={effect.value} 标识={effect.metadata:#010x}"
                           " ← 改选表内词条会把它替换掉")
             else:

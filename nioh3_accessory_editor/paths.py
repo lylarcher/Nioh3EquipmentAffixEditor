@@ -30,6 +30,7 @@ __all__ = [
     "default_catalog_path",
     "default_config_path",
     "default_crypto_exe",
+    "default_grace_path",
     "default_state_root",
     "icon_path",
     "is_frozen",
@@ -120,6 +121,11 @@ def default_crypto_exe() -> Path:
 def default_catalog_path() -> Path:
     """Bundled accessory affix catalogue."""
     return resource_path("data", "accessory_affixes.json")
+
+
+def default_grace_path() -> Path:
+    """Bundled 恩宠/套装 (grace + set) name table."""
+    return resource_path("data", "grace_affixes.json")
 
 
 def default_config_path() -> Path:

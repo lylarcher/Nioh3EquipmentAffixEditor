@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import records
-from .affixdb import AffixDb
+from .affixdb import AffixDb, GraceDb
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .savefile import (
@@ -132,7 +132,8 @@ class AccessoryView:
             trailing.append(effect.slot_index)
         return frozenset(trailing)
 
-    def describe_effects(self, affix_db: AffixDb) -> tuple[str, ...]:
+    def describe_effects(self, affix_db: AffixDb,
+                         grace_db: GraceDb | None = None) -> tuple[str, ...]:
         lines: list[str] = []
         grace = self.grace_slots(affix_db)
         for effect in self.effects:
@@ -140,7 +141,12 @@ class AccessoryView:
                 lines.append(f"  [{effect.slot_index}] (空)")
                 continue
             if effect.slot_index in grace:
-                name = f"恩宠/套装词条（不在饰品词条库，id={effect.effect_id:#06x}）"
+                named = grace_db.describe(effect.effect_id) if grace_db else None
+                if named:
+                    name = f"{named}（末位槽，id={effect.effect_id:#06x}）"
+                else:
+                    name = (f"恩宠/套装词条（不在饰品词条库，"
+                            f"id={effect.effect_id:#06x}）")
                 lines.append(
                     f"  [{effect.slot_index}] {name} (数值={effect.value} "
                     f"标识={effect.metadata:#010x})"
