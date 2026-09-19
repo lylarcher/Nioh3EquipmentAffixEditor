@@ -44,6 +44,16 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 * **Legal-affix-only editing** — the affix catalog is built from the
   `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
   outside the table is rejected (fail closed).
+* **Legal 恩宠 editing (恩宠 → 恩宠 only)** — an accessory's last slot can be
+  changed to another `xxx的恩宠` (the 21 rows the workbook marks 恩宠 or 上位恩宠),
+  from the GUI's 恩宠 row or `edit --grace`. Item-specific 套装/专属套装 effects
+  (e.g. 怨恨盖世) and plain 词条 are refused, as are non-trailing slots and
+  records that are not accessories: the gate is the game's own family byte
+  (metadata byte 9 — `0x0C` for all 196 恩宠 slots and `0x4C` for all 16 套装
+  slots of the reporting user's 213 accessories). Only the slot's effect id and
+  value change; the family/sub-kind bytes and the unexplained byte 11 are kept
+  exactly as the game wrote them. Measured on a copy of a real save: a whole
+  9.4 MB save changes in 5 bytes — the 2 id bytes and 3 checksum bytes.
 * **Dual crypto backend** — the bundled reference executable
   (`bin/Nioh_Savefile_decrypt.exe`, ~0.4 s per pass) by default; a
   bit-exact pure-Python port of the custom Nioh AES as a zero-dependency
@@ -92,6 +102,12 @@ python launch_editor.py edit --record 3 --edit 1:0x0B32:200
 
 # CLI: dry run (validates everything, writes nothing)
 python launch_editor.py edit --record 3 --edit 1:0x0B32:200 --dry-run
+
+# CLI: replace record #3's 恩宠 with another one — by id, or by a unique name
+python launch_editor.py edit --record 3 --grace 0x4fa3
+python launch_editor.py edit --record 3 --grace 稻荷神 --dry-run
+#   only 恩宠 → 恩宠 is allowed; 套装/专属套装 (e.g. 怨恨盖世) and plain 词条 are
+#   refused with the reason, and nothing is written.
 
 # CLI: plaintext backup only
 python launch_editor.py backup
@@ -399,7 +415,7 @@ build artifacts: a fresh checkout reports live git information
 ## Tests
 
 ```powershell
-# Whole suite (528 tests, ~5.5 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (614 tests, ~7 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter
@@ -415,7 +431,10 @@ The suite covers the crypto layer (golden key schedule, exe-observed keystream,
 region coverage, involution/XOR equivalence), the checksum fold, record
 parsing/patching, the affix catalog schema, save discovery + durability +
 backup + rollback, the editor/CLI pipelines, a full CLI write against a
-synthetic save on disk, and the backup/restore path — including a real
+synthetic save on disk, the 恩宠 legality gate (a 恩宠 slot is writable; a
+专属套装 effect such as 怨恨盖世, a plain 词条 in the last slot, an unknown family
+byte and an unlisted id are all refused, and the write moves only the id bytes),
+and the backup/restore path — including a real
 encrypt → back up → damage → restore round trip asserting that the restored file
 is byte-identical to the backed-up one (and that the uncovered tail is never
 zeroed). Tests that need the reference executable or the sibling reference
@@ -454,10 +473,14 @@ Two tables come out of one workbook, deliberately kept apart:
 * **`data/accessory_affixes.json`** — the 饰品词条 sheet (276 ids). This is what
   the editor accepts as an edit; anything else fails closed.
 * **`data/grace_affixes.json`** — the 恩宠/套装组合 rows of 词条总目录 (77 ids:
-  恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22). Display only: it names the last
-  effect slot of an accessory (`0x71f6 不动明王的恩宠（上位恩宠）`) instead of
-  showing an unknown id. It can never authorise a write — armour carries 套装
-  codes too, so those ids are not accessory-affix evidence.
+  恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22). It names the last effect slot of
+  an accessory (`0x71f6 不动明王的恩宠（上位恩宠）`) instead of showing an unknown
+  id, and the 21 恩宠/上位恩宠 rows are also the allowed **targets** of a 恩宠
+  change (`edit --grace`, the GUI 恩宠 row). The 56 套装 rows are never writable:
+  they stay display-only, because armour carries 套装 codes too, so those ids are
+  not accessory-affix evidence — and the editor additionally requires the slot
+  being replaced to carry the 恩宠 family byte (0x0C), which a 专属套装 effect
+  (e.g. 怨恨盖世, 0x4C) never does.
 
 ## Verified facts vs. unverified boundaries
 
@@ -541,6 +564,17 @@ nothing.
 > single-save observation, not a confirmation). **Run `list` (or `scan`) on your
 > own save first, confirm the listed records and affixes look right, and keep the
 > automatic backup** before writing.
+>
+> **恩宠 edits specifically:** the rule "only `xxx的恩宠` → another `xxx的恩宠`" is
+> enforced from three independent facts — the slot's family byte (0x0C, measured on
+> all 196 恩宠 slots of that save vs 0x4C on all 16 套装 slots), the workbook's 归属
+> (恩宠 / 上位恩宠 only) and the trailing-slot position. What is **not** verified:
+> whether 上位恩宠 is gated in game by level/difficulty (the edit does not check
+> that), what metadata byte 10 (0x02 vs 0x0A) and byte 11 (0x00/0x18/0x29/0xDB/…
+> for the *same* 恩宠 on different accessories) actually mean — both are therefore
+> copied from the slot being replaced instead of being invented, and whether the
+> in-game item list refreshes cleanly after such a swap (only load the save and
+> look). If the swapper shows something odd, restore the automatic backup.
 
 ## Safety model
 

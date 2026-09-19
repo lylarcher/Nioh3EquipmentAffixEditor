@@ -21,13 +21,17 @@ from .bootstrap import ensure_once
 from .config import ConfigError, EditorConfig, load_config, write_default_config
 from .editor import (
     EditorError,
+    GraceEditError,
     SaveDescriptor,
     accessory_catalog_ids,
     apply_edits,
+    apply_grace_edit,
     commit_save,
     discover_saves,
+    grace_edit_availability,
     list_accessories,
     open_save,
+    resolve_grace_id,
     restore_backup,
     save_checksum_is_valid,
 )
@@ -234,20 +238,42 @@ def cmd_edit(args: argparse.Namespace) -> int:
     save = _select_save(args)
     if args.record < 0:
         raise EditorError("--record 必须指定一个非负的记录索引")
+    grace_id = None
+    if args.grace:
+        grace_id = resolve_grace_id(grace_db, args.grace)
+    if bool(args.edit) == (grace_id is not None):
+        raise EditorError("请二选一：--edit 改饰品词条，--grace 改恩宠"
+                          "（两者不能同时使用，也不能都不给）")
     edits = tuple(
         {"record_index": args.record, **_parse_edit_spec(spec)}
-        for spec in args.edit
+        for spec in (args.edit or ())
     )
-    if not edits:
-        raise EditorError("请至少提供一个 --edit 参数")
 
     print(DISCLAIMER)
     print(f"存档: {save.display}")
     data = open_save(save, crypto)
     known_ids = accessory_catalog_ids(affix_db)
     layout = records.locate_layout(data, known_ids=known_ids)
-    patched = apply_edits(data, edits, affix_db=affix_db, known_ids=known_ids,
-                          layout=layout)
+    if grace_id is not None:
+        views = {view.slot_index: view
+                 for view in list_accessories(data, layout=layout,
+                                              known_ids=known_ids)}
+        view = views.get(args.record)
+        if view is None:
+            raise GraceEditError(f"记录 #{args.record} 不在当前存档的饰品记录中")
+        availability = grace_edit_availability(view, grace_db=grace_db,
+                                               affix_db=affix_db)
+        print(f"末位槽: {availability.describe_current()}"
+              f"（{availability.kind or '未分类'}）")
+        if not availability.allowed:
+            raise GraceEditError(availability.reason)
+        patched = apply_grace_edit(
+            data, args.record, grace_id, affix_db=affix_db, grace_db=grace_db,
+            known_ids=known_ids, layout=layout,
+        )
+    else:
+        patched = apply_edits(data, edits, affix_db=affix_db,
+                              known_ids=known_ids, layout=layout)
 
     for view in list_accessories(patched, layout=layout, known_ids=known_ids):
         if view.slot_index != args.record:
@@ -500,11 +526,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser_check = sub.add_parser("check", help="只读检查存档完整性与饰品数量")
     parser_check.set_defaults(func=cmd_check)
 
-    parser_edit = sub.add_parser("edit", help="修改饰品词条并写回存档")
+    parser_edit = sub.add_parser("edit", help="修改饰品词条或恩宠并写回存档")
     parser_edit.add_argument("--record", type=int, default=-1,
                              help="目标饰品记录索引（list 输出中的 #N）")
-    parser_edit.add_argument("--edit", action="append", required=True,
+    parser_edit.add_argument("--edit", action="append",
                              help="编辑项 slot:effect_id[:value[:metadata]]，可多次指定")
+    parser_edit.add_argument("--grace", default=None,
+                             help="把末位槽的恩宠改成另一个恩宠：id（0x4fa3）"
+                                  "或名称（稻荷神）；套装/专属套装词条一律拒绝")
     parser_edit.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
     parser_edit.add_argument("--no-verify", action="store_true",
                              help="跳过写入前后的解密校验（更快，但风险更高）")

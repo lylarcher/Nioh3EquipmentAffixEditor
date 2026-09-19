@@ -29,6 +29,7 @@ __all__ = [
     "DEFAULT_GRACE_CATALOG",
     "FLAG_FIXED",
     "FLAG_STAR",
+    "GRACE_KINDS",
     "AffixDb",
     "AffixEntry",
     "AffixError",
@@ -48,6 +49,11 @@ CATALOG_SCHEMA = "nioh3-accessory-affixes/v1"
 #: without the table the editor could only call that slot an unknown affix.
 DEFAULT_GRACE_CATALOG = default_grace_path()
 GRACE_CATALOG_SCHEMA = "nioh3-grace-affixes/v1"
+
+#: 归属 values that describe a *changeable* 恩宠 (a name ending in 的恩宠).  The
+#: 套装 kinds are listed in the same table but must never be written: the game
+#: keeps item-specific 套装 effects (e.g. 怨恨盖世) in a different family byte.
+GRACE_KINDS = ("恩宠", "上位恩宠")
 
 # Metadata flag bits decoded from the 词条代码 byte layout:
 # byte 9 bit6 = 固定 (同名固定 variants carry 0x43/0x45/0x46), byte 10 bit2 = 星.
@@ -330,6 +336,19 @@ class GraceDb:
         if entry.category:
             return f"{entry.name}（{entry.category}）"
         return entry.name
+
+    def of_kind(self, *kinds: str) -> tuple[AffixEntry, ...]:
+        """Entries whose 归属 is one of ``kinds`` (e.g. 恩宠 / 上位恩宠)."""
+        return tuple(entry for entry in self._entries if entry.category in kinds)
+
+    def grace_entries(self) -> tuple[AffixEntry, ...]:
+        """Only the changeable 恩宠/上位恩宠 entries (never the 套装 ones)."""
+        return self.of_kind(*GRACE_KINDS)
+
+    def labels(self) -> tuple[str, ...]:
+        """Combo-box labels for the changeable 恩宠: ``0x4fa3 稻荷神的恩宠（恩宠）``."""
+        return tuple(f"{entry.effect_id:#06x} {entry.name}（{entry.category}）"
+                     for entry in self.grace_entries())
 
     def all(self) -> tuple[AffixEntry, ...]:
         return self._entries

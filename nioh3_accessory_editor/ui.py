@@ -26,15 +26,19 @@ from .bootstrap import ensure_once, last_report
 from .config import ConfigError, EditorConfig, load_config
 from .editor import (
     AccessoryView,
+    GraceEditError,
     SaveDescriptor,
     accessory_catalog_ids,
     apply_edits,
+    apply_grace_edit,
     commit_save,
     discover_saves,
+    grace_edit_availability,
     inspect_layout,
     list_accessories,
     list_backups,
     open_save,
+    resolve_grace_id,
     restore_backup,
     save_checksum_is_valid,
 )
@@ -129,6 +133,7 @@ class AccessoryEditorApp(tk.Tk):
         # 恩宠/套装 name table: display only (see affixdb.GraceDb).  A missing or
         # stale file must not stop the editor from running, it only costs names.
         self.grace_db = GraceDb.best_effort()
+        self.grace_availability = None
         self._backend_note = ""
         self.crypto = self._build_crypto()
         self.saves: list[SaveDescriptor] = []
@@ -322,11 +327,33 @@ class AccessoryEditorApp(tk.Tk):
             text=("说明：词条选择来自《仁王3词条装备库v2.21》饰品词条表，"
                   "非表内词条一律拒绝。选择词条会写入该词条的 ID 与标称数值；"
                   "标识(metadata) 位不会被改写，因为其在存档中的编码尚未核实。\n"
-                  "每件饰品的最后一个词条是「恩宠/套装组合」词条（如 稻荷神的恩宠），"
-                  "它不在饰品词条表内，因此显示为表外词条；给该槽选择表内词条会把它替换掉。"),
+                  "每件饰品的最后一个词条通常是「恩宠」或「套装/专属套装」词条："
+                  "恩宠（xxx的恩宠）可以用下面的【恩宠】栏改成另一个恩宠；"
+                  "套装/专属套装（如 怨恨盖世）按规则不允许改动。"),
             foreground="#666666", wraplength=520, justify=tk.LEFT,
         )
         note.pack(anchor=tk.W, pady=(6, 0))
+
+        self.grace_frame = ttk.LabelFrame(right, text="恩宠（末位槽）", padding=(6, 4))
+        self.grace_frame.pack(fill=tk.X, pady=(6, 0))
+        grace_row = ttk.Frame(self.grace_frame)
+        grace_row.pack(fill=tk.X)
+        ttk.Label(grace_row, text="改成:").pack(side=tk.LEFT)
+        self.grace_combo = ttk.Combobox(grace_row, state="readonly", width=40,
+                                        values=self.grace_db.labels())
+        self.grace_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.grace_button = ttk.Button(grace_row, text="应用恩宠",
+                                       command=self.apply_grace_to_selection)
+        self.grace_button.pack(side=tk.LEFT, padx=2)
+        self.grace_status_var = tk.StringVar(
+            value="选择一条饰品记录后，这里会显示它的末位恩宠是否可改。")
+        self.grace_status_label = ttk.Label(
+            self.grace_frame, textvariable=self.grace_status_var,
+            foreground="#666666", wraplength=520, justify=tk.LEFT,
+        )
+        self.grace_status_label.pack(anchor=tk.W, pady=(4, 0))
+        self._set_grace_enabled(False)
+
         mid.add(right, weight=3)
 
     # ------------------------------------------------------------- version
@@ -652,6 +679,76 @@ class AccessoryEditorApp(tk.Tk):
                 detail = f"数值={effect.value} 标识={effect.metadata:#010x}"
             self.slot_combos[index].set(label)
             self.slot_labels[index].set(detail)
+        self._refresh_grace_state(view)
+
+    def _set_grace_enabled(self, enabled: bool) -> None:
+        state = ["!disabled"] if enabled else ["disabled"]
+        self.grace_combo.state(["!disabled"] if enabled else ["disabled"])
+        self.grace_button.state(state)
+
+    def _refresh_grace_state(self, view: AccessoryView) -> None:
+        """Show whether this accessory's 恩宠 may be replaced, and why not."""
+        availability = grace_edit_availability(view, grace_db=self.grace_db,
+                                              affix_db=self.affix_db)
+        self.grace_availability = availability
+        if availability.allowed:
+            self.grace_status_var.set(
+                f"当前末位槽 [{availability.slot_index}]："
+                f"{availability.describe_current()}。可以选择其他恩宠后点【应用恩宠】。"
+            )
+            self.grace_status_label.configure(foreground="#1a7f37")
+            self._set_grace_enabled(True)
+            for index, label in enumerate(self.grace_db.labels()):
+                if availability.current_id is not None and \
+                        label.startswith(f"{availability.current_id:#06x} "):
+                    self.grace_combo.current(index)
+                    break
+        else:
+            self.grace_status_var.set(f"不可改：{availability.reason}")
+            self.grace_status_label.configure(foreground="#b03030")
+            self.grace_combo.set("")
+            self._set_grace_enabled(False)
+
+    def apply_grace_to_selection(self) -> None:
+        """Replace the selected accessory's 恩宠 (memory only; 写入存档 commits)."""
+        if self.decrypted is None or self.selected_accessory is None:
+            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            return
+        text = self.grace_combo.get()
+        if not text:
+            messagebox.showwarning("提示", "请先选择要改成的恩宠")
+            return
+        try:
+            grace_id = resolve_grace_id(self.grace_db, text.split(" ", 1)[0])
+        except GraceEditError as error:
+            messagebox.showwarning("提示", str(error))
+            return
+        target = self.selected_accessory
+        known_ids = accessory_catalog_ids(self.affix_db)
+        try:
+            self.decrypted = apply_grace_edit(
+                self.decrypted, target, grace_id, affix_db=self.affix_db,
+                grace_db=self.grace_db, known_ids=known_ids, layout=self.layout,
+            )
+        except GraceEditError as error:
+            # A refused 恩宠 change is a user-input problem, not a crash.
+            messagebox.showwarning("恩宠未修改", str(error))
+            return
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("恩宠未修改", str(error))
+            return
+        layout = inspect_layout(self.decrypted, known_ids=known_ids)
+        self._populate_accessories(
+            (self.decrypted,
+             list_accessories(self.decrypted, layout=layout, known_ids=known_ids),
+             self.checksum_ok, layout),
+            keep_selection=True,
+        )
+        self.tree.selection_set(str(target))
+        self.selected_accessory = target
+        self._on_accessory_selected()
+        self._status(f"记录 #{target} 的恩宠已改为 {self.grace_db.describe(grace_id)}"
+                     "（尚未写入存档）")
 
     def _on_slot_picked(self, index: int) -> None:
         text = self.slot_combos[index].get()

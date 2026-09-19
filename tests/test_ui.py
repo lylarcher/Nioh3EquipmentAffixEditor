@@ -688,6 +688,86 @@ class StartupScanTests(unittest.TestCase):
         self.assertIn("查找位置", app.table_var.get())
 
 
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class GraceWidgetTests(UiTestCase):
+    """The 恩宠 row: only a 恩宠 slot may be replaced, and the reason is shown."""
+
+    GRACE_A = 0x004FA3  # 稻荷神的恩宠
+    GRACE_B = 0x0071F6  # 不动明王的恩宠
+    SET_ITEM = 0x00A7A1  # 怨恨盖世（忍者套装）
+
+    def _load(self, last_id: int, *, byte9: int = 0x0C) -> None:
+        record = support.build_record(
+            record_type=0x4001,
+            effects=((self.db.all()[0].effect_id, 20, 0x40),
+                     (last_id, 0, 0x5C000000 | (byte9 << 8) | 0x020000)),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        self.app.decrypted = plain
+        self.app._populate_accessories(
+            (plain, ui.list_accessories(plain), True, records.locate_layout(plain))
+        )
+        self.app.tree.selection_set("3")
+        self.app.selected_accessory = 3
+        self.app._on_accessory_selected()
+
+    def test_the_combo_offers_only_graces(self) -> None:
+        values = tuple(self.app.grace_combo["values"])
+        self.assertEqual(len(values), 21)
+        self.assertTrue(all("的恩宠" in value for value in values), values)
+        self.assertFalse(any("套装" in value for value in values), values)
+
+    def test_a_grace_slot_enables_the_control_and_shows_the_current_one(self) -> None:
+        self._load(self.GRACE_A)
+        self.assertNotIn("disabled", self.app.grace_button.state())
+        self.assertNotIn("disabled", self.app.grace_combo.state())
+        self.assertIn("稻荷神的恩宠", self.app.grace_status_var.get())
+        self.assertTrue(self.app.grace_combo.get().startswith(f"{self.GRACE_A:#06x}"))
+
+    def test_a_set_effect_disables_the_control_with_a_reason(self) -> None:
+        self._load(self.SET_ITEM, byte9=0x4C)
+        self.assertIn("disabled", self.app.grace_button.state())
+        self.assertIn("disabled", self.app.grace_combo.state())
+        text = self.app.grace_status_var.get()
+        self.assertIn("怨恨盖世", text)
+        self.assertIn("不能改", text)
+
+    def test_a_plain_affix_disables_the_control(self) -> None:
+        self._load(self.db.all()[1].effect_id)
+        self.assertIn("disabled", self.app.grace_button.state())
+        self.assertIn("恩宠只能替换恩宠", self.app.grace_status_var.get())
+
+    def test_applying_replaces_the_grace_in_memory_only(self) -> None:
+        self._load(self.GRACE_A)
+        self.app.grace_combo.set(
+            next(value for value in self.app.grace_combo["values"]
+                 if value.startswith(f"{self.GRACE_B:#06x}"))
+        )
+        self.app.apply_grace_to_selection()
+        self.assertIn("不动明王的恩宠", self.app.grace_status_var.get())
+        view = next(item for item in self.app.accessory_views if item.slot_index == 3)
+        self.assertEqual(view.occupied_effects[-1].effect_id, self.GRACE_B)
+        self.assertIn("尚未写入存档", self.app.status_var.get())
+
+    def test_applying_a_set_effect_is_impossible_through_the_widgets(self) -> None:
+        self._load(self.GRACE_A)
+        self.app.grace_combo.set(f"{self.SET_ITEM:#06x} 怨恨盖世（忍者套装）")
+        with mock.patch.object(ui.messagebox, "showwarning") as warned, \
+                mock.patch.object(ui.messagebox, "showerror") as failed:
+            self.app.apply_grace_to_selection()
+        failed.assert_not_called()
+        warned.assert_called_once()
+        view = next(item for item in self.app.accessory_views if item.slot_index == 3)
+        self.assertEqual(view.occupied_effects[-1].effect_id, self.GRACE_A)
+
+    def test_without_a_selection_nothing_happens(self) -> None:
+        self.app.selected_accessory = None
+        self.app.decrypted = None
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            self.app.apply_grace_to_selection()
+        warned.assert_called_once()
+
+
 class StaticMethodTests(unittest.TestCase):
     """A ``@staticmethod`` that touches ``self`` is a guaranteed NameError."""
 

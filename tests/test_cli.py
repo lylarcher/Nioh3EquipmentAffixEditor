@@ -87,9 +87,12 @@ class ParserTests(unittest.TestCase):
         self.assertEqual(args.account, 42)
         self.assertEqual(args.command, "list")
 
-    def test_edit_requires_an_edit_argument(self) -> None:
-        with self.assertRaises(SystemExit):
-            cli.build_parser().parse_args(["edit", "--record", "0"])
+    def test_edit_accepts_edit_or_grace_but_parses_neither_as_required(self) -> None:
+        """``--edit`` and ``--grace`` are alternatives, so neither is required by
+        argparse; the command itself rejects "both missing" and "both given"."""
+        args = cli.build_parser().parse_args(["edit", "--record", "0"])
+        self.assertIsNone(args.edit)
+        self.assertIsNone(args.grace)
 
     def test_edit_defaults(self) -> None:
         args = cli.build_parser().parse_args(["edit", "--edit", "0:1"])
@@ -97,6 +100,7 @@ class ParserTests(unittest.TestCase):
         self.assertFalse(args.dry_run)
         self.assertFalse(args.no_verify)
         self.assertFalse(args.force_while_running)
+        self.assertIsNone(args.grace)
 
     def test_restore_defaults_to_listing_only(self) -> None:
         """``restore`` with no --from must never write anything."""
@@ -422,6 +426,79 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertEqual(code, 0, err)
         self.assertIn("恩宠/套装词条", out)
         self.assertIn("0xdeadbeef", out)
+
+    # ------------------------------------------------------- 恩宠 (grace) edits
+
+    GRACE_A = 0x004FA3  # 稻荷神的恩宠
+    GRACE_B = 0x0071F6  # 不动明王的恩宠
+    SET_ITEM = 0x00A7A1  # 怨恨盖世（忍者套装）
+
+    def _stage(self, last_id: int, *, byte9: int = 0x0C, name: str = "grace") -> None:
+        record = support.build_record(
+            record_type=0x4001,
+            effects=((self.affix.effect_id, 20, 0x40),
+                     (last_id, 0, 0x5C000000 | (byte9 << 8) | 0x020000)),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        staged = self.root / f"{name}-plain.bin"
+        staged.write_bytes(plain)
+        encrypted = self.root / f"{name}-enc.bin"
+        self.crypto.encrypt(staged, encrypted)
+        self.save_path.write_bytes(encrypted.read_bytes())
+
+    def test_edit_grace_rewrites_the_last_slot_only(self) -> None:
+        self._stage(self.GRACE_A)
+        before = self.save_path.read_bytes()
+        code, out, err = run_cli(["edit", "--record", "3", "--grace", "不动明王",
+                                  "--dry-run"])
+        self.assertEqual(code, 0, err + out)
+        self.assertIn("稻荷神的恩宠", out)
+        self.assertIn("不动明王的恩宠", out)
+        self.assertIn("演练模式", out)
+        self.assertEqual(self.save_path.read_bytes(), before, "演练不得写文件")
+
+    def test_edit_grace_accepts_an_id(self) -> None:
+        self._stage(self.GRACE_B)
+        code, out, err = run_cli(["edit", "--record", "3", "--grace", "0x4fa3",
+                                  "--dry-run"])
+        self.assertEqual(code, 0, err + out)
+        self.assertIn("稻荷神的恩宠", out)
+
+    def test_edit_grace_refuses_an_item_specific_set_effect(self) -> None:
+        """专属套装词条（怨恨盖世）is not a 恩宠, so it must never be replaced."""
+        self._stage(self.SET_ITEM, byte9=0x4C, name="set")
+        before = self.save_path.read_bytes()
+        code, out, err = run_cli(["edit", "--record", "3", "--grace", "稻荷神"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("套装", err + out)
+        self.assertEqual(self.save_path.read_bytes(), before)
+
+    def test_edit_refuses_grace_into_a_plain_affix_slot(self) -> None:
+        self._stage(self.affix.effect_id)
+        code, out, err = run_cli(["edit", "--record", "3", "--grace", "稻荷神"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("恩宠只能替换恩宠", err + out)
+
+    def test_edit_needs_exactly_one_of_edit_or_grace(self) -> None:
+        code, out, err = run_cli(["edit", "--record", "3"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("二选一", err + out)
+        code, out, err = run_cli(["edit", "--record", "3", "--edit", "0:1",
+                                  "--grace", "稻荷神"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("二选一", err + out)
+
+    def test_edit_grace_refuses_a_set_target(self) -> None:
+        self._stage(self.GRACE_A)
+        code, out, err = run_cli(["edit", "--record", "3", "--grace", "怨恨盖世"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("没有匹配", err + out)
+
+    def test_edit_grace_rejects_a_missing_record(self) -> None:
+        self._stage(self.GRACE_A)
+        code, out, err = run_cli(["edit", "--record", "7", "--grace", "稻荷神"])
+        self.assertNotEqual(code, 0)
+        self.assertIn("不在当前存档的饰品记录中", err + out)
 
     def test_scan_reports_the_diagnosis(self) -> None:
         code, out, err = run_cli(["scan"])

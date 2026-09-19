@@ -13,13 +13,18 @@ from nioh3_accessory_editor import savefile as savefile_module
 from nioh3_accessory_editor.affixdb import AffixDb, AffixError, GraceDb
 from nioh3_accessory_editor.editor import (
     EditorError,
+    GraceEditError,
     SaveDescriptor,
     apply_edits,
+    apply_grace_edit,
     commit_save,
     discover_saves,
+    grace_edit_availability,
     list_accessories,
     open_save,
     plan_edits,
+    plan_grace_edit,
+    resolve_grace_id,
     save_checksum_is_valid,
 )
 from nioh3_accessory_editor.records import EMPTY_EFFECT_ID, RecordError
@@ -171,6 +176,157 @@ class GraceSlotTests(EditorTestCase):
 
     def test_checksum_is_valid_on_the_fixture(self) -> None:
         self.assertTrue(save_checksum_is_valid(self.plain))
+
+
+class GraceEditTests(EditorTestCase):
+    """恩宠 -> 恩宠 is allowed; 套装/专属套装 and plain 词条 are refused.
+
+    The gate is the game's own family byte (metadata byte 9): a real v2.21 save
+    holds 0x0C in all 196 恩宠 slots and 0x4C in all 16 套装 slots.
+    """
+
+    GRACE_A = 0x004FA3  # 稻荷神的恩宠（恩宠）
+    GRACE_B = 0x0071F6  # 不动明王的恩宠（上位恩宠）
+    SET_ITEM = 0x00A7A1  # 怨恨盖世（忍者套装）— an item-specific 套装 effect
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.grace_db = GraceDb.best_effort()
+
+    def _save_with(self, last_id: int, *, byte9: int = 0x0C,
+                   value: int = 0, extra_slots: int = 1) -> bytes:
+        effects = [(self.affix_a.effect_id, 20, 0x40)]
+        effects += [(self.db.all()[index + 1].effect_id, 10, 0x40)
+                    for index in range(extra_slots)]
+        effects.append((last_id, value, 0x5C000000 | (byte9 << 8) | 0x020000))
+        return support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=ITEM_TYPE, effects=tuple(effects)),
+        })
+
+    def _availability(self, save: bytes):
+        view = list_accessories(save)[0]
+        return grace_edit_availability(view, grace_db=self.grace_db,
+                                      affix_db=self.db)
+
+    def test_a_grace_slot_may_become_another_grace(self) -> None:
+        availability = self._availability(self._save_with(self.GRACE_A))
+        self.assertTrue(availability.allowed, availability.reason)
+        self.assertEqual(availability.current_id, self.GRACE_A)
+        self.assertIn("稻荷神的恩宠", availability.current_name)
+        self.assertIn("稻荷神的恩宠", availability.describe_current())
+
+    def test_an_upper_grace_is_interchangeable_with_a_normal_one(self) -> None:
+        availability = self._availability(self._save_with(self.GRACE_B))
+        self.assertTrue(availability.allowed, availability.reason)
+        self.assertEqual(availability.kind, "上位恩宠")
+
+    def test_a_set_effect_cannot_be_changed(self) -> None:
+        """怨恨盖世 is an item-specific 套装 effect: the user's explicit rule."""
+        availability = self._availability(
+            self._save_with(self.SET_ITEM, byte9=0x4C))
+        self.assertFalse(availability.allowed)
+        self.assertIn("套装", availability.reason)
+        self.assertIn("怨恨盖世", availability.reason)
+
+    def test_a_plain_affix_in_the_last_slot_cannot_become_a_grace(self) -> None:
+        availability = self._availability(self._save_with(self.affix_b.effect_id))
+        self.assertFalse(availability.allowed)
+        self.assertIn("饰品词条", availability.reason)
+
+    def test_an_unknown_family_byte_is_refused(self) -> None:
+        availability = self._availability(self._save_with(self.GRACE_A, byte9=0x99))
+        self.assertFalse(availability.allowed)
+        self.assertIn("0x99", availability.reason)
+
+    def test_a_grace_id_outside_the_name_table_is_refused(self) -> None:
+        # 0x00fb1d occurs in the reporting user's save but is in neither table.
+        availability = self._availability(self._save_with(0x00FB1D))
+        self.assertFalse(availability.allowed)
+        self.assertIn("不在恩宠名表", availability.reason)
+
+    def test_a_record_without_catalog_ids_is_not_changeable(self) -> None:
+        save = support.build_plain_save(records_by_slot={
+            3: support.build_record(
+                record_type=ITEM_TYPE,
+                effects=((0xDEADBEEF, 1, 0x40), (self.GRACE_A, 0, 0x00020C00))),
+        })
+        availability = self._availability(save)
+        self.assertFalse(availability.allowed)
+
+    def test_apply_changes_only_the_id_bytes(self) -> None:
+        """In memory only the id moves; the checksum is recomputed at commit."""
+        save = self._save_with(self.GRACE_A)
+        patched = apply_grace_edit(save, 3, self.GRACE_B, affix_db=self.db,
+                                   grace_db=self.grace_db)
+        self.assertEqual(len(patched), len(save))
+        changed = {index for index, (old, new) in enumerate(zip(save, patched))
+                   if old != new}
+        # The 恩宠 sits in slot 2 of this fixture, and its id lives at slot+0x04.
+        # 0x4fa3 -> 0x71f6 differs in the two low bytes only.
+        record = list_accessories(save)[0]
+        slot_offset = record.offset + 0x34 + 2 * 0x18
+        self.assertEqual(changed, {slot_offset + 0x04, slot_offset + 0x05})
+        self.assertFalse(save_checksum_is_valid(patched),
+                         "写入前校验和应为过期状态，由 commit 重新计算")
+        view = list_accessories(patched)[0]
+        self.assertEqual(view.effects[2].effect_id, self.GRACE_B)
+        self.assertEqual(view.effects[2].value, 0)
+
+    def test_value_and_metadata_of_the_slot_are_preserved(self) -> None:
+        save = self._save_with(self.GRACE_A, byte9=0x0C)
+        before = list_accessories(save)[0].effects[2]
+        patched = apply_grace_edit(save, 3, self.GRACE_B, affix_db=self.db,
+                                   grace_db=self.grace_db)
+        after = list_accessories(patched)[0].effects[2]
+        self.assertEqual(after.metadata, before.metadata)
+        self.assertEqual(after.value, before.value)
+
+    def test_set_targets_are_rejected(self) -> None:
+        save = self._save_with(self.GRACE_A)
+        with self.assertRaises(GraceEditError) as caught:
+            apply_grace_edit(save, 3, self.SET_ITEM, affix_db=self.db,
+                             grace_db=self.grace_db)
+        self.assertIn("不是恩宠", str(caught.exception))
+
+    def test_plan_reports_before_and_after(self) -> None:
+        save = self._save_with(self.GRACE_A)
+        plan = plan_grace_edit(save, 3, self.GRACE_B, affix_db=self.db,
+                               grace_db=self.grace_db)
+        self.assertEqual(plan.record_index, 3)
+        self.assertEqual(plan.before[2].effect_id, self.GRACE_A)
+        self.assertEqual(plan.after[2].effect_id, self.GRACE_B)
+
+    def test_same_grace_is_a_no_op_error(self) -> None:
+        save = self._save_with(self.GRACE_A)
+        with self.assertRaises(GraceEditError) as caught:
+            apply_grace_edit(save, 3, self.GRACE_A, affix_db=self.db,
+                             grace_db=self.grace_db)
+        self.assertIn("已经是", str(caught.exception))
+
+    def test_unknown_record_is_rejected(self) -> None:
+        with self.assertRaises(GraceEditError):
+            apply_grace_edit(self.plain, 999, self.GRACE_A, affix_db=self.db,
+                             grace_db=self.grace_db)
+
+    def test_resolve_accepts_ids_and_unique_names(self) -> None:
+        self.assertEqual(resolve_grace_id(self.grace_db, "0x4fa3"), self.GRACE_A)
+        self.assertEqual(resolve_grace_id(self.grace_db, "稻荷神"), self.GRACE_A)
+        self.assertEqual(resolve_grace_id(self.grace_db, "稻荷神的恩宠"), self.GRACE_A)
+        self.assertEqual(resolve_grace_id(self.grace_db, "不动明王"), self.GRACE_B)
+
+    def test_resolve_rejects_set_names_and_unknown_ids(self) -> None:
+        with self.assertRaises(GraceEditError):
+            resolve_grace_id(self.grace_db, "怨恨盖世")
+        with self.assertRaises(GraceEditError):
+            resolve_grace_id(self.grace_db, "0xdeadbeef")
+        with self.assertRaises(GraceEditError):
+            resolve_grace_id(self.grace_db, "")
+
+    def test_resolve_reports_ambiguous_names(self) -> None:
+        with self.assertRaises(GraceEditError) as caught:
+            resolve_grace_id(self.grace_db, "恩宠")
+        self.assertIn("多个", str(caught.exception))
 
 
 class PlanTests(EditorTestCase):

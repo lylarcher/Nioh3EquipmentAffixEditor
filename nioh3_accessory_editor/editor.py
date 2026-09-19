@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import records
-from .affixdb import AffixDb, GraceDb
+from .affixdb import GRACE_KINDS, AffixDb, GraceDb
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .savefile import (
@@ -379,6 +379,237 @@ def apply_edits(
             raise EditorError(
                 f"记录 #{plan.record_index} 的修改未能正确写入，已中止"
             )
+    return bytes(output)
+
+
+# --------------------------------------------------------------------------
+# 恩宠 (grace) editing
+# --------------------------------------------------------------------------
+
+#: Metadata byte 9 of an effect slot is the game's own family tag, measured on a
+#: real v2.21 save: all 196 恩宠 slots hold 0x0C, all 16 套装 slots hold 0x4C
+#: (and a normal 词条 holds something else entirely).  It is therefore the gate
+#: for "may this slot be rewritten as another 恩宠".
+GRACE_FAMILY_BYTE9 = 0x0C
+#: Metadata byte 9 of a 套装 / 专属套装 slot, measured on the same save; kept here
+#: so the refusal message can say *what* the slot is instead of "not a 恩宠".
+SET_FAMILY_BYTE9 = 0x4C
+
+
+class GraceEditError(EditorError):
+    """Raised when a 恩宠 slot may not be rewritten (fail closed)."""
+
+
+@dataclass(frozen=True, slots=True)
+class GraceAvailability:
+    """Whether the selected record's last slot can be changed to another 恩宠."""
+
+    allowed: bool
+    reason: str
+    slot_index: int | None = None
+    current_id: int | None = None
+    current_name: str = ""
+    kind: str = ""
+
+    def describe_current(self) -> str:
+        if self.current_id is None:
+            return "（末位槽为空）"
+        name = self.current_name or "未命名"
+        return f"{name}（{self.current_id:#06x}）"
+
+
+def grace_edit_availability(
+    view: "AccessoryView",
+    *,
+    grace_db: GraceDb,
+    affix_db: AffixDb,
+) -> GraceAvailability:
+    """Decide whether ``view``'s last slot may be rewritten as another 恩宠.
+
+    Strict on purpose -- every condition below is evidence from a real save plus
+    the shipped workbook:
+
+    * the record must be an accessory (it hits the 饰品词条 catalog),
+    * the last occupied slot must be a *trailing* slot outside that catalog,
+    * its metadata byte 9 must be the 恩宠 family tag (0x0C); 套装 entries carry
+      0x4C, so an item-specific 套装 effect such as 怨恨盖世 is refused,
+    * and its current id must be a 恩宠/上位恩宠 in the workbook's 词条总目录.
+    """
+    occupied = view.occupied_effects
+    if not occupied:
+        return GraceAvailability(False, "该饰品没有任何占用中的词条槽")
+    if view.is_accessory is False:
+        return GraceAvailability(False, "该记录不是含饰品词条的饰品记录")
+
+    last = occupied[-1]
+    slot_index = last.slot_index
+    family = (last.metadata >> 8) & 0xFF
+    entry = grace_db.lookup(last.effect_id)
+    kind = entry.category if entry else ""
+
+    if slot_index not in view.grace_slots(affix_db):
+        return GraceAvailability(
+            False,
+            f"末位槽 [{slot_index}] 是饰品词条（id={last.effect_id:#06x}），"
+            "恩宠只能替换恩宠，不能把普通词条改成恩宠",
+            slot_index=slot_index, current_id=last.effect_id,
+            current_name=affix_db.describe(last.effect_id), kind="饰品词条",
+        )
+    if family == SET_FAMILY_BYTE9:
+        return GraceAvailability(
+            False,
+            f"末位槽 [{slot_index}] 是套装/专属套装词条"
+            f"（{entry.name if entry else '未命名'}，id={last.effect_id:#06x}），"
+            "按规则不能改成恩宠",
+            slot_index=slot_index, current_id=last.effect_id,
+            current_name=entry.name if entry else "", kind=kind or "套装",
+        )
+    if family != GRACE_FAMILY_BYTE9:
+        return GraceAvailability(
+            False,
+            f"末位槽 [{slot_index}] 的标识族字节是 {family:#04x}，"
+            f"不是恩宠族 {GRACE_FAMILY_BYTE9:#04x}，无法确认可以安全替换",
+            slot_index=slot_index, current_id=last.effect_id,
+            current_name=entry.name if entry else "", kind=kind,
+        )
+    if entry is None or kind not in GRACE_KINDS:
+        return GraceAvailability(
+            False,
+            f"末位槽 [{slot_index}] 的 id {last.effect_id:#06x} 不在恩宠名表里，"
+            "无法确认它是可替换的恩宠",
+            slot_index=slot_index, current_id=last.effect_id,
+            current_name=entry.name if entry else "", kind=kind,
+        )
+    return GraceAvailability(
+        True,
+        f"末位槽 [{slot_index}] 当前是 {entry.name}，可以改成任意其他恩宠",
+        slot_index=slot_index, current_id=last.effect_id,
+        current_name=entry.name, kind=kind,
+    )
+
+
+def resolve_grace_id(grace_db: GraceDb, text: str) -> int:
+    """Accept ``0x4fa3``, ``4fa3`` or a unique name such as ``稻荷神``."""
+    raw = (text or "").strip()
+    if not raw:
+        raise GraceEditError("请指定要写入的恩宠")
+    try:
+        value = int(raw, 16) if raw.lower().startswith("0x") else int(raw, 16)
+    except ValueError:
+        value = None
+    if value is not None and grace_db.lookup(value) is not None:
+        return value
+    if value is not None:
+        raise GraceEditError(f"恩宠 id {value:#06x} 不在恩宠名表里")
+
+    wanted = raw.replace("的恩宠", "").replace("恩宠", "").strip() or raw
+    matches = [entry for entry in grace_db.all()
+               if entry.category in GRACE_KINDS
+               and (wanted in entry.name or raw == entry.name)]
+    if not matches:
+        raise GraceEditError(
+            f"没有匹配「{raw}」的恩宠；可用 list 查看全部恩宠，"
+            "或改用 id（如 --grace 0x4fa3）"
+        )
+    if len(matches) > 1:
+        raise GraceEditError(
+            f"「{raw}」匹配到多个恩宠："
+            + "、".join(f"{entry.name}({entry.effect_id:#06x})" for entry in matches)
+        )
+    return matches[0].effect_id
+
+
+def plan_grace_edit(
+    decrypted: bytes,
+    record_index: int,
+    grace_id: int,
+    *,
+    affix_db: AffixDb,
+    grace_db: GraceDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> EditPlan:
+    """Validate a 恩宠 -> 恩宠 change and return the plan for it.
+
+    Only the slot's effect id and value are written; the family/sub-kind and the
+    unexplained byte 11 are kept exactly as the game wrote them, because a real
+    save shows byte 11 varying per item for one and the same 恩宠 id.
+    """
+    target = grace_db.lookup(grace_id)
+    if target is None:
+        raise GraceEditError(f"恩宠 id {grace_id:#06x} 不在恩宠名表里")
+    if target.category not in GRACE_KINDS:
+        raise GraceEditError(
+            f"{target.name} 是「{target.category}」，不是恩宠；"
+            "只有 xxx的恩宠 才能改成另外的 xxx的恩宠"
+        )
+
+    if known_ids is None and layout is None:
+        known_ids = accessory_catalog_ids(affix_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    views = {view.slot_index: view
+             for view in list_accessories(decrypted, layout=layout,
+                                          known_ids=known_ids)}
+    view = views.get(record_index)
+    if view is None:
+        raise GraceEditError(f"记录 #{record_index} 不在当前存档的饰品记录中")
+
+    availability = grace_edit_availability(view, grace_db=grace_db,
+                                           affix_db=affix_db)
+    if not availability.allowed:
+        raise GraceEditError(availability.reason)
+    if availability.current_id == grace_id:
+        raise GraceEditError(f"末位槽已经是 {target.name}，无需修改")
+
+    record = records.read_item_record(decrypted, record_index, layout=layout)
+    if record is None:
+        raise GraceEditError(f"记录 #{record_index} 无法解析为饰品记录")
+    edit = {
+        "record_index": record_index,
+        "slot_index": int(availability.slot_index),
+        "effect_id": grace_id,
+        "value": int(target.value),
+        "metadata": int(view.effects[int(availability.slot_index)].metadata),
+    }
+    patched = records.patch_effect_slots(
+        record.record, [edit], allow_record_index=True,
+    )
+    return EditPlan(
+        record_index=record_index,
+        offset=record.offset,
+        edits=(edit,),
+        before=view.effects,
+        after=records.read_effect_slots(patched),
+    )
+
+
+def apply_grace_edit(
+    decrypted: bytes,
+    record_index: int,
+    grace_id: int,
+    *,
+    affix_db: AffixDb,
+    grace_db: GraceDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> bytes:
+    """Return new save bytes with one accessory's 恩宠 replaced."""
+    plan = plan_grace_edit(
+        decrypted, record_index, grace_id, affix_db=affix_db, grace_db=grace_db,
+        known_ids=known_ids, layout=layout,
+    )
+    output = bytearray(decrypted)
+    offset = plan.offset
+    record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+    patched = records.patch_effect_slots(record, [dict(plan.edits[0])],
+                                         allow_record_index=True)
+    output[offset:offset + records.SCROLL_RECORD_SIZE] = patched
+    applied = records.read_effect_slots(
+        bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+    )
+    if applied != plan.after:
+        raise GraceEditError(f"记录 #{record_index} 的恩宠修改未能正确写入，已中止")
     return bytes(output)
 
 
