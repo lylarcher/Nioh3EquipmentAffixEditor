@@ -58,6 +58,7 @@ __all__ = [
     "LEGACY_GROUP_OFFSET",
     "MAX_GROUP_SLOTS",
     "MAX_ITEM_LEVEL",
+    "MAX_RECORD_PLUS",
     "MIN_ITEM_LEVEL",
     "RARITY_NAMES",
     "RECORD_PLUS_OFFSET",
@@ -502,6 +503,8 @@ def patch_record_plus(record: bytes, value: int) -> bytes:
     struct.pack_into("<H", patched, RECORD_PLUS_OFFSET, value)
     return bytes(patched)
 
+
+def patch_record_level(record: bytes, level: int) -> bytes:
     """Return ``record`` with ``+0x06``/``+0x08`` set to ``level``.
 
     Refuses an out-of-range level and a record whose two level fields disagree

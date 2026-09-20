@@ -97,9 +97,24 @@ class ItemCollectionTests(unittest.TestCase):
         cls.by_id = {entry.item_id: entry for entry in cls.entries}
 
     def test_collects_every_accessory_item_row(self) -> None:
-        self.assertEqual(len(self.entries), 88)
+        # 88 workbook rows plus 0x5c5f, which the sheet cannot express (both 八咫镜
+        # rows carry 代码 `21 15`) and which comes from save evidence instead.
+        self.assertEqual(len(self.entries), 89)
         self.assertEqual({entry.category for entry in self.entries},
                          {"武士饰品", "忍者饰品"})
+
+    def test_the_unexpressible_yatagami_id_is_added_from_save_evidence(self) -> None:
+        self.assertEqual(self.by_id[0x5C5F].name, "八咫镜[武士]")
+        self.assertEqual(self.by_id[0x5C5F].category, "武士饰品")
+        self.assertIn("存档实测", self.by_id[0x5C5F].source)
+        # ...and the row the workbook *does* have is renamed to the 忍者 version,
+        # because 0x1521's own fixed affix is 识破可增加灵力 on the real save.
+        self.assertEqual(self.by_id[0x1521].name, "八咫镜[忍者]")
+        self.assertEqual(self.by_id[0x1521].category, "忍者饰品")
+
+    def test_workbook_rows_other_than_yatagami_keep_their_source_empty(self) -> None:
+        self.assertEqual(self.by_id[0x3E3F].source, "")
+        self.assertEqual(self.by_id[0x4987].source, "")
 
     def test_names_the_items_a_real_save_carried(self) -> None:
         # Measured: record #3 (the 龙笛 the user saw 不动明王的恩宠 on) and #4
