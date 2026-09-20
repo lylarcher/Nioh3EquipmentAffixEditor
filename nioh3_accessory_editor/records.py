@@ -146,12 +146,12 @@ RECORD_RARITY_HIGH_OFFSET = 0x31
 RECORD_ACCOUNT_LOW_OFFSET = 0x14
 
 #: Highest item level the game serialises: the reference project reads
-#: ``min(record +0x06, 180)`` as the effective level, and the reporting user's
+#: ``min(record +0x06, 180)`` as the effective level, and the reference save's
 #: save tops out at 0x00B4 = 180 as well.  Never write above it.
 MAX_ITEM_LEVEL = 180
 MIN_ITEM_LEVEL = 1
 #: Level mirror written alongside ``+0x06``.  Measured: equal to ``+0x06`` on all
-#: 213 accessories of the reporting user's save, so a level edit writes both and
+#: 213 accessories of the reference save, so a level edit writes both and
 #: refuses when they disagree (that would mean the record is not an accessory).
 RECORD_LEVEL_MIRRORS = (RECORD_LEVEL_OFFSET, RECORD_MIRROR_LEVEL_OFFSET)
 
@@ -165,7 +165,7 @@ RECORD_LEVEL_MIRRORS = (RECORD_LEVEL_OFFSET, RECORD_MIRROR_LEVEL_OFFSET)
 EFFECT_FIXED_MARKER_SHIFT = 8
 EFFECT_FIXED_MARKER_BIT = 0x40
 
-#: ``+0x0A``: a per-instance field, 0..30 across the reporting user's 1535 item
+#: ``+0x0A``: a per-instance field, 0..30 across the reference save's 1535 item
 #: records (0..18 on 魂核), constant for a given piece and independent of level,
 #: of the item kind and of every effect value.  The user reports a "+值" with a cap
 #: around 15, which fits this field being twice the +值 — but that is **not yet
@@ -496,7 +496,7 @@ def patch_record_plus(record: bytes, value: int) -> bytes:
         raise RecordError("+0x0A 的值必须是整数")
     if not 0 <= value <= MAX_RECORD_PLUS:
         raise RecordError(
-            f"+0x0A 必须在 0..{MAX_RECORD_PLUS} 之间（这是你存档里实测的取值范围；"
+            f"+0x0A 必须在 0..{MAX_RECORD_PLUS} 之间（这是参考存档里实测的取值范围；"
             "该字段含义尚未核实，不接受范围外的值）"
         )
     patched = bytearray(record)
@@ -508,7 +508,7 @@ def patch_record_level(record: bytes, level: int) -> bytes:
     """Return ``record`` with ``+0x06``/``+0x08`` set to ``level``.
 
     Refuses an out-of-range level and a record whose two level fields disagree
-    (measured equal on every accessory of the reporting user's save, so a
+    (measured equal on every accessory of the reference save, so a
     mismatch means this is not the record shape we verified).
     """
     if len(record) != SCROLL_RECORD_SIZE:

@@ -153,7 +153,7 @@ class AccessoryView:
           template, measured against the workbook's own 同名固定 rows), and
         * the slot's metadata byte 9 has bit ``0x40`` set.
 
-        On the 795 catalogued slots of the reporting user's save the two agreed
+        On the 795 catalogued slots of the reference save the two agreed
         with zero exceptions.  The bit is *not* consulted for ids outside the
         catalog, because there it is set for other reasons too — 恩宠 slots
         (byte 9 = 0x4C = 0x40|0x0C) and 套装 slots all carry it, and 恩宠 must stay
@@ -277,7 +277,7 @@ class KindSample:
     invent one: it copies the fixed affix of the target kind from a real record.
 
     Only the kind-deterministic fields are copied — measured over the 60 kinds
-    with a fixed affix in the reporting user's save, ``id``, ``value`` and
+    with a fixed affix in the reference save, ``id``, ``value`` and
     metadata **byte 9** are identical on every copy of a kind (58/60; the two
     exceptions are the 八咫镜 variants, which are refused as ambiguous), while
     metadata bytes 10/11 vary per copy (only 25/60 kinds agree) and the slot
@@ -519,10 +519,10 @@ def plan_level_edit(
     """Validate one 等级 change and return its plan (nothing is written here).
 
     Legal range is ``1..180``: the reference project reads the effective level as
-    ``min(record +0x06, 180)`` and the reporting user's save tops out at exactly
+    ``min(record +0x06, 180)`` and the reference save tops out at exactly
     180, so anything above it is not something the game would ever serialise.
 
-    Only the level fields change.  Measured on the reporting user's save: the
+    Only the level fields change.  Measured on the reference save: the
     *stored* affix values of a kind are identical at every level (e.g. every
     copy of 除雷护身符[武士] holds 雷属性伤害降低 +15 at levels 156..170), so this
     edit does not - and must not - rewrite affix values to match the new level.
@@ -616,7 +616,7 @@ def plan_plus_edit(
     if not 0 <= value <= records.MAX_RECORD_PLUS:
         raise EditorError(
             f"+0x0A 必须在 0..{records.MAX_RECORD_PLUS} 之间"
-            "（这是你存档里实测的取值范围；含义未核实，不接受范围外的值）"
+            "（这是参考存档里实测的取值范围；含义未核实，不接受范围外的值）"
         )
     if not isinstance(record_index, int) or isinstance(record_index, bool):
         raise EditorError("记录索引必须是整数")
@@ -662,7 +662,7 @@ class SoulCoreView:
 
     A 魂核 is identified by evidence, not by a type table: its header item id must
     be a 物品总目录 魂核 row, and its effect slots must name affixes from the
-    绘卷-魂核词条 魂核 pool.  Measured on the reporting user's save: 132 of 134
+    绘卷-魂核词条 魂核 pool.  Measured on the reference save: 132 of 134
     candidate records satisfy both, and the workbook's own 固定词条代码 matched
     those 132 with 0 mismatches (the other 2 are the two copies of `0xda62`, whose
     id is not in the 魂核 sheet — they are reported as unidentified, never guessed).
@@ -947,7 +947,7 @@ def _validate_edit(edit: dict[str, int], affix_db: AffixDb) -> dict[str, int]:
                     "只能由「改种类」自动带入，不能手动写入其它饰品"
                 )
             # 数值: the workbook's own span is the gate.  None of the 807 catalogued
-            # slots of the reporting user's save falls outside its affix's span, so
+            # slots of the reference save falls outside its affix's span, so
             # a value outside it describes an affix the game cannot roll.
             requested = edit.get("value")
             if requested is not None and requested != entry.value:
@@ -1539,7 +1539,7 @@ def find_free_slots(
 ) -> FreeSlotReport:
     """Every slot whose type word is 0 -- the game's own "empty" marker.
 
-    Measured on the reporting user's save: 465 of the 2000 slots carry type 0,
+    Measured on the reference save: 465 of the 2000 slots carry type 0,
     they are scattered (209 have occupied neighbours on both sides), and their
     effect slots hold no residual affix, so the game marks emptiness with the
     type word alone -- which is exactly what a deleted item leaves behind.

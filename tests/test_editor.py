@@ -189,7 +189,7 @@ class GraceSlotTests(EditorTestCase):
         self.assertEqual(view.grace_slots(self.db), frozenset({4}))
 
     def test_grace_slot_is_named_from_the_grace_table(self) -> None:
-        """0x71f6 ends record #3 of the reporting user's save (不动明王的恩宠)."""
+        """0x71f6 ends record #3 of the reference save (不动明王的恩宠)."""
         record = support.build_record(
             record_type=ITEM_TYPE,
             effects=((self.affix_a.effect_id, 20, 0x40), (0x0071F6, 0, 0x5C020C00)),
@@ -279,7 +279,7 @@ class GraceEditTests(EditorTestCase):
         self.assertIn("0x99", availability.reason)
 
     def test_a_grace_id_outside_the_name_table_is_refused(self) -> None:
-        # 0x00fb1d occurs in the reporting user's save but is in neither table.
+        # 0x00fb1d occurs in the reference save but is in neither table.
         availability = self._availability(self._save_with(0x00FB1D))
         self.assertFalse(availability.allowed)
         self.assertIn("不在恩宠名表", availability.reason)
@@ -418,7 +418,7 @@ class FixedSlotTests(EditorTestCase):
     """A 同名固定 affix is part of the item kind: never editable manually.
 
     Evidence: the catalog's ``(同名固定)`` flag and the slot's metadata byte 9 bit
-    0x40 agreed on all 795 catalogued slots of the reporting user's save.
+    0x40 agreed on all 795 catalogued slots of the reference save.
     """
 
     def _save(self, *, fixed_first: bool, bit: bool = True) -> bytes:

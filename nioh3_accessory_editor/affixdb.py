@@ -78,7 +78,7 @@ GRACE_KINDS = ("恩宠", "上位恩宠")
 #: The 饰品 rows of 物品总目录 — what an accessory *is* (its 种类), keyed by the
 #: per-item id the record header carries in v2.21.  Display only, like the grace
 #: table: the ids live in a different space from 词条 ids, and nothing here may
-#: ever authorise a write.  Measured on the reporting user's save: 212 of 213
+#: ever authorise a write.  Measured on the reference save: 212 of 213
 #: accessories resolve to one of these 88 ids.
 DEFAULT_ITEM_CATALOG = default_items_path()
 ITEM_CATALOG_SCHEMA = "nioh3-accessory-items/v1"
@@ -117,7 +117,7 @@ class AffixEntry:
     #: (全词条数值 取值集合 for 饰品, 数值区间/数值集合 for 魂核).  ``None`` means the
     #: workbook gave no span, and then the editor refuses to write any value other
     #: than the catalog's own — guessing a range would be exactly the kind of
-    #: unverified write this tool must not do.  Measured on the reporting user's
+    #: unverified write this tool must not do.  Measured on the reference save's
     #: save: all 807 catalogued accessory slots hold a value inside their span.
     value_min: int | None = None
     value_max: int | None = None
@@ -453,7 +453,7 @@ class ItemDb:
     """Name lookup for the item id an accessory record carries (display only).
 
     A v2.21 record's header field at ``+0x00`` (mirrored at ``+0x02``) holds the
-    *item* id, not the captured category type: measured on the reporting user's
+    *item* id, not the captured category type: measured on the reference save's
     save, 212 of 213 accessories resolve to a 饰品 row of 物品总目录.  This table
     answers "which accessory is this?", and — like :class:`GraceDb` — never
     decides what may be written.  A missing table degrades to "no names".

@@ -70,7 +70,7 @@ GRACE_OWNERS = ("恩宠", "上位恩宠", "武士套装", "忍者套装")
 
 #: What an accessory *is* lives in the 物品总目录 sheet (大类 / 中类 / 小类 / 代码 /
 #: 名称 / 备注).  Only the 饰品 rows are shipped: a v2.21 record header carries the
-#: per-item id (mirrored), and of the reporting user's 213 accessories 212 resolve
+#: per-item id (mirrored), and of the reference save's 213 accessories 212 resolve
 #: to one of these 88 ids — measured, not assumed.  Display only.
 ITEMS_SHEET = "物品总目录"
 ITEM_BIG_CLASS = "饰品"
@@ -95,7 +95,7 @@ ITEM_ID_OVERRIDES: dict[int, tuple[str, str, str]] = {
 ITEM_CODE_PATTERN = re.compile(r"^(?:0x)?([0-9A-Fa-f]{2})\s*([0-9A-Fa-f]{2})$")
 
 #: 魂核 (soul cores) have their own affix pool in the 绘卷-魂核词条 sheet, whose
-#: 种类 column is 绘卷 or 魂核; measured on the reporting user's save, 132 of the
+#: 种类 column is 绘卷 or 魂核; measured on the reference save, 132 of the
 #: 134 records that look like 魂核 carry exactly the 魂核 sheet's 固定词条代码
 #: (0 mismatches), which is why that sheet — not 饰品词条 — gates 魂核 edits.
 SOUL_AFFIX_SHEET = "绘卷-魂核词条"
@@ -410,7 +410,7 @@ def collect_value_ranges(source: Path) -> tuple[dict[int, tuple[int, int]], int]
     two bytes** (``BC 53`` → ``0x53BC``), which is why this table is keyed by
     ``effect_id & 0xFFFF``.
 
-    Measured on the reporting user's save: all 807 accessory slots whose affix is
+    Measured on the reference save: all 807 accessory slots whose affix is
     in this table store a value inside its range — 0 exceptions — which is what
     makes the range a safe write gate.  ``(ranges, skipped)``.
     """

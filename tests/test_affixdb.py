@@ -193,7 +193,7 @@ class GraceCatalogTests(unittest.TestCase):
         self.assertGreater(len(self.db), 50)
 
     def test_names_the_id_seen_in_a_real_save(self) -> None:
-        # Record #3 of the reporting user's save holds 0x71f6 in its last slot.
+        # Record #3 of the reference save holds 0x71f6 in its last slot.
         self.assertEqual(self.db.describe(0x71F6), "不动明王的恩宠（上位恩宠）")
         self.assertEqual(self.db.describe(0x4FA3), "稻荷神的恩宠（恩宠）")
 
@@ -245,7 +245,7 @@ class ItemCatalogTests(unittest.TestCase):
     """What an accessory *is* (种类), from 物品总目录's 饰品 rows.
 
     In v2.21 a record header carries the per-item id (mirrored at +0x02) rather
-    than the captured category type; measured on the reporting user's save, all 213
+    than the captured category type; measured on the reference save, all 213
     accessories resolve here (0x5c5f was the last one, added from save evidence).
     Display only: the tool never writes that field.
     """

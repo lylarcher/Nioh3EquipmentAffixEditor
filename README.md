@@ -24,7 +24,7 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   `data/soul_items.json`. A record is identified as a core only when **both**
   facts hold — its header id is a 魂核 row *and* a slot names a 魂核 affix — since
   exactly one id (`0xfb24`) is listed in both pools and the item table is what
-  keeps 八尺琼勾玉[武士]-style accessories out. On the reporting user's save 137
+  keeps 八尺琼勾玉[武士]-style accessories out. On the reference save 137
   candidates resolved to 132 cores; the other 5 (two `0xda62`, which is not in
   the 魂核 sheet, and three accessories carrying `0xfb24`) are listed as
   unidentified and refused rather than guessed. The same rules as accessories
@@ -54,26 +54,27 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   of as an unknown affix.
 * **Shows which accessory each record is — and can swap it (同分类 only)** — that
   same per-item id is resolved against the 饰品 rows of the workbook's 物品总目录
-  (89 rows → 88 ids, shipped as `data/accessory_items.json`), so `list` and the
-  GUI name every record (`种类 0x3e3f 龙笛[武士]`, `0x4987 八尺琼勾玉[武士]`,
-  `0xf5bb 凶王耳饰[忍者]`). Measured on the reporting user's save: 212 of 213
-  accessories resolve, and the one that does not (`0x5c5f`) is reported as unlisted
-  instead of guessed. Changing 饰品种类 is supported **inside the same 中类**
+  (shipped as `data/accessory_items.json`, **89 entries**; two of them carry
+  save-measured provenance, see
+  [the reference save](#the-reference-save) below), so `list` and the GUI name every
+  record (`种类 0x3e3f 龙笛[武士]`, `0x4987 八尺琼勾玉[武士]`,
+  `0xf5bb 凶王耳饰[忍者]`). Measured on the reference save: **213 of 213**
+  accessories resolve. Changing 饰品种类 is supported **inside the same 中类**
   (武士饰品 ↔ 武士饰品, 忍者饰品 ↔ 忍者饰品) from the GUI's 种类 row or
   `edit --kind`, and the target kind's 同名固定 affix is copied **from a real
-  sample of that kind already in your save** — never invented. See
+  sample of that kind already in the save being edited** — never invented. See
   [Changing 种类](#changing-种类-同分类互换).
 * **Fixed affixes cannot be edited (fail closed)** — every kind has its own
   同名固定 affix (some have none). A slot counts as fixed when the catalog marks
   the id `(同名固定)` and/or the slot's metadata byte 9 has bit `0x40`; measured on
-  the reporting user's save the two agreed on all 795 catalogued slots with zero
+  the reference save the two agreed on all 795 catalogued slots with zero
   exceptions. Fixed slots are shown as `（固定词条，不可修改）`, refused by
   `plan_edits`, and refused as a *target* too (a normal slot may not be turned into
   a fixed affix). The only code that rewrites them is the 种类 swap, which copies
   the target kind's own entry.
 * **等级 editing, capped at 180** — `edit --level 180` or the GUI's 等级 row writes
   only `+0x06`/`+0x08` and refuses anything above 180 (the reference project reads
-  the effective level as `min(record +0x06, 180)` and the reporting user's save tops
+  the effective level as `min(record +0x06, 180)` and the reference save tops
   out at exactly 180). Measured: a whole 9.4 MB save changes in 5 bytes (2 level
   bytes + 3 checksum bytes). Stored affix values do **not** scale with level (see
   the verified note on 数值 and 等级/`+值`), so this is a caution-flagged edit:
@@ -90,7 +91,7 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   (e.g. 怨恨盖世) and plain 词条 are refused, as are non-trailing slots and
   records that are not accessories: the gate is the game's own family byte
   (metadata byte 9 — `0x0C` for all 196 恩宠 slots and `0x4C` for all 16 套装
-  slots of the reporting user's 213 accessories). Only the slot's effect id and
+  slots of the reference save's 213 accessories). Only the slot's effect id and
   value change; the family/sub-kind bytes and the unexplained byte 11 are kept
   exactly as the game wrote them. Measured on a copy of a real save: a whole
   9.4 MB save changes in 5 bytes — the 2 id bytes and 3 checksum bytes.
@@ -665,7 +666,7 @@ is, under three fail-closed rules:
 2. **The fixed affix is copied, never invented** — the target kind's 同名固定 affix
    is read from a real copy of that kind already in *your* save: its slot index,
    effect id, value and metadata byte 9. Measured over the 60 kinds with a fixed
-   affix in the reporting user's save, those fields are identical on every copy of a
+   affix in the reference save, those fields are identical on every copy of a
    kind (58/60; the two exceptions are the 八咫镜 variants, which are refused as
    ambiguous). Metadata bytes 10/11 (only 25/60 kinds agree) and the slot `prefix`
    (4 kinds disagree) are **per-instance**, so they are left byte-for-byte as they
@@ -740,6 +741,77 @@ Notes that matter in practice:
   「背包已满：记录表 2000 个槽位全部被占用，请先在游戏里清理背包后再添加」.
 * **A read-only search** — `edit --search` loads and reports only; the save bytes are
   byte-identical afterwards (asserted in the tests).
+
+### The reference save
+
+Every measurement quoted in this README (213 accessories out of 1456 item records,
+132 identified 魂核, 807/807 affix values inside their span, 795/795 slots agreeing
+with the catalog's 同名固定 flag, 465 free slots, the two 八咫镜 ids) comes from the
+same **reference save**: one ordinary, unmodified PC save file that the project was
+developed against, always opened read-only. It is referred to that way — as *the
+reference save*, or *a sample save* — because the tool is not tied to any particular
+file; what is tied to one file is only the *evidence*, which is why each measured
+claim below names it.
+
+### Will it work on another player's save?
+
+The parts that decide **what may be written** are not tied to that file:
+
+* the legal affix, value-span, 恩宠/套装、魂核 and 种类 tables are generated from
+  `仁王3词条装备库v2.21.xlsx`, not from a save;
+* identification is evidence-based and fails closed: a 饰品 needs catalog affixes, a
+  魂核 needs **both** an item-table row and a 魂核-affix hit, and anything that does
+  not qualify is listed as 未识别 rather than edited;
+* the record array is *located*, not assumed: the scanner votes between candidate
+  strides and the winning stride's extent gives the array (see
+  [the layout section](#verified-facts-vs-unverified-boundaries)); a save with no
+  such evidence is refused instead of being edited at guessed offsets.
+
+The parts that **were measured on one file** are the byte-level ones, and each has a
+defined failure mode on a save that does not match:
+
+| measured fact | if another save disagrees |
+| --- | --- |
+| `type == 0` is the empty-slot marker (465 of 2000 slots) | no `type == 0` slot means "背包已满" and creation is refused |
+| 同名固定 = catalog flag **and** metadata byte-9 bit `0x40` (795/795) | the slot is simply not treated as fixed, so it stays editable; nothing is guessed |
+| `+0x1c`/`+0x20`/`+0x28` are unique per record (213/213) | create/改种类 copy them from a same-kind sample **in the same save**; no sample of that kind → refused with 「存档里没有 … 的样本」 |
+| level `+0x06` mirrors `+0x08`, cap 180 | mismatched mirrors or a higher cap → the edit is refused |
+| 0x5c5f = 八咫镜[武士] (from that save's fixed affix) | ids are game-global, so this holds for every save; it is the *only* item row derived from save evidence |
+
+So: on someone else's save the catalog-driven features (listing, filtering, keyword
+search, value spans, fixed-affix protection, 恩宠 edits) should work as-is, while the
+write paths that need a same-kind sample are refused with a message when the sample is
+missing. To check a new file, run `check` and `list`: they print the located layout
+(stride/offset/slot count, and whether it matches the reference project's captured
+layout) plus how many records identified as accessories.
+
+### The one field that is still unknown: `+0x0A`
+
+Every other header word is pinned to something: `+0x00`/`+0x02` are the 种类 id,
+`+0x04` the item count, `+0x06`/`+0x08` the level, `+0x0C` a constant, `+0x30` the
+rarity. `+0x0A` is not. What is measured about it (reference save, 213 accessories):
+
+* it takes **25 distinct values between 0 and 30**, and it is a property of the
+  *instance*, not of the kind — 42 of 74 kinds show several values;
+* it does not track level (a Lv170 item can be 0), rarity (神器 spans 0..30, 粗物 is
+  always 0), or the number of fixed affixes;
+* the **stored affix values do not change with it**: across 82 affixes that appear at
+  both low (≤5) and high (≥15) `+0x0A`, the average stored value is identical. So it
+  is not an on-disk stat multiplier — the same reason the 等级 edit does not rewrite
+  affix values.
+
+Because writing it is the only way to find out what the game shows, it has one
+dedicated tool instead of a general edit path:
+
+```powershell
+python tools/set_plus.py --record 28 --value 0            # 演练，不写入
+python tools/set_plus.py --record 28 --value 0 --write    # 真正写入（自动备份）
+```
+
+It refuses anything outside 0..30, verifies that **only** the two bytes of `+0x0A`
+changed and aborts otherwise, and never touches an affix, a level or a mirror. The
+safest first step needs no write at all: open the game and compare two same-kind
+items that already differ in `+0x0A` (e.g. three 龙笛[武士] at 13 / 18 / 19).
 
 ### Changing 等级
 
