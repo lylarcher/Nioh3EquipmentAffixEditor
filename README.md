@@ -38,6 +38,15 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   trailing slot of an accessory holds its 恩宠/套装组合 effect (confirmed in game),
   which the table does not list, so that one slot is labelled accordingly instead
   of as an unknown affix.
+* **Shows which accessory each record is — read only** — that same per-item id is
+  resolved against the 饰品 rows of the workbook's 物品总目录 (89 rows → 88 ids,
+  shipped as `data/accessory_items.json`), so `list` and the GUI name every record
+  (`种类 0x3e3f 龙笛[武士]`, `0x4987 八尺琼勾玉[武士]`, `0xf5bb 凶王耳饰[忍者]`).
+  Measured on the reporting user's save: 212 of 213 accessories resolve, and the
+  one that does not (`0x5c5f`) is reported as unlisted instead of guessed.
+  **The tool never writes this field**: changing 饰品种类 (turning 龙笛 into
+  凶王耳饰) is *not* supported — the column has no editor; see the boundary note
+  below for what would have to be verified first.
 * **Live write-condition display** — the GUI footer shows whether a Nioh 3
   process is running (green = writable, red = the write would be refused), so the
   game-closed requirement is visible before you click 写入存档.
@@ -415,7 +424,7 @@ build artifacts: a fresh checkout reports live git information
 ## Tests
 
 ```powershell
-# Whole suite (614 tests, ~7 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (645 tests, ~7 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter
@@ -434,6 +443,8 @@ backup + rollback, the editor/CLI pipelines, a full CLI write against a
 synthetic save on disk, the 恩宠 legality gate (a 恩宠 slot is writable; a
 专属套装 effect such as 怨恨盖世, a plain 词条 in the last slot, an unknown family
 byte and an unlisted id are all refused, and the write moves only the id bytes),
+the display-only item table (including that an item id can never become an
+editable affix, and that the committed JSON still matches the workbook),
 and the backup/restore path — including a real
 encrypt → back up → damage → restore round trip asserting that the restored file
 is byte-identical to the backed-up one (and that the uncovered tail is never
@@ -481,6 +492,13 @@ Two tables come out of one workbook, deliberately kept apart:
   not accessory-affix evidence — and the editor additionally requires the slot
   being replaced to carry the 恩宠 family byte (0x0C), which a 专属套装 effect
   (e.g. 怨恨盖世, 0x4C) never does.
+* **`data/accessory_items.json`** — the 饰品 rows of 物品总目录 (89 rows → 88 ids:
+  武士饰品 46, 忍者饰品 42; one id, `0x1521`, is listed twice — 八咫镜[武士] and
+  [忍者] — which is recorded in the table's `conflicts` field instead of being
+  hidden). This is what an accessory **is**, keyed by the record header's per-item
+  id, and it is display only like the tables above: the ids live in a different
+  space from 词条 ids (measured: zero overlap with the 276 affix ids and the 77
+  grace/set ids), and `list`/GUI only name the record with them.
 
 ## Verified facts vs. unverified boundaries
 
@@ -575,6 +593,21 @@ nothing.
 > copied from the slot being replaced instead of being invented, and whether the
 > in-game item list refreshes cleanly after such a swap (only load the save and
 > look). If the swapper shows something odd, restore the automatic backup.
+>
+> **饰品种类 (which accessory it is) is read only.** The field is known — the
+> record header's per-item id at `+0x00`, with a mirror at `+0x02` (equal on all
+> 213 records), resolving to `data/accessory_items.json` for 212 of them — and
+> writing it would be two bytes, but the tool deliberately does not, because
+> nothing below has been verified yet: (1) whether the game reads `+0x00`, the
+> mirror `+0x02`, or both; (2) what happens to the *existing* effect slots, which a
+> kind swap would leave untouched, so an 八尺琼勾玉 could keep affixes that only a
+> 龙笛 may carry (the game shows them, repairs them, or rejects them — unknown);
+> (3) whether an item-specific 专属套装 effect (e.g. 怨恨盖世 on 凶王耳饰) must match
+> the new kind — the same risk class the "套装 must not be edited" rule exists for;
+> (4) whether 等级/品质 (`+0x06`/`0x30`) have to be rewritten consistently, and
+> (5) that `0x1521` maps to two different items (八咫镜[武士] and [忍者]), so the id
+> alone does not even determine the item. Verifying those needs a copy-write plus an
+> in-game check, which is why the feature is display-only for now.
 
 ## Safety model
 

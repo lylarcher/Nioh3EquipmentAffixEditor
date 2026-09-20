@@ -768,6 +768,48 @@ class GraceWidgetTests(UiTestCase):
         warned.assert_called_once()
 
 
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class ItemKindWidgetTests(UiTestCase):
+    """种类 is displayed (tree column + detail line) and never editable."""
+
+    def _load(self, record_type: int) -> None:
+        record = support.build_record(
+            record_type=record_type,
+            effects=((self.db.all()[0].effect_id, 20, 0x40),),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        self.app.decrypted = plain
+        self.app._populate_accessories(
+            (plain, ui.list_accessories(plain), True, records.locate_layout(plain))
+        )
+        self.app.tree.selection_set("3")
+        self.app.selected_accessory = 3
+        self.app._on_accessory_selected()
+
+    def test_the_tree_column_names_a_real_item(self) -> None:
+        self._load(0x3E3F)
+        values = self.app.tree.item("3", "values")
+        self.assertEqual(values[2], "龙笛[武士]")
+
+    def test_the_detail_line_names_the_record(self) -> None:
+        self._load(0x3E3F)
+        text = self.app.item_var.get()
+        self.assertIn("记录 #3", text)
+        self.assertIn("龙笛[武士]", text)
+
+    def test_an_unlisted_id_falls_back_to_the_evidence_wording(self) -> None:
+        self._load(0x1234)
+        values = self.app.tree.item("3", "values")
+        self.assertIn("0x1234", values[2])
+        self.assertIn("0x1234", self.app.item_var.get())
+
+    def test_the_kind_is_not_an_editable_widget(self) -> None:
+        """Only 词条 combos and the 恩宠 row exist; 种类 has nothing to write it."""
+        self.assertEqual(len(self.app.slot_combos), EFFECT_COUNT)
+        self.assertFalse(hasattr(self.app, "item_combo"))
+        self.assertFalse(hasattr(self.app, "item_button"))
+
+
 class StaticMethodTests(unittest.TestCase):
     """A ``@staticmethod`` that touches ``self`` is a guaranteed NameError."""
 

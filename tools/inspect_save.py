@@ -37,7 +37,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from nioh3_accessory_editor import records, savefile  # noqa: E402
-from nioh3_accessory_editor.affixdb import AffixDb, GraceDb  # noqa: E402
+from nioh3_accessory_editor.affixdb import AffixDb, GraceDb, ItemDb  # noqa: E402
 from nioh3_accessory_editor.config import load_config  # noqa: E402
 from nioh3_accessory_editor.editor import (  # noqa: E402
     SaveDescriptor,
@@ -257,11 +257,23 @@ def inspect(decrypted: bytes, db: AffixDb, *, preview_records: int = 4) -> dict:
     payload["grace_affix_ids"] = [{"effect_id": effect_id, "count": count}
                                   for effect_id, count in grace.most_common(40)]
     payload["grace_affix_total"] = sum(grace.values())
+    # len(...) of the *truncated* list above would understate the variety; keep
+    # the true distinct counts so the report cannot mislead.
+    payload["grace_affix_kinds"] = len(grace)
+
+    # What the accessories *are*: the record header's per-item id, resolved
+    # against the 饰品 rows of 物品总目录 (display only).
+    items = Counter(entry["type"] for entry in payload["accessory_candidates"])
+    payload["accessory_item_ids"] = [{"item_id": item_id, "count": count}
+                                     for item_id, count in items.most_common(40)]
+    payload["accessory_item_total"] = sum(items.values())
+    payload["accessory_item_kinds"] = len(items)
     return payload
 
 
 def _format_report(payload: dict, db: AffixDb, *, listing: int,
-                   grace_db: GraceDb | None = None) -> str:
+                   grace_db: GraceDb | None = None,
+                   item_db: ItemDb | None = None) -> str:
     lines: list[str] = []
     lines.append(f"存档大小      : {payload['save_size']:#x} 字节")
     lines.append(f"词条库条目    : {payload['catalog_size']}（仅饰品词条）")
@@ -352,7 +364,8 @@ def _format_report(payload: dict, db: AffixDb, *, listing: int,
         lines.append("")
         lines.append("饰品末位槽（游戏内显示为恩宠/套装组合效果）的 id: "
                      f"{payload['grace_affix_total']} 件"
-                     f"（{len(grace)} 种，前 12 种）")
+                     f"（{payload.get('grace_affix_kinds', len(grace))} 种，"
+                     "列出前 12 种）")
         for item in grace[:12]:
             effect_id = item["effect_id"]
             named = grace_db.describe(effect_id) if grace_db else None
@@ -364,6 +377,22 @@ def _format_report(payload: dict, db: AffixDb, *, listing: int,
             lines.append(f"  其中名表未收录: {len(unknown)} 种 "
                          f"（共 {sum(item['count'] for item in unknown)} 件），"
                          "可反馈给作者补全")
+    items = payload.get("accessory_item_ids") or []
+    if items:
+        # Count the named/short names over *all* accessories, not the listed slice.
+        all_items = Counter(entry["type"]
+                            for entry in payload["accessory_candidates"])
+        named = sum(count for item_id, count in all_items.items()
+                    if item_db and item_db.describe(item_id))
+        lines.append("")
+        lines.append(f"饰品是什么（种类，只读）: {payload['accessory_item_total']} 件"
+                     f"（{payload.get('accessory_item_kinds', len(items))} 种，"
+                     f"列出前 12 种；能对上物品总目录 {named} 件）")
+        for item in items[:12]:
+            item_id = item["item_id"]
+            name = item_db.describe(item_id) if item_db else None
+            suffix = name if name else "物品总目录里没有这个 id"
+            lines.append(f"  {item_id:#08x} × {item['count']:<3} {suffix}")
     return "\n".join(lines)
 
 
@@ -401,6 +430,7 @@ def main(argv: list[str] | None = None) -> int:
     decrypted = open_save(descriptor, crypto)
     db = AffixDb()
     grace_db = GraceDb.best_effort()
+    item_db = ItemDb.best_effort()
     payload = inspect(decrypted, db, preview_records=4)
     payload["path"] = str(descriptor.path)
     payload["account_id"] = descriptor.account_id
@@ -414,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
     print(_format_report(payload, db,
                          listing=len(payload["records"]) if args.all
                          else max(0, args.records),
-                         grace_db=grace_db))
+                         grace_db=grace_db, item_db=item_db))
 
     if args.json:
         target = Path(args.json)

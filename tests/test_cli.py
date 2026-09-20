@@ -385,6 +385,39 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertIn(self.affix.name, out)
         self.assertIn("校验和一致: 是", out)
 
+    def test_list_names_the_item_kind(self) -> None:
+        """种类 comes from 物品总目录; a real id is named, an unknown one is not."""
+        record = support.build_record(
+            record_type=0x3E3F,
+            effects=((self.affix.effect_id, 20, 0x40),),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        staged = self.root / "item-plain.bin"
+        staged.write_bytes(plain)
+        encrypted = self.root / "item-enc.bin"
+        self.crypto.encrypt(staged, encrypted)
+        self.save_path.write_bytes(encrypted.read_bytes())
+
+        code, out, err = run_cli(["list"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("种类 0x3e3f 龙笛[武士]", out)
+
+    def test_list_says_so_for_an_unlisted_item_id(self) -> None:
+        record = support.build_record(
+            record_type=0x1234,
+            effects=((self.affix.effect_id, 20, 0x40),),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        staged = self.root / "item2-plain.bin"
+        staged.write_bytes(plain)
+        encrypted = self.root / "item2-enc.bin"
+        self.crypto.encrypt(staged, encrypted)
+        self.save_path.write_bytes(encrypted.read_bytes())
+
+        code, out, err = run_cli(["list"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("种类 0x1234（不在物品种类表内）", out)
+
     def test_list_reports_the_located_record_table(self) -> None:
         code, out, err = run_cli(["list"])
         self.assertEqual(code, 0, err)

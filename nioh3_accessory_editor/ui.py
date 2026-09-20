@@ -21,7 +21,7 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from . import paths
-from .affixdb import AffixDb, GraceDb
+from .affixdb import AffixDb, GraceDb, ItemDb
 from .bootstrap import ensure_once, last_report
 from .config import ConfigError, EditorConfig, load_config
 from .editor import (
@@ -133,6 +133,7 @@ class AccessoryEditorApp(tk.Tk):
         # 恩宠/套装 name table: display only (see affixdb.GraceDb).  A missing or
         # stale file must not stop the editor from running, it only costs names.
         self.grace_db = GraceDb.best_effort()
+        self.item_db = ItemDb.best_effort()
         self.grace_availability = None
         self._backend_note = ""
         self.crypto = self._build_crypto()
@@ -294,10 +295,10 @@ class AccessoryEditorApp(tk.Tk):
         self.tree.heading("#0", text="记录")
         self.tree.heading("level", text="等级")
         self.tree.heading("rarity", text="品质")
-        self.tree.heading("type", text="类型")
+        self.tree.heading("type", text="种类（只读）")
         self.tree.column("level", width=52, anchor=tk.CENTER)
         self.tree.column("rarity", width=76, anchor=tk.CENTER)
-        self.tree.column("type", width=76, anchor=tk.CENTER)
+        self.tree.column("type", width=190, anchor=tk.W)
         self.tree.pack(fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", lambda _event: self._on_accessory_selected())
         mid.add(left, weight=2)
@@ -329,7 +330,9 @@ class AccessoryEditorApp(tk.Tk):
                   "标识(metadata) 位不会被改写，因为其在存档中的编码尚未核实。\n"
                   "每件饰品的最后一个词条通常是「恩宠」或「套装/专属套装」词条："
                   "恩宠（xxx的恩宠）可以用下面的【恩宠】栏改成另一个恩宠；"
-                  "套装/专属套装（如 怨恨盖世）按规则不允许改动。"),
+                  "套装/专属套装（如 怨恨盖世）按规则不允许改动。\n"
+                  "「种类」一栏由《仁王3词条装备库v2.21》物品总目录的饰品条目解析得到，"
+                  "**只用于显示**：工具目前不会修改饰品本身的种类/等级/品质。"),
             foreground="#666666", wraplength=520, justify=tk.LEFT,
         )
         note.pack(anchor=tk.W, pady=(6, 0))
@@ -353,6 +356,14 @@ class AccessoryEditorApp(tk.Tk):
         )
         self.grace_status_label.pack(anchor=tk.W, pady=(4, 0))
         self._set_grace_enabled(False)
+
+        # 种类 (the item itself) is read-only: the tool never writes that field.
+        self.item_var = tk.StringVar(
+            value="选择一条饰品记录后，这里会显示它是什么饰品（只读）。")
+        self.item_label = ttk.Label(right, textvariable=self.item_var,
+                                    foreground="#1a4f8f", wraplength=520,
+                                    justify=tk.LEFT)
+        self.item_label.pack(anchor=tk.W, pady=(6, 0))
 
         mid.add(right, weight=3)
 
@@ -588,7 +599,10 @@ class AccessoryEditorApp(tk.Tk):
                 self.accessory_views.append(retained)
         self.tree.delete(*self.tree.get_children())
         for view in self.accessory_views:
-            label = f"{view.kind_name} {view.record_type:#06x}"
+            # 种类 = the item this record is, named from 物品总目录 when available
+            # (display only).  Falls back to the raw id plus the catalog evidence.
+            named = self.item_db.describe(view.record_type)
+            label = named or f"{view.kind_name} {view.record_type:#06x}"
             if view.catalog_hits is not None:
                 label += f" 词条命中 {view.catalog_hits}"
             self.tree.insert(
@@ -679,6 +693,10 @@ class AccessoryEditorApp(tk.Tk):
                 detail = f"数值={effect.value} 标识={effect.metadata:#010x}"
             self.slot_combos[index].set(label)
             self.slot_labels[index].set(detail)
+        self.item_var.set(
+            f"记录 #{view.slot_index}：{view.describe_item(self.item_db)}"
+            f"  Lv{view.level} {view.rarity_name}"
+        )
         self._refresh_grace_state(view)
 
     def _set_grace_enabled(self, enabled: bool) -> None:

@@ -10,7 +10,7 @@ from unittest import mock
 from nioh3_accessory_editor import editor as editor_module
 from nioh3_accessory_editor import records
 from nioh3_accessory_editor import savefile as savefile_module
-from nioh3_accessory_editor.affixdb import AffixDb, AffixError, GraceDb
+from nioh3_accessory_editor.affixdb import AffixDb, AffixError, GraceDb, ItemDb
 from nioh3_accessory_editor.editor import (
     EditorError,
     GraceEditError,
@@ -27,7 +27,7 @@ from nioh3_accessory_editor.editor import (
     resolve_grace_id,
     save_checksum_is_valid,
 )
-from nioh3_accessory_editor.records import EMPTY_EFFECT_ID, RecordError
+from nioh3_accessory_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID, RecordError
 from nioh3_accessory_editor.savefile import GameRunningError, SaveCrypto
 from tests import support
 
@@ -75,9 +75,11 @@ class ReadOnlyOperationTests(EditorTestCase):
     def test_describe_effects(self) -> None:
         view = list_accessories(self.plain)[0]
         lines = view.describe_effects(self.db)
-        self.assertEqual(len(lines), 7)
-        self.assertIn(self.affix_a.name, lines[0])
-        self.assertIn("(空)", lines[1])
+        # One 种类 line plus one line per effect slot.
+        self.assertEqual(len(lines), EFFECT_COUNT + 1)
+        self.assertIn("种类", lines[0])
+        self.assertIn(self.affix_a.name, lines[1])
+        self.assertIn("(空)", lines[2])
 
     def test_describe_unknown_affix(self) -> None:
         record = support.build_record(
@@ -85,7 +87,7 @@ class ReadOnlyOperationTests(EditorTestCase):
         )
         save = support.build_plain_save(records_by_slot={0: record})
         lines = list_accessories(save)[0].describe_effects(self.db)
-        self.assertIn("未知词条", lines[0])
+        self.assertIn("未知词条", lines[1])
 
 
 class GraceSlotTests(EditorTestCase):
@@ -109,8 +111,8 @@ class GraceSlotTests(EditorTestCase):
         self.assertEqual(view.slot_role(0, self.db), "饰品词条")
         self.assertEqual(view.slot_role(1, self.db), "恩宠/套装词条")
         lines = view.describe_effects(self.db)
-        self.assertIn("恩宠/套装词条", lines[1])
-        self.assertIn(f"{0x0071F6:#06x}", lines[1])
+        self.assertIn("恩宠/套装词条", lines[2])
+        self.assertIn(f"{0x0071F6:#06x}", lines[2])
 
     def test_out_of_table_slot_before_a_known_one_is_not_grace(self) -> None:
         record = support.build_record(
@@ -120,7 +122,7 @@ class GraceSlotTests(EditorTestCase):
         save = support.build_plain_save(records_by_slot={3: record})
         view = list_accessories(save)[0]
         self.assertEqual(view.grace_slots(self.db), frozenset())
-        self.assertIn("未知词条", view.describe_effects(self.db)[0])
+        self.assertIn("未知词条", view.describe_effects(self.db)[1])
 
     def test_two_trailing_out_of_table_slots_are_both_grace(self) -> None:
         record = support.build_record(
@@ -158,7 +160,7 @@ class GraceSlotTests(EditorTestCase):
         save = support.build_plain_save(records_by_slot={3: record})
         view = list_accessories(save)[0]
         grace_db = GraceDb.best_effort()
-        line = view.describe_effects(self.db, grace_db)[1]
+        line = view.describe_effects(self.db, grace_db)[2]
         self.assertIn("不动明王的恩宠", line)
         self.assertIn("上位恩宠", line)
         self.assertIn("0x71f6", line)
@@ -170,7 +172,7 @@ class GraceSlotTests(EditorTestCase):
         )
         save = support.build_plain_save(records_by_slot={3: record})
         view = list_accessories(save)[0]
-        line = view.describe_effects(self.db)[1]
+        line = view.describe_effects(self.db)[2]
         self.assertIn("恩宠/套装词条", line)
         self.assertIn("0x71f6", line)
 
@@ -327,6 +329,52 @@ class GraceEditTests(EditorTestCase):
         with self.assertRaises(GraceEditError) as caught:
             resolve_grace_id(self.grace_db, "恩宠")
         self.assertIn("多个", str(caught.exception))
+
+
+class ItemKindDisplayTests(EditorTestCase):
+    """种类: which accessory a record *is* (display only, never written)."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.item_db = ItemDb.best_effort()
+
+    def _view(self, record_type: int = 0x3E3F):
+        save = support.build_plain_save(records_by_slot={
+            3: support.build_record(
+                record_type=record_type,
+                effects=((self.affix_a.effect_id, 20, 0x40),),
+            ),
+        })
+        return list_accessories(save)[0]
+
+    def test_names_a_real_item_id(self) -> None:
+        self.assertEqual(self._view().describe_item(self.item_db),
+                         "种类 0x3e3f 龙笛[武士]")
+
+    def test_says_so_when_the_id_is_not_in_the_table(self) -> None:
+        text = self._view(0x1234).describe_item(self.item_db)
+        self.assertIn("0x1234", text)
+        self.assertIn("不在物品种类表内", text)
+
+    def test_without_the_table_it_says_which_id_it_is(self) -> None:
+        text = self._view().describe_item(None)
+        self.assertIn("0x3e3f", text)
+        self.assertIn("未加载物品种类表", text)
+
+    def test_effects_listing_starts_with_the_kind(self) -> None:
+        lines = self._view().describe_effects(self.db, None, self.item_db)
+        self.assertIn("龙笛[武士]", lines[0])
+
+    def test_the_kind_is_display_only(self) -> None:
+        """Naming an item must not make any 词条 writable."""
+        with self.assertRaises(AffixError):
+            self.db.require(0x3E3F)
+        with self.assertRaises(AffixError):
+            plan_edits(self.plain,
+                       [{"record_index": 3, "slot_index": 0,
+                         "effect_id": 0x3E3F, "value": 1}],
+                       affix_db=self.db)
 
 
 class PlanTests(EditorTestCase):

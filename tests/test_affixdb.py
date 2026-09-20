@@ -10,16 +10,22 @@ from pathlib import Path
 from nioh3_accessory_editor.affixdb import (
     DEFAULT_CATALOG,
     DEFAULT_GRACE_CATALOG,
+    DEFAULT_ITEM_CATALOG,
     FLAG_FIXED,
     FLAG_STAR,
+    ITEM_CATALOG_SCHEMA,
     AffixDb,
     AffixEntry,
     AffixError,
     GraceDb,
+    ItemDb,
+    ItemEntry,
     load_catalog,
     load_grace_catalog,
+    load_item_catalog,
     save_catalog,
     save_grace_catalog,
+    save_item_catalog,
 )
 
 
@@ -233,6 +239,88 @@ class GraceCatalogTests(unittest.TestCase):
         path.write_text('{"count": 0}', encoding="utf-8")
         with self.assertRaises(AffixError):
             load_grace_catalog(path)
+
+
+class ItemCatalogTests(unittest.TestCase):
+    """What an accessory *is* (种类), from 物品总目录's 饰品 rows.
+
+    In v2.21 a record header carries the per-item id (mirrored at +0x02) rather
+    than the captured category type; measured on the reporting user's save, 212 of
+    213 accessories resolve here.  Display only: the tool never writes that field.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.db = ItemDb.best_effort()
+
+    def test_table_is_present_and_parses(self) -> None:
+        self.assertTrue(DEFAULT_ITEM_CATALOG.is_file())
+        self.assertTrue(self.db.is_loaded, self.db.error)
+        self.assertEqual(self.db.error, "")
+        self.assertEqual(len(self.db), 88)
+
+    def test_names_the_items_a_real_save_carried(self) -> None:
+        self.assertEqual(self.db.describe(0x3E3F), "龙笛[武士]")
+        self.assertEqual(self.db.describe(0xF5BB), "凶王耳饰[忍者]")
+        self.assertEqual(self.db.describe(0x4987), "八尺琼勾玉[武士]")
+
+    def test_categories_are_accessory_only(self) -> None:
+        self.assertEqual(set(self.db.categories()), {"武士饰品", "忍者饰品"})
+
+    def test_unknown_id_has_no_name(self) -> None:
+        self.assertIsNone(self.db.describe(0xDEADBEEF))
+        self.assertNotIn(0xDEADBEEF, self.db)
+
+    def test_item_ids_are_not_legal_edits(self) -> None:
+        """The item table must not widen what may be written: neither table."""
+        legal = AffixDb()
+        grace = GraceDb.best_effort()
+        for entry in self.db.all():
+            self.assertNotIn(entry.item_id, legal, f"{entry.item_id:#x}")
+            self.assertNotIn(entry.item_id, grace, f"{entry.item_id:#x}")
+
+    def test_a_record_header_id_stays_out_of_the_affix_path(self) -> None:
+        """An item id must not become an editable affix by accident."""
+        with self.assertRaises(AffixError):
+            AffixDb().require(0x3E3F)
+
+    def test_empty_table_reports_no_names_instead_of_failing(self) -> None:
+        db = ItemDb.best_effort(Path(tempfile.gettempdir()) / "missing-items.json")
+        self.assertFalse(db.is_loaded)
+        self.assertTrue(db.error)
+        self.assertIsNone(db.describe(0x3E3F))
+
+    def test_save_item_catalog_round_trip(self) -> None:
+        directory = Path(tempfile.mkdtemp(prefix="nioh3-items-"))
+        path = directory / "items.json"
+        entries = [ItemEntry(0xF5BB, "凶王耳饰[忍者]", "忍者饰品")]
+        save_item_catalog(entries, path, source="unit-test")
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(payload["schema"], "nioh3-accessory-items/v1")
+        self.assertEqual(payload["count"], 1)
+        self.assertEqual(load_item_catalog(path), entries)
+
+    def test_save_item_catalog_rejects_duplicates(self) -> None:
+        directory = Path(tempfile.mkdtemp(prefix="nioh3-items-"))
+        path = directory / "dupes.json"
+        entry = ItemEntry(0x11, "护身符[武士]", "武士饰品")
+        with self.assertRaises(AffixError):
+            save_item_catalog([entry, entry], path)
+
+    def test_a_missing_item_list_is_rejected(self) -> None:
+        directory = Path(tempfile.mkdtemp(prefix="nioh3-items-"))
+        path = directory / "bad.json"
+        path.write_text('{"count": 0}', encoding="utf-8")
+        with self.assertRaises(AffixError):
+            load_item_catalog(path)
+
+    def test_the_two_tables_have_their_own_schemas(self) -> None:
+        affix = json.loads(DEFAULT_CATALOG.read_text(encoding="utf-8"))
+        item = json.loads(DEFAULT_ITEM_CATALOG.read_text(encoding="utf-8"))
+        self.assertEqual(item["schema"], ITEM_CATALOG_SCHEMA)
+        self.assertNotEqual(item["schema"], affix["schema"])
+        self.assertIn("items", item)
+        self.assertNotIn("affixes", item)
 
 
 if __name__ == "__main__":

@@ -4,7 +4,7 @@
 Usage:
     python tools/build_affix_db.py [path-to-xlsx]
 
-Two files are written:
+Three files are written:
 
 * ``data/accessory_affixes.json`` from the 饰品词条 sheet — the **legal edit**
   catalog.  Columns: A=类别  B=词条代码 (12 bytes as space-separated hex)
@@ -13,6 +13,10 @@ Two files are written:
   **name table** (display only; 归属 = [恩宠] / [上位恩宠] / [武士套装] /
   [忍者套装]).  Every real accessory ends with one of these, and they must never
   enter the legal catalog because armour carries 套装 codes as well.
+* ``data/accessory_items.json`` from the 物品总目录 sheet — the 饰品 rows, i.e.
+  what an accessory **is** (种类), keyed by the per-item id a v2.21 record header
+  carries.  Display only as well: those ids are a different space from 词条 ids
+  and never authorise a write.
 
 The parser is stdlib-only (xlsx = zip + XML).  It accepts either the real
 xlsx or the pre-dumped TSV form (A=../B=.. lines) to stay robust; the TSV form
@@ -31,8 +35,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from nioh3_accessory_editor.affixdb import (
     AffixEntry,
+    ItemEntry,
     save_catalog,
     save_grace_catalog,
+    save_item_catalog,
 )
 
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -58,6 +64,15 @@ TARGET_SHEET = "饰品词条"
 #: display-only table instead of the legal-edit catalog.
 GRACE_SHEET = "词条总目录"
 GRACE_OWNERS = ("恩宠", "上位恩宠", "武士套装", "忍者套装")
+
+#: What an accessory *is* lives in the 物品总目录 sheet (大类 / 中类 / 小类 / 代码 /
+#: 名称 / 备注).  Only the 饰品 rows are shipped: a v2.21 record header carries the
+#: per-item id (mirrored), and of the reporting user's 213 accessories 212 resolve
+#: to one of these 88 ids — measured, not assumed.  Display only.
+ITEMS_SHEET = "物品总目录"
+ITEM_BIG_CLASS = "饰品"
+#: 物品代码 in the sheet lists the low byte first ("BB F5" == 0xF5BB).
+ITEM_CODE_PATTERN = re.compile(r"^(?:0x)?([0-9A-Fa-f]{2})\s*([0-9A-Fa-f]{2})$")
 
 
 def resolve_source(explicit: str | Path | None = None) -> Path:
@@ -202,6 +217,58 @@ def collect_grace_entries(source: Path) -> tuple[list[AffixEntry], int]:
     return entries, skipped
 
 
+def parse_item_code(code: str) -> int | None:
+    """``BB F5`` -> ``0xF5BB``; ``None`` when the cell is not a 2-byte item code.
+
+    The workbook writes the low byte first, so the value has to be swapped --
+    this is what makes a save's ``+0x00`` field resolve to e.g. 凶王耳饰[忍者].
+    """
+    match = ITEM_CODE_PATTERN.match((code or "").strip())
+    if match is None:
+        return None
+    low, high = match.groups()
+    return int(high + low, 16)
+
+
+def collect_item_entries(source: Path) -> tuple[list[ItemEntry], list[str], int]:
+    """Read the 饰品 rows of 物品总目录 as display-only item entries.
+
+    Returns ``(entries, conflicts, skipped)``; a conflict records an id that the
+    workbook gives two names (e.g. ``0x1521`` is both 八咫镜[武士] and
+    [忍者]), which is kept visible instead of silently picking one.
+    """
+    rows = _rows_from_xlsx(source, ITEMS_SHEET)
+    entries: list[ItemEntry] = []
+    conflicts: list[str] = []
+    by_id: dict[int, ItemEntry] = {}
+    skipped = 0
+    for row in rows[1:]:  # skip header: 大类 / 中类 / 小类 / 代码 / 名称 / 备注
+        if len(row) < 5:
+            skipped += 1
+            continue
+        big, mid, _small, code, name = (cell.strip() for cell in row[:5])
+        if big != ITEM_BIG_CLASS or not name:
+            skipped += 1
+            continue
+        item_id = parse_item_code(code)
+        if item_id is None:
+            skipped += 1
+            continue
+        if item_id in by_id:
+            existing = by_id[item_id]
+            if existing.name != name:
+                conflicts.append(
+                    f"{item_id:#06x} 同时是「{existing.name}」与「{name}」；"
+                    f"表中保留「{existing.name}」"
+                )
+            skipped += 1
+            continue
+        entry = ItemEntry(item_id=item_id, name=name, category=mid)
+        by_id[item_id] = entry
+        entries.append(entry)
+    return entries, conflicts, skipped
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     dry_run = "--dry-run" in sys.argv[1:]
@@ -292,6 +359,33 @@ def main() -> int:
         kinds[entry.category] = kinds.get(entry.category, 0) + 1
     print("    分类:", "，".join(f"{name} {count}" for name, count in sorted(kinds.items())))
     print(f"    跳过行: {grace_skipped}")
+
+    # 饰品 rows of 物品总目录: what an accessory *is* (display only).
+    items: list[ItemEntry] = []
+    item_conflicts: list[str] = []
+    item_skipped = 0
+    try:
+        items, item_conflicts, item_skipped = collect_item_entries(source)
+    except (FileNotFoundError, KeyError, zipfile.BadZipFile) as error:
+        print(f"    警告：未能读取 {ITEMS_SHEET}（{error}）；物品种类表未更新")
+    if not items:
+        return 0
+    if dry_run:
+        print(f"演练：将生成 {len(items)} 条饰品物品种类（未写入）")
+    else:
+        save_item_catalog(items, source=f"{source.name} / {ITEMS_SHEET}（{ITEM_BIG_CLASS}）",
+                          conflicts=item_conflicts)
+        print(f"OK: 已生成物品种类表，共 {len(items)} 条饰品条目")
+    categories: dict[str, int] = {}
+    for entry in items:
+        categories[entry.category] = categories.get(entry.category, 0) + 1
+    print("    分类:", "，".join(f"{name} {count}"
+                                for name, count in sorted(categories.items())))
+    print(f"    跳过行: {item_skipped}")
+    if item_conflicts:
+        print(f"    同一物品 ID 多名称: {len(item_conflicts)} 处")
+        for line in item_conflicts[:10]:
+            print("      -", line)
     return 0
 
 

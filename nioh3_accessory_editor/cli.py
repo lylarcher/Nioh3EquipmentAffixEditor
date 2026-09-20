@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import paths, records, version
-from .affixdb import AffixDb, AffixError, GraceDb
+from .affixdb import AffixDb, AffixError, GraceDb, ItemDb
 from .bootstrap import ensure_once
 from .config import ConfigError, EditorConfig, load_config, write_default_config
 from .editor import (
@@ -120,6 +120,7 @@ def _select_save(args: argparse.Namespace) -> SaveDescriptor:
 def cmd_list(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
     grace_db = GraceDb.best_effort()
+    item_db = ItemDb.best_effort()
     known_ids = accessory_catalog_ids(affix_db)
     crypto = _crypto(args)
     save = _select_save(args)
@@ -139,12 +140,13 @@ def cmd_list(args: argparse.Namespace) -> int:
     print(f"\n记录表内 {len(views)} 条物品记录，其中 {len(accessories)} 条含饰品词条")
     print(f"列出 {len(accessories)} 条饰品记录\n")
     for view in accessories:
+        # 种类 is printed by describe_effects below, so the header keeps the
+        # numbers only.
         print(
             f"记录 #{view.slot_index} @ {view.offset:#x}  "
-            f"type={view.record_type:#06x} Lv{view.level} {view.rarity_name}"
-            f"  词条命中 {view.catalog_hits}"
+            f"Lv{view.level} {view.rarity_name}  词条命中 {view.catalog_hits}"
         )
-        for line in view.describe_effects(affix_db, grace_db):
+        for line in view.describe_effects(affix_db, grace_db, item_db):
             print(line)
         print()
     if not accessories:

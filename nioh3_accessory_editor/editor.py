@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import records
-from .affixdb import GRACE_KINDS, AffixDb, GraceDb
+from .affixdb import GRACE_KINDS, AffixDb, GraceDb, ItemDb
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .savefile import (
@@ -132,9 +132,24 @@ class AccessoryView:
             trailing.append(effect.slot_index)
         return frozenset(trailing)
 
+    def describe_item(self, item_db: ItemDb | None = None) -> str:
+        """``种类 0x4987 八尺琼勾玉[武士]`` — the *item* this record is.
+
+        In v2.21 the header field at ``+0x00`` (mirrored at ``+0x02``) is the
+        per-item id, not the captured category type.  Naming it is display only:
+        nothing here may authorise a write.
+        """
+        name = item_db.describe(self.record_type) if item_db else None
+        if name:
+            return f"种类 {self.record_type:#06x} {name}"
+        if item_db is not None and item_db.is_loaded:
+            return f"种类 {self.record_type:#06x}（不在物品种类表内）"
+        return f"种类 {self.record_type:#06x}（未加载物品种类表）"
+
     def describe_effects(self, affix_db: AffixDb,
-                         grace_db: GraceDb | None = None) -> tuple[str, ...]:
-        lines: list[str] = []
+                         grace_db: GraceDb | None = None,
+                         item_db: ItemDb | None = None) -> tuple[str, ...]:
+        lines: list[str] = [f"  {self.describe_item(item_db)}"]
         grace = self.grace_slots(affix_db)
         for effect in self.effects:
             if effect.is_empty:

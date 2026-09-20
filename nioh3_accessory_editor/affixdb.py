@@ -22,22 +22,28 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import default_catalog_path, default_grace_path
+from .paths import default_catalog_path, default_grace_path, default_items_path
 
 __all__ = [
     "DEFAULT_CATALOG",
     "DEFAULT_GRACE_CATALOG",
+    "DEFAULT_ITEM_CATALOG",
     "FLAG_FIXED",
     "FLAG_STAR",
     "GRACE_KINDS",
+    "ITEM_CATALOG_SCHEMA",
     "AffixDb",
     "AffixEntry",
     "AffixError",
     "GraceDb",
+    "ItemDb",
+    "ItemEntry",
     "load_catalog",
     "load_grace_catalog",
+    "load_item_catalog",
     "save_catalog",
     "save_grace_catalog",
+    "save_item_catalog",
 ]
 
 DEFAULT_CATALOG = default_catalog_path()
@@ -54,6 +60,14 @@ GRACE_CATALOG_SCHEMA = "nioh3-grace-affixes/v1"
 #: 套装 kinds are listed in the same table but must never be written: the game
 #: keeps item-specific 套装 effects (e.g. 怨恨盖世) in a different family byte.
 GRACE_KINDS = ("恩宠", "上位恩宠")
+
+#: The 饰品 rows of 物品总目录 — what an accessory *is* (its 种类), keyed by the
+#: per-item id the record header carries in v2.21.  Display only, like the grace
+#: table: the ids live in a different space from 词条 ids, and nothing here may
+#: ever authorise a write.  Measured on the reporting user's save: 212 of 213
+#: accessories resolve to one of these 88 ids.
+DEFAULT_ITEM_CATALOG = default_items_path()
+ITEM_CATALOG_SCHEMA = "nioh3-accessory-items/v1"
 
 # Metadata flag bits decoded from the 词条代码 byte layout:
 # byte 9 bit6 = 固定 (同名固定 variants carry 0x43/0x45/0x46), byte 10 bit2 = 星.
@@ -181,7 +195,8 @@ def load_grace_catalog(path: Path = DEFAULT_GRACE_CATALOG) -> list[AffixEntry]:
     return _entries_from_payload(payload, path)
 
 
-def _load_payload(path: Path, what: str) -> dict:
+def _load_payload(path: Path, what: str, *,
+                  list_key: str = "affixes") -> dict:
     if not path.is_file():
         raise AffixError(f"缺少{what}文件 {path}；请先运行 tools/build_affix_db.py 生成")
     try:
@@ -190,9 +205,9 @@ def _load_payload(path: Path, what: str) -> dict:
         raise AffixError(f"{what}文件无法解析：{path}（{error}）") from error
     if not isinstance(payload, dict):
         raise AffixError(f"{what}文件格式错误：{path} 顶层必须是对象")
-    raw_entries = payload.get("affixes")
+    raw_entries = payload.get(list_key)
     if not isinstance(raw_entries, list) or not raw_entries:
-        raise AffixError(f"{what}文件没有 affixes 列表：{path}")
+        raise AffixError(f"{what}文件没有 {list_key} 列表：{path}")
 
     declared = payload.get("count")
     if isinstance(declared, int) and declared != len(raw_entries):
@@ -275,6 +290,142 @@ def save_grace_catalog(
         entries, path, source=source, schema=GRACE_CATALOG_SCHEMA,
         default_source="仁王3词条装备库v2.21.xlsx / 词条总目录（恩宠·套装）",
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ItemEntry:
+    """One 饰品 row of 物品总目录: what an accessory *is*, not what it carries."""
+
+    item_id: int
+    name: str
+    category: str
+
+    @property
+    def label(self) -> str:
+        """``0x4987 八尺琼勾玉[武士]``."""
+        return f"{self.item_id:#06x} {self.name}"
+
+
+class ItemDb:
+    """Name lookup for the item id an accessory record carries (display only).
+
+    A v2.21 record's header field at ``+0x00`` (mirrored at ``+0x02``) holds the
+    *item* id, not the captured category type: measured on the reporting user's
+    save, 212 of 213 accessories resolve to a 饰品 row of 物品总目录.  This table
+    answers "which accessory is this?", and — like :class:`GraceDb` — never
+    decides what may be written.  A missing table degrades to "no names".
+    """
+
+    __slots__ = ("_entries", "_by_id", "catalog_path", "error")
+
+    def __init__(
+        self,
+        entries: list[ItemEntry] | None = None,
+        catalog_path: Path = DEFAULT_ITEM_CATALOG,
+        *,
+        error: str = "",
+    ) -> None:
+        self.catalog_path = catalog_path
+        self.error = error
+        self._entries = tuple(entries) if entries is not None else ()
+        by_id: dict[int, ItemEntry] = {}
+        for entry in self._entries:
+            by_id.setdefault(entry.item_id, entry)
+        self._by_id = by_id
+
+    @classmethod
+    def from_file(cls, catalog_path: Path = DEFAULT_ITEM_CATALOG) -> "ItemDb":
+        return cls(load_item_catalog(catalog_path), catalog_path)
+
+    @classmethod
+    def best_effort(cls, catalog_path: Path | None = None) -> "ItemDb":
+        """Load the table, or return an empty one carrying the reason."""
+        path = DEFAULT_ITEM_CATALOG if catalog_path is None else catalog_path
+        try:
+            return cls.from_file(path)
+        except AffixError as error:
+            return cls(catalog_path=path, error=str(error))
+
+    @property
+    def is_loaded(self) -> bool:
+        return bool(self._entries)
+
+    def __len__(self) -> int:
+        return len(self._entries)
+
+    def __contains__(self, item_id: object) -> bool:
+        return item_id in self._by_id
+
+    def lookup(self, item_id: int) -> ItemEntry | None:
+        return self._by_id.get(item_id)
+
+    def describe(self, item_id: int) -> str | None:
+        """``八尺琼勾玉[武士]`` — ``None`` when the id is not in the table."""
+        entry = self.lookup(item_id)
+        return None if entry is None else entry.name
+
+    def all(self) -> tuple[ItemEntry, ...]:
+        return self._entries
+
+    def categories(self) -> tuple[str, ...]:
+        seen: list[str] = []
+        for entry in self._entries:
+            if entry.category not in seen:
+                seen.append(entry.category)
+        return tuple(seen)
+
+
+def load_item_catalog(path: Path = DEFAULT_ITEM_CATALOG) -> list[ItemEntry]:
+    """Load the 饰品 item table (display only, never used for legality)."""
+    payload = _load_payload(path, "物品种类表", list_key="items")
+    entries: list[ItemEntry] = []
+    for index, item in enumerate(payload["items"]):
+        where = f"第 {index + 1} 条"
+        if not isinstance(item, dict):
+            raise AffixError(f"{where}: 物品条目必须是对象")
+        name = item.get("name")
+        category = item.get("category")
+        if not isinstance(name, str) or not name.strip():
+            raise AffixError(f"{where}: 缺少物品名称")
+        if not isinstance(category, str):
+            raise AffixError(f"{where}: 缺少物品分类")
+        entries.append(
+            ItemEntry(
+                item_id=_require_uint32(item, "item_id", where),
+                name=name.strip(),
+                category=category.strip(),
+            )
+        )
+    return entries
+
+
+def save_item_catalog(
+    entries: list[ItemEntry],
+    path: Path = DEFAULT_ITEM_CATALOG,
+    *,
+    source: str = "",
+    conflicts: list[str] | None = None,
+) -> None:
+    """Write the 饰品 item table (same envelope, its own ``items`` list)."""
+    seen: set[int] = set()
+    for entry in entries:
+        if entry.item_id in seen:
+            raise AffixError(f"拒绝写出含重复物品 ID 的表：{entry.item_id:#x}")
+        seen.add(entry.item_id)
+    payload = {
+        "schema": ITEM_CATALOG_SCHEMA,
+        "count": len(entries),
+        "source": source or "仁王3词条装备库v2.21.xlsx / 物品总目录（饰品）",
+        "conflicts": conflicts or [],
+        "items": [
+            {"item_id": entry.item_id, "name": entry.name,
+             "category": entry.category}
+            for entry in entries
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
 
 
 class GraceDb:

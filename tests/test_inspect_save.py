@@ -185,9 +185,39 @@ class ReportTests(unittest.TestCase):
         self.assertIn("未定位到", text)
         self.assertIn("scan", text)
 
+    def test_report_names_the_item_kind_and_counts_what_it_could_not(self) -> None:
+        from nioh3_accessory_editor.affixdb import ItemDb
+
+        save = support.build_plain_save(records_by_slot={
+            1: support.build_record(
+                record_type=0x3E3F,
+                effects=((self.affixes[0].effect_id, 20, 0x40),)),
+            2: support.build_record(
+                record_type=0x1234,
+                effects=((self.affixes[1].effect_id, 20, 0x40),)),
+        })
+        payload = inspect_save.inspect(save, self.db)
+        self.assertEqual(payload["accessory_item_total"], 2)
+        self.assertEqual(payload["accessory_item_kinds"], 2)
+        text = inspect_save._format_report(payload, self.db, listing=2,
+                                           item_db=ItemDb.best_effort())
+        self.assertIn("龙笛[武士]", text)
+        self.assertIn("物品总目录里没有这个 id", text)
+        self.assertIn("能对上物品总目录 1 件", text)
+
+    def test_report_without_the_item_table_still_lists_the_ids(self) -> None:
+        save = support.build_plain_save(records_by_slot={
+            1: support.build_record(
+                record_type=0x3E3F,
+                effects=((self.affixes[0].effect_id, 20, 0x40),)),
+        })
+        payload = inspect_save.inspect(save, self.db)
+        text = inspect_save._format_report(payload, self.db, listing=2)
+        self.assertIn("0x003e3f", text)
+        self.assertIn("能对上物品总目录 0 件", text)
+
     def test_report_names_the_trailing_grace_slot_and_flags_the_rest(self) -> None:
         from nioh3_accessory_editor.affixdb import GraceDb
-
         save = support.build_plain_save(records_by_slot={
             1: support.build_record(
                 record_type=0x4001,
