@@ -148,8 +148,10 @@ class AccessoryEditorApp(tk.Tk):
         self.config = config if config is not None else load_config()
         self.state_root = self.config.resolved_backup_root()
         self.title(f"{TITLE} · v{version_info().version}")
-        self.geometry("1000x700")
-        self.minsize(880, 620)
+        # The editor column is tall (词条槽 + 等级 + +值 + 种类 + 新建), so the
+        # default window is sized for it and every column scrolls as a fallback.
+        self.geometry("1280x900")
+        self.minsize(1040, 660)
 
         # Keep references: a PhotoImage that no widget holds is garbage collected
         # and the image silently disappears.
@@ -177,6 +179,8 @@ class AccessoryEditorApp(tk.Tk):
             self.soul_db_error = str(error)
         self.soul_item_db = ItemDb.best_effort(default_soul_items_path())
         self.soul_views: list[SoulCoreView] = []
+        #: (canvas, inner frame) per scrollable editor column (饰品 / 魂核).
+        self.scroll_columns: list[tuple[tk.Canvas, ttk.Frame]] = []
         self.selected_soul: int | None = None
         self.soul_layout = None
         self.soul_known_ids: frozenset[int] = frozenset()
@@ -251,6 +255,43 @@ class AccessoryEditorApp(tk.Tk):
 
     # ------------------------------------------------------------------ UI
 
+    def _scrollable(self, parent: tk.Widget, *, width: int) -> ttk.Frame:
+        """A vertically scrolling viewport inside ``parent``; returns its content.
+
+        pack() clips whatever does not fit, which silently hid the lower rows of
+        the editor column on a short window, so the column scrolls instead.
+        """
+        canvas = tk.Canvas(parent, highlightthickness=0, borderwidth=0, width=width)
+        bar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
+        canvas.configure(yscrollcommand=bar.set)
+        bar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        inner = ttk.Frame(canvas)
+        window = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def resize(_event=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+            canvas.itemconfigure(window, width=canvas.winfo_width())
+
+        def wheel(event) -> None:
+            canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+
+        inner.bind("<Configure>", resize)
+        canvas.bind("<Configure>", resize)
+        canvas.bind("<MouseWheel>", wheel)
+        inner.bind("<MouseWheel>", wheel)
+        self.scroll_columns.append((canvas, inner))
+        return inner
+
+    def _bind_wheel_to_children(self, widget: tk.Widget, canvas: tk.Canvas) -> None:
+        """Route the wheel to the column's canvas while the pointer is inside it."""
+        def wheel(event) -> None:
+            canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+
+        for child in widget.winfo_children():
+            child.bind("<MouseWheel>", wheel, add="+")
+            self._bind_wheel_to_children(child, canvas)
+
     def _build_ui(self) -> None:
         self._header_logo()
 
@@ -277,7 +318,7 @@ class AccessoryEditorApp(tk.Tk):
 
         footer = ttk.Frame(self, padding=(8, 2))
         footer.pack(side=tk.BOTTOM, fill=tk.X)
-        self.version_var = tk.StringVar(value=self._version_text())
+        self.version_var = tk.StringVar(value=self._version_short())
         ttk.Label(footer, textvariable=self.version_var, foreground="#555555",
                   justify=tk.LEFT, font=("Consolas", 8)).pack(side=tk.LEFT)
         ttk.Button(footer, text="版本信息",
@@ -347,7 +388,7 @@ class AccessoryEditorApp(tk.Tk):
         self.accessory_tab = ttk.Frame(self.notebook, padding=(2, 2))
         self.soul_tab = ttk.Frame(self.notebook, padding=(2, 2))
         self.notebook.add(self.accessory_tab, text="饰品")
-        self.notebook.add(self.soul_tab, text="魂核")
+        self.notebook.add(self.soul_tab, text="魂核（魂之核）")
 
         mid = ttk.Panedwindow(self.accessory_tab, orient=tk.HORIZONTAL)
         mid.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=4)
@@ -395,7 +436,8 @@ class AccessoryEditorApp(tk.Tk):
                   wraplength=380, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 0))
         mid.add(left, weight=2)
 
-        right = ttk.Frame(mid)
+        right_scroll = ttk.Frame(mid)
+        right = self._scrollable(right_scroll, width=540)
         ttk.Label(right, text="词条槽（选择词条后点 应用修改）").pack(anchor=tk.W)
         # 需求(4): 输入关键词 -> 列出全部匹配 -> 从匹配里选。
         search_row = ttk.Frame(right)
@@ -574,9 +616,13 @@ class AccessoryEditorApp(tk.Tk):
                                     justify=tk.LEFT)
         self.item_label.pack(anchor=tk.W, pady=(6, 0))
 
-        mid.add(right, weight=3)
+        mid.add(right_scroll, weight=3)
 
         self._build_soul_tab()
+        # Both editor columns exist now: let the wheel scroll whichever one the
+        # pointer is over (the scrollbar works regardless).
+        for canvas, inner in self.scroll_columns:
+            self._bind_wheel_to_children(inner, canvas)
 
     # ------------------------------------------------- 筛选 / 关键词 / 新建
     def clear_filters(self) -> None:
@@ -828,7 +874,8 @@ class AccessoryEditorApp(tk.Tk):
                             lambda _event: self._on_soul_selected())
         mid.add(left, weight=2)
 
-        right = ttk.Frame(mid)
+        right_scroll = ttk.Frame(mid)
+        right = self._scrollable(right_scroll, width=540)
         ttk.Label(right, text="魂核词条槽（选择词条后点 应用修改）").pack(anchor=tk.W)
         soul_search = ttk.Frame(right)
         soul_search.pack(fill=tk.X, pady=(2, 2))
@@ -935,6 +982,9 @@ class AccessoryEditorApp(tk.Tk):
         ttk.Label(soul_create, textvariable=self.create_soul_status_var,
                   foreground="#666666", wraplength=560,
                   justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        # Without this the whole 魂核 editor column never appears in its panedwindow:
+        # the tree showed up, the 词条槽/等级/种类/新建 rows did not.
+        mid.add(right_scroll, weight=3)
         self._set_soul_controls(False)
         if self.soul_db_error:
             self.soul_kind_status_var.set(
@@ -1297,6 +1347,14 @@ class AccessoryEditorApp(tk.Tk):
     # ------------------------------------------------------------- version
 
     @staticmethod
+    def _version_short() -> str:
+        """The footer's one-line identity; the 版本信息 dialog has the details."""
+        info = version_info()
+        built = info.built_at if info.built_at != UNKNOWN else "源码运行"
+        return (f"v{info.version} · commit {info.commit}{info.dirty_suffix}"
+                f" · 构建 {built} · {info.language}")
+
+    @staticmethod
     def _version_text() -> str:
         """Four required facts: commit tail, source, build time, language."""
         info = version_info()
@@ -1558,7 +1616,11 @@ class AccessoryEditorApp(tk.Tk):
                   "可在命令行运行 scan 命令查看完整诊断并反馈给作者。",
             )
             return
-        self._status(f"已读取 {len(self.accessory_views)} 件饰品{suffix}{other_note}")
+        souls = len([view for view in self.soul_views if not view.unidentified])
+        soul_note = (f" · 魂核 {souls} 个已读好，见上方的『魂核（魂之核）』页签"
+                     if souls else "")
+        self._status(f"已读取 {len(self.accessory_views)} 件饰品{suffix}"
+                     f"{other_note}{soul_note}")
         self.table_var.set(layout.describe())
 
     def _report_no_layout(self, payload: object) -> None:

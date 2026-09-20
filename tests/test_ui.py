@@ -102,12 +102,13 @@ class ConstructionTests(UiTestCase):
     def test_title_and_footer_report_the_build(self) -> None:
         info = version_info()
         self.assertIn(f"v{info.version}", self.app.title())
+        # The footer is one compact line now; the full identity lives in the dialog
+        # (test_version_button_shows_the_full_banner covers every fact).
         footer = self.app.version_var.get()
+        self.assertNotIn("\n", footer)
         self.assertIn(f"commit {info.commit}", footer)
-        self.assertIn(f"来源 {info.built_from}", footer)
-        self.assertIn(f"加密组件 {info.crypto_exe}", footer)
         self.assertIn(info.language, footer)
-        self.assertIn("构建时间", footer)
+        self.assertIn("构建", footer)
 
     def test_version_button_shows_the_full_banner(self) -> None:
         info = version_info()
