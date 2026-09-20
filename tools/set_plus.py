@@ -1,4 +1,8 @@
-"""Set the unverified ``+0x0A`` word on one accessory — the in-game A/B test tool.
+"""Set the +値 (``+0x0A``) of one accessory — a one-field writer.
+
+``edit --plus N`` is the normal way to do this; this script stays as the
+no-subcommand version of the same edit.
+
 
     python tools/set_plus.py --record 28 --value 0            # dry-run
     python tools/set_plus.py --record 28 --value 0 --write    # really write
@@ -54,7 +58,10 @@ def main(argv: list[str] | None = None) -> int:
                         help=f"新的 +0x0A 值（0..{records.MAX_RECORD_PLUS}）")
     parser.add_argument("--write", action="store_true",
                         help="真正写入（缺省只演练；写入前会自动备份）")
-    parser.add_argument("--force-while-running", action="store_true")
+    parser.add_argument("--at-title-screen", action="store_true",
+                        help="确认游戏停在标题界面（未载入存档）时也允许写入")
+    parser.add_argument("--force-while-running", action="store_true",
+                        help="--at-title-screen 的旧名，效果相同")
     args = parser.parse_args(argv)
 
     db = AffixDb()
@@ -73,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     if view is None:
         raise EditorError(f"记录 #{args.record} 不在当前存档的饰品记录中")
     print(f"目标: #{view.slot_index} {items.describe(view.record_type) or '未知种类'} "
-          f"Lv{view.level} {view.rarity_name}，当前 +0x0A={view.plus_candidate}")
+          f"Lv{view.level} {view.rarity_name}，当前 +值={view.plus_value}")
 
     plan = plan_plus_edit(data, args.record, args.value, affix_db=db,
                           known_ids=known, layout=layout)
@@ -99,10 +106,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     result = commit_save(save, patched, crypto=crypto, state_root=_state_root(args),
                          dry_run=False, verify=True,
-                         allow_game_running=args.force_while_running)
+                         allow_game_running=bool(args.at_title_screen
+                                                or args.force_while_running))
     print(f"已写入: {save.path}（备份 {result.get('backup_dir')}）")
-    print("请进游戏看这件饰品的显示：名称/数值/图标是否有变化，"
-          "再和同种类其它件对比；本工具无法替你判断这个字段的含义。")
+    print("已改的是 +值（物品卡上的 +N）；请进游戏确认显示，"
+          "并和同种类其它件对比。")
     return 0
 
 

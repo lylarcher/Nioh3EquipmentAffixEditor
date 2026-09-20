@@ -358,7 +358,9 @@ def require_game_not_running(*, allow_running: bool = False) -> tuple[str, ...]:
             + "、".join(running)
             + "）。\n"
             + SAVE_WRITE_REQUIREMENT
-            + "\n如已退到标题界面且确认要写入，请显式使用 --force-while-running。"
+            + "\n如已退到标题界面且确认要写入，请显式使用 --at-title-screen"
+              "（旧名 --force-while-running）；GUI 里对应窗口底部那个"
+              "「我确认：游戏正在运行，但停留在标题界面」勾选框。"
         )
     return running
 

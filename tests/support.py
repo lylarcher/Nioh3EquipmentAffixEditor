@@ -88,10 +88,12 @@ def build_record(
     prefix: int = 0x00010002,
     tail_0: int = 0,
     tail_1: int = 0,
+    plus: int = 0,
 ) -> bytes:
     """Build a 0xE8-byte synthetic item record with ``effects`` in slots 0..n.
 
-    ``effects`` entries are ``(effect_id, value, metadata)``.
+    ``effects`` entries are ``(effect_id, value, metadata)``; ``plus`` is the +値
+    written to ``+0x0A``.
     """
     if len(effects) > records.EFFECT_COUNT:
         raise ValueError("too many effects for one record")
@@ -101,6 +103,7 @@ def build_record(
     struct.pack_into("<H", record, records.RECORD_ITEM_COUNT_OFFSET, 1)
     struct.pack_into("<H", record, records.RECORD_LEVEL_OFFSET, level)
     struct.pack_into("<H", record, records.RECORD_MIRROR_LEVEL_OFFSET, level)
+    struct.pack_into("<H", record, records.RECORD_PLUS_OFFSET, plus)
     struct.pack_into("<I", record, records.RECORD_ACCOUNT_LOW_OFFSET, account_low32)
     record[records.RECORD_RARITY_OFFSET] = rarity & 0x0F
     for index in range(records.EFFECT_COUNT):

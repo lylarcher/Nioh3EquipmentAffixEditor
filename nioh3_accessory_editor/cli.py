@@ -35,6 +35,7 @@ from .editor import (
     apply_grace_edit,
     apply_kind_swaps,
     apply_level_edits,
+    apply_plus_edits,
     apply_soul_edits,
     apply_creations,
     commit_save,
@@ -47,6 +48,7 @@ from .editor import (
     plan_creation,
     plan_kind_swap,
     plan_level_edit,
+    plan_plus_edit,
     resolve_grace_id,
     resolve_item_id,
     restore_backup,
@@ -300,7 +302,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     running = running_game_processes()
     if running:
         print(f"当前状态：检测到 {'、'.join(running)} 正在运行——"
-              f"{'已强制继续（--force-while-running）' if args.force_while_running else '将被拒绝'}。")
+              f"{'已确认停在标题界面（--at-title-screen）' if _title_screen_confirmed(args) else '将被拒绝'}。")
     else:
         print("当前状态：未检测到游戏进程。")
     if args.dry_run:
@@ -308,7 +310,7 @@ def cmd_create(args: argparse.Namespace) -> int:
     result = commit_save(
         save, patched, crypto=crypto, state_root=_state_root(args),
         dry_run=args.dry_run, verify=not args.no_verify,
-        allow_game_running=args.force_while_running,
+        allow_game_running=_title_screen_confirmed(args),
     )
     if result.get("dry_run"):
         print("演练完成：校验通过，未写入存档。")
@@ -474,6 +476,16 @@ def _parse_edit_spec(spec: str, affix_db: AffixDb | None = None,
     return edit
 
 
+def _title_screen_confirmed(args: argparse.Namespace) -> bool:
+    """True when the operator confirmed the game sits on its title screen.
+
+    ``--at-title-screen`` is the explicit spelling; ``--force-while-running`` is
+    the older name for the same acknowledgement and keeps working.
+    """
+    return bool(getattr(args, "at_title_screen", False)
+                or getattr(args, "force_while_running", False))
+
+
 def cmd_edit(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
     grace_db = GraceDb.best_effort()
@@ -494,11 +506,12 @@ def cmd_edit(args: argparse.Namespace) -> int:
         grace_id = resolve_grace_id(grace_db, args.grace)
     chosen = sum(1 for flag in (bool(args.edit), grace_id is not None,
                                 args.level is not None,
+                                args.plus is not None,
                                 args.kind is not None,
                                 args.search is not None) if flag)
     if chosen != 1:
-        raise EditorError("五选一：--edit 改词条，--grace 改恩宠，--level 改等级，"
-                          "--kind 改种类，--search 只搜索词条不改存档"
+        raise EditorError("六选一：--edit 改词条，--grace 改恩宠，--level 改等级，"
+                          "--plus 改 +值，--kind 改种类，--search 只搜索词条不改存档"
                           "（不能同时使用，也不能都不给）")
     edits = tuple(
         {"record_index": args.record,
@@ -549,6 +562,15 @@ def cmd_edit(args: argparse.Namespace) -> int:
               "但游戏是否会在读取后按等级重算显示数值无法由存档证明，"
               "请谨慎使用并进游戏确认。")
         patched = apply_level_edits(data, [plan])
+    elif args.plus is not None:
+        plan = plan_plus_edit(data, args.record, args.plus,
+                              affix_db=affix_db, known_ids=known_ids,
+                              layout=layout)
+        print(f"+值: {plan.describe()}")
+        print("注意：只写入 +值 字段（+0x0A）与校验和。"
+              "该字段已由游戏内实测确认（存档字节与物品卡显示的 +13/+18/+19 一致），"
+              "改完请进游戏确认显示。")
+        patched = apply_plus_edits(data, [plan])
     elif args.kind is not None:
         target = resolve_item_id(item_db, args.kind)
         plan = plan_kind_swap(data, args.record, target, affix_db=affix_db,
@@ -611,7 +633,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
     running = running_game_processes()
     if running:
         print(f"当前状态：检测到 {'、'.join(running)} 正在运行——"
-              f"{'已强制继续（--force-while-running）' if args.force_while_running else '将被拒绝'}。")
+              f"{'已确认停在标题界面（--at-title-screen）' if _title_screen_confirmed(args) else '将被拒绝'}。")
     else:
         print("当前状态：未检测到游戏进程。")
     if args.dry_run:
@@ -625,7 +647,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         state_root=_state_root(args),
         dry_run=args.dry_run,
         verify=not args.no_verify,
-        allow_game_running=args.force_while_running,
+        allow_game_running=_title_screen_confirmed(args),
     )
     print("\n" + json.dumps(result, ensure_ascii=False, indent=2))
     if not result["dry_run"]:
@@ -690,7 +712,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
     running = running_game_processes()
     if running:
         print(f"当前状态：检测到 {'、'.join(running)} 正在运行——"
-              f"{'已强制继续（--force-while-running）' if args.force_while_running else '将被拒绝'}。")
+              f"{'已确认停在标题界面（--at-title-screen）' if _title_screen_confirmed(args) else '将被拒绝'}。")
     else:
         print("当前状态：未检测到游戏进程。")
     if args.dry_run:
@@ -705,7 +727,7 @@ def cmd_restore(args: argparse.Namespace) -> int:
         state_root=state_root,
         dry_run=args.dry_run,
         verify=not args.no_verify,
-        allow_game_running=args.force_while_running,
+        allow_game_running=_title_screen_confirmed(args),
     )
     print("\n" + json.dumps(result, ensure_ascii=False, indent=2))
     if not result["dry_run"]:
@@ -872,6 +894,9 @@ def build_parser() -> argparse.ArgumentParser:
                                   f"{records.MIN_ITEM_LEVEL}..{records.MAX_ITEM_LEVEL}，"
                                   f"{records.MAX_ITEM_LEVEL} 是游戏上限）；"
                                   "只写等级字段，出厂词条数值不变")
+    parser_edit.add_argument("--plus", type=int, default=None, metavar="N",
+                             help=f"改 +值（0..{records.MAX_RECORD_PLUS}）；"
+                                  "该字段已由游戏内实测确认（+0x0A），只写这一个字段")
     parser_edit.add_argument("--kind", default=None,
                              help="改种类：目标必须是同分类（武士饰品/忍者饰品）"
                                   "且在存档里已有实例的饰品种类，"
@@ -882,8 +907,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser_edit.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
     parser_edit.add_argument("--no-verify", action="store_true",
                              help="跳过写入前后的解密校验（更快，但风险更高）")
+    parser_edit.add_argument("--at-title-screen", action="store_true",
+                             help="确认游戏正停在标题界面（未载入存档）时也允许写入；"
+                                  "等价于 GUI 里勾选那个确认框")
     parser_edit.add_argument("--force-while-running", action="store_true",
-                             help="即使检测到游戏正在运行也继续写入（不推荐）")
+                             help="--at-title-screen 的旧名，效果相同（不推荐，"
+                                  "请优先用 --at-title-screen 表达你确认的内容）")
     parser_edit.set_defaults(func=cmd_edit)
 
     parser_create = sub.add_parser(
@@ -904,8 +933,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser_create.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
     parser_create.add_argument("--no-verify", action="store_true",
                                help="跳过写入前后的解密校验（更快，但风险更高）")
+    parser_create.add_argument("--at-title-screen", action="store_true",
+                               help="确认游戏正停在标题界面（未载入存档）时也允许写入")
     parser_create.add_argument("--force-while-running", action="store_true",
-                               help="即使检测到游戏正在运行也继续写入（不推荐）")
+                               help="--at-title-screen 的旧名，效果相同")
     parser_create.set_defaults(func=cmd_create)
 
     parser_backup = sub.add_parser("backup", help="备份存档（解密明文副本）")
@@ -922,8 +953,10 @@ def build_parser() -> argparse.ArgumentParser:
                                 help="仅演练：检查并校验，不写入")
     parser_restore.add_argument("--no-verify", action="store_true",
                                 help="跳过写入前后的解密校验（更快，但风险更高）")
+    parser_restore.add_argument("--at-title-screen", action="store_true",
+                                help="确认游戏正停在标题界面（未载入存档）时也允许恢复")
     parser_restore.add_argument("--force-while-running", action="store_true",
-                                help="即使检测到游戏正在运行也继续写入（不推荐）")
+                                help="--at-title-screen 的旧名，效果相同")
     parser_restore.set_defaults(func=cmd_restore)
 
     parser_version = sub.add_parser("version", help="显示版本与构建信息")

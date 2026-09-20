@@ -85,6 +85,7 @@ __all__ = [
     "read_record_item_id",
     "read_record_level",
     "read_record_level_mirror",
+    "read_record_plus",
     "read_record_plus_candidate",
     "record_is_empty",
     "record_offset",
@@ -165,19 +166,21 @@ RECORD_LEVEL_MIRRORS = (RECORD_LEVEL_OFFSET, RECORD_MIRROR_LEVEL_OFFSET)
 EFFECT_FIXED_MARKER_SHIFT = 8
 EFFECT_FIXED_MARKER_BIT = 0x40
 
-#: ``+0x0A``: a per-instance field, 0..30 across the reference save's 1535 item
-#: records (0..18 on 魂核), constant for a given piece and independent of level,
-#: of the item kind and of every effect value.  The user reports a "+值" with a cap
-#: around 15, which fits this field being twice the +值 — but that is **not yet
-#: confirmed in game**, so nothing writes it: ``RECORD_PLUS_OFFSET`` is here to
-#: document the candidate, and the writer refuses until the mapping is verified.
+#: ``+0x0A``: the item's **+値**, confirmed in game.  The user read three same-kind
+#: accessories off their 龙笛[武士] cards (+13 / +18 / +19) and the field holds exactly
+#: 13 / 18 / 19 for those records (#28 / #3 / #521) — a 1:1 mapping, not the "twice the
+#: +値" reading this comment used to carry.  It is a per-instance field (0..30 across
+#: the reference save's 213 accessories, 0..18 on its 魂核), constant for a given piece,
+#: and independent of level, rarity, kind and every stored effect value.
 RECORD_PLUS_OFFSET = 0x0A
 
-#: Highest ``+0x0A`` value the reporting save uses (0..30 across its 213
-#: accessories).  The field's meaning is unverified, so writes stay inside the
-#: span that is actually observed instead of guessing a wider one.
+#: Highest ``+0x0A`` value the reference save uses (0..30 across its 213 accessories).
+#: The field's meaning is confirmed, but no save or workbook states the game's own cap,
+#: so writes stay inside the span that was actually observed instead of guessing higher.
 MAX_RECORD_PLUS = 30
-RECORD_PLUS_CANDIDATE_MAX = 30
+
+#: Kept for callers written while the field was still a candidate; same span.
+RECORD_PLUS_CANDIDATE_MAX = MAX_RECORD_PLUS
 
 
 # Six known scroll record types (CATEGORY_TO_TYPE in the reference project).
@@ -464,14 +467,21 @@ def read_record_level_mirror(record: bytes) -> int:
     return struct.unpack_from("<H", record, RECORD_MIRROR_LEVEL_OFFSET)[0]
 
 
-def read_record_plus_candidate(record: bytes) -> int:
-    """Read ``+0x0A`` — the *candidate* "+值" field, still unverified.
+def read_record_plus(record: bytes) -> int:
+    """Read ``+0x0A`` — the item's **+値**, confirmed in game.
 
-    Returned for display only; nothing writes it (see ``RECORD_PLUS_OFFSET``).
+    An accessory card shows the number this field holds: three 龙笛[武士] read
+    +13 / +18 / +19, exactly the bytes of records #28 / #3 / #521, so the mapping
+    is 1:1 and the value is no longer a guess.
     """
     if len(record) != SCROLL_RECORD_SIZE:
         raise RecordError("record must be exactly 0xE8 bytes")
     return struct.unpack_from("<H", record, RECORD_PLUS_OFFSET)[0]
+
+
+def read_record_plus_candidate(record: bytes) -> int:
+    """Deprecated alias of :func:`read_record_plus`, kept for older callers."""
+    return read_record_plus(record)
 
 
 def read_record_item_id(record: bytes) -> int:
@@ -482,22 +492,22 @@ def read_record_item_id(record: bytes) -> int:
 
 
 def patch_record_plus(record: bytes, value: int) -> bytes:
-    """Return ``record`` with ``+0x0A`` set to ``value`` (the "+值" *candidate*).
+    """Return ``record`` with ``+0x0A`` (the item's +値) set to ``value``.
 
-    ``+0x0A`` is the one header word whose meaning is still unverified, so this
-    writer exists **for the in-game A/B test** and stays inside the span the
-    reporting save actually uses (0..30, 213/213 accessories).  Everything else in
-    the record is left byte-identical: no affix, no level, no mirror is touched,
-    because no other field is known to be a copy of this one.
+    The mapping byte → in-game +値 is 1:1 (verified on three 龙笛), so this is a normal
+    edit.  It stays inside the span the reference save actually uses (0..30) because no
+    source states the game's own cap.  Everything else in the record is left
+    byte-identical: no affix, no level, no mirror is touched, because no other field is
+    known to be a copy of this one.
     """
     if len(record) != SCROLL_RECORD_SIZE:
         raise RecordError("record must be exactly 0xE8 bytes")
     if not isinstance(value, int) or isinstance(value, bool):
-        raise RecordError("+0x0A 的值必须是整数")
+        raise RecordError("+值 必须是整数")
     if not 0 <= value <= MAX_RECORD_PLUS:
         raise RecordError(
-            f"+0x0A 必须在 0..{MAX_RECORD_PLUS} 之间（这是参考存档里实测的取值范围；"
-            "该字段含义尚未核实，不接受范围外的值）"
+            f"+值必须在 0..{MAX_RECORD_PLUS} 之间（这是参考存档里实测的取值范围；"
+            "游戏自身的上限没有可核对的依据，不接受范围外的值）"
         )
     patched = bytearray(record)
     struct.pack_into("<H", patched, RECORD_PLUS_OFFSET, value)

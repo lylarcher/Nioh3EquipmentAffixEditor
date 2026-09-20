@@ -45,6 +45,7 @@ from .editor import (
     apply_grace_edit,
     apply_kind_swaps,
     apply_level_edits,
+    apply_plus_edits,
     apply_soul_edits,
     collect_kind_samples,
     commit_save,
@@ -57,6 +58,7 @@ from .editor import (
     open_save,
     plan_kind_swap,
     plan_level_edit,
+    plan_plus_edit,
     resolve_grace_id,
     restore_backup,
     save_checksum_is_valid,
@@ -67,6 +69,7 @@ from .records import (
     EFFECT_COUNT,
     EMPTY_EFFECT_ID,
     MAX_ITEM_LEVEL,
+    MAX_RECORD_PLUS,
     EffectSlot,
     InventoryLayout,
     RecordError,
@@ -102,13 +105,14 @@ EMPTY_LABEL = "(空)"
 #: Sentinel for "no filter" in the 种类 / 恩宠 filter comboboxes (需求 3).
 ALL_FILTER = "(全部)"
 
-#: Game-process state line.  Writing needs the game closed, so the state is shown
+#: Game-process state line.  Writing needs the game closed *or* an explicit
+#: acknowledgement that it sits on its title screen, so the state is shown
 #: continuously instead of only when a write is refused.
 GAME_STATUS_UNKNOWN = "游戏状态：检查中…"
 GAME_STATUS_CLOSED = "游戏状态：未检测到仁王3 进程 —— 可以写入存档"
 GAME_STATUS_RUNNING = (
-    "游戏状态：{names} 正在运行 —— 写入会被拒绝，请完全退出游戏"
-    "（或退回到标题界面且不加载存档）后重试"
+    "游戏状态：{names} 正在运行 —— 写入会被拒绝；"
+    "若游戏确实停在标题界面，请勾选窗口底部的确认框再写入"
 )
 #: How often the process list is re-checked (ms).  The check spawns tasklist, so
 #: it runs on the worker thread and never blocks the window.
@@ -296,6 +300,18 @@ class AccessoryEditorApp(tk.Tk):
                                            foreground="#666666")
         self.game_status_label.pack(side=tk.BOTTOM, fill=tk.X, padx=8, pady=(2, 0))
 
+        # Writing while the game runs is only safe from its title screen: the game
+        # has not loaded the save into memory yet, so it cannot overwrite the file.
+        # Requiring this box (auto-cleared after every write) turns "the game is
+        # running" from a refusal into an explicit, checked acknowledgement.
+        self.title_screen_var = tk.BooleanVar(value=False)
+        self.title_screen_check = ttk.Checkbutton(
+            self, variable=self.title_screen_var, takefocus=True,
+            text="我确认：游戏正在运行，但停留在标题界面（尚未载入存档）→ 允许写入",
+            command=self._on_title_screen_toggled,
+        )
+        self.title_screen_check.pack(side=tk.BOTTOM, fill=tk.X, padx=8)
+
         controls = ttk.Frame(self, padding=(8, 2))
         controls.pack(side=tk.BOTTOM, fill=tk.X)
         self.controls = controls
@@ -360,13 +376,16 @@ class AccessoryEditorApp(tk.Tk):
         self.grace_filter_combo.bind("<<ComboboxSelected>>",
                                      lambda _event: self._refresh_accessory_tree())
         self.tree = ttk.Treeview(
-            left, columns=("level", "rarity", "type"), show="tree headings", height=16,
+            left, columns=("level", "plus", "rarity", "type"), show="tree headings",
+            height=16,
         )
         self.tree.heading("#0", text="记录")
         self.tree.heading("level", text="等级")
+        self.tree.heading("plus", text="+值")
         self.tree.heading("rarity", text="品质")
         self.tree.heading("type", text="种类（只读）")
         self.tree.column("level", width=52, anchor=tk.CENTER)
+        self.tree.column("plus", width=44, anchor=tk.CENTER)
         self.tree.column("rarity", width=76, anchor=tk.CENTER)
         self.tree.column("type", width=190, anchor=tk.W)
         self.tree.pack(fill=tk.BOTH, expand=True)
@@ -432,8 +451,9 @@ class AccessoryEditorApp(tk.Tk):
                   "恩宠（xxx的恩宠）可以用下面的【恩宠】栏改成另一个恩宠；"
                   "套装/专属套装（如 怨恨盖世）按规则不允许改动。\n"
                   "「种类」一栏由《仁王3词条装备库v2.21》物品总目录的饰品条目解析得到。"
-                  "等级可以改（上限 180）；「+值」对应的字段尚未在游戏内核实，"
-                  "所以工具只显示、不修改。"),
+                  "等级可以改（上限 180）；「+值」也可以改（字段 +0x0A，"
+                  "已由游戏内实测确认：存档字节与物品卡显示的 +13/+18/+19 一致，"
+                  f"合法范围 0..{MAX_RECORD_PLUS}，只写这一个字段）。"),
             foreground="#666666", wraplength=520, justify=tk.LEFT,
         )
         note.pack(anchor=tk.W, pady=(6, 0))
@@ -457,6 +477,28 @@ class AccessoryEditorApp(tk.Tk):
         )
         self.level_status_label.pack(anchor=tk.W, pady=(4, 0))
         self._set_level_enabled(False)
+
+        # +值: the item card's "+N", confirmed in game to be record byte +0x0A.
+        self.plus_frame = ttk.LabelFrame(
+            right, text=f"+值（0..{MAX_RECORD_PLUS}，字段 +0x0A）", padding=(6, 4))
+        self.plus_frame.pack(fill=tk.X, pady=(6, 0))
+        plus_row = ttk.Frame(self.plus_frame)
+        plus_row.pack(fill=tk.X)
+        ttk.Label(plus_row, text="改成:").pack(side=tk.LEFT)
+        self.plus_var = tk.StringVar(value="")
+        self.plus_entry = ttk.Entry(plus_row, textvariable=self.plus_var, width=8)
+        self.plus_entry.pack(side=tk.LEFT, padx=4)
+        self.plus_button = ttk.Button(plus_row, text="应用 +值",
+                                      command=self.apply_plus_to_selection)
+        self.plus_button.pack(side=tk.LEFT, padx=2)
+        self.plus_status_var = tk.StringVar(
+            value="选择一条饰品记录后，这里会显示它的 +值。")
+        self.plus_status_label = ttk.Label(
+            self.plus_frame, textvariable=self.plus_status_var,
+            foreground="#666666", wraplength=520, justify=tk.LEFT,
+        )
+        self.plus_status_label.pack(anchor=tk.W, pady=(4, 0))
+        self._set_plus_enabled(False)
 
         self.kind_frame = ttk.LabelFrame(right, text="种类（同分类互换）", padding=(6, 4))
         self.kind_frame.pack(fill=tk.X, pady=(6, 0))
@@ -574,7 +616,9 @@ class AccessoryEditorApp(tk.Tk):
             self.tree.insert(
                 "", "end", iid=str(view.slot_index),
                 text=f"#{view.slot_index} @ {view.offset:#x}",
-                values=(view.level, view.rarity_name, label),
+                # Tk normalises a numeric-looking cell ("+5" comes back as "5"), so
+                # the meaning rides on the column header and the cell is a plain number.
+                values=(view.level, str(view.plus_value), view.rarity_name, label),
             )
         total = len(self.accessory_views)
         if self.kind_filter_var.get() in ("", self.ALL_FILTER) and \
@@ -1350,6 +1394,8 @@ class AccessoryEditorApp(tk.Tk):
         elif tag == "accessories_failed":
             self._report_no_layout(value)
         elif tag == "written" and isinstance(value, dict):
+            # The acknowledgement is spent: the next write must confirm again.
+            self.title_screen_var.set(False)
             self._status(f"已写入，SHA-256 {value.get('new_sha256', '')}")
             messagebox.showinfo("完成", "修改已写入存档。\n请在游戏中重新加载存档查看效果。")
         elif tag == "dry_run" and isinstance(value, dict):
@@ -1378,6 +1424,7 @@ class AccessoryEditorApp(tk.Tk):
                 + note + "\n\n请在游戏中加载该存档确认。",
             )
             self._invalidate_loaded_save()
+            self.title_screen_var.set(False)
         elif tag == "restore_dry_run" and isinstance(value, dict):
             self._status("恢复演练完成（未写入）")
             messagebox.showinfo(
@@ -1593,6 +1640,7 @@ class AccessoryEditorApp(tk.Tk):
         self.level_var.set(str(view.level))
         self._refresh_grace_state(view)
         self._refresh_level_state(view)
+        self._refresh_plus_state(view)
         self._refresh_kind_state(view)
 
     def _set_grace_enabled(self, enabled: bool) -> None:
@@ -1786,6 +1834,23 @@ class AccessoryEditorApp(tk.Tk):
         self.level_entry.state(["!disabled"] if enabled else ["disabled"])
         self.level_button.state(["!disabled"] if enabled else ["disabled"])
 
+    # -- +值 ----------------------------------------------------------------
+    def _set_plus_enabled(self, enabled: bool) -> None:
+        self.plus_entry.state(["!disabled"] if enabled else ["disabled"])
+        self.plus_button.state(["!disabled"] if enabled else ["disabled"])
+
+    def _refresh_plus_state(self, view: AccessoryView) -> None:
+        """Enable the +值 row for the selected record and show its current value."""
+        self.plus_var.set(str(view.plus_value))
+        self.plus_status_var.set(
+            f"当前 +{view.plus_value}（字段 +0x0A，只写这两个字节；"
+            f"合法范围 0..{MAX_RECORD_PLUS}——这是实测到的取值范围，"
+            "游戏自身的上限没有可核对的依据）。"
+            "该字段已由游戏内实测确认：物品卡显示的 +13/+18/+19 与存档字节一致。"
+        )
+        self.plus_status_label.configure(foreground="#1a7f37")
+        self._set_plus_enabled(True)
+
     def _refresh_level_state(self, view: AccessoryView) -> None:
         """Enable the 等级 row only for a record whose level fields agree."""
         if view.level_mirror != view.level:
@@ -1937,6 +2002,84 @@ class AccessoryEditorApp(tk.Tk):
         self._on_accessory_selected()
         self._status(f"记录 #{target} 的等级已改为 {level}（尚未写入存档）")
 
+    def apply_plus_to_selection(self) -> None:
+        """Change the selected record's +值 (memory only; 写入存档 commits)."""
+        if self.decrypted is None or self.selected_accessory is None:
+            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            return
+        text = self.plus_var.get().strip()
+        try:
+            value = int(text, 10)
+        except ValueError:
+            messagebox.showwarning("提示", f"+值必须是整数：{text!r}")
+            return
+        target = self.selected_accessory
+        if not messagebox.askokcancel(
+            "确认修改 +值",
+            f"把记录 #{target} 的 +值改成 {value}？\n\n"
+            "· 只写入 +值 字段（+0x0A）与校验和，词条、等级、标识都不动；\n"
+            f"· 合法范围 0..{MAX_RECORD_PLUS}（实测范围）；\n"
+            "· 该字段已在游戏内确认就是物品卡上的 +值，改完请进游戏复核；\n"
+            "· 存档写入前会自动备份，出问题可以用「回滚」恢复。",
+            icon="warning",
+        ):
+            return
+        known_ids = accessory_catalog_ids(self.affix_db)
+        try:
+            plan = plan_plus_edit(self.decrypted, target, value,
+                                  affix_db=self.affix_db, known_ids=known_ids,
+                                  layout=self.layout)
+            self.decrypted = apply_plus_edits(self.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        layout = inspect_layout(self.decrypted, known_ids=known_ids)
+        self._populate_accessories(
+            (self.decrypted,
+             list_accessories(self.decrypted, layout=layout, known_ids=known_ids),
+             self.checksum_ok, layout),
+            keep_selection=True,
+        )
+        self.tree.selection_set(str(target))
+        self.selected_accessory = target
+        self._on_accessory_selected()
+        self._status(f"记录 #{target} 的 +值已改为 {value}（尚未写入存档）")
+
+    # -- 写入门禁：游戏运行中必须确认“停在标题界面” ------------------------
+    def _on_title_screen_toggled(self) -> None:
+        """Reflect the acknowledgement in the status line as soon as it changes."""
+        if self.title_screen_var.get():
+            self._status("已确认游戏停在标题界面——现在允许写入存档"
+                         "（每次写入后该确认会自动取消）。")
+        else:
+            self._status("已取消“停在标题界面”的确认；游戏运行中写入会被拒绝。")
+
+    def _title_screen_confirmed(self) -> bool:
+        """True when the game is not running, or the operator ticked the box.
+
+        The game only holds a save in memory after it has been loaded, so writing
+        from the title screen cannot be overwritten by it.  Without the tick, a
+        running game means refusal — there is no silent override.
+        """
+        return not running_game_processes() or bool(self.title_screen_var.get())
+
+    def _refuse_running_game(self, what: str) -> bool:
+        """Return True when the write must stop, after telling the user why."""
+        running = running_game_processes()
+        if self._title_screen_confirmed():
+            return False
+        messagebox.showwarning(
+            "游戏正在运行",
+            "检测到 " + "、".join(running) + " 正在运行。\n\n"
+            f"{what}只能在下面两种情况下进行：\n"
+            "  1. 完全退出游戏；或\n"
+            "  2. 游戏停在【标题界面】（尚未载入存档），并在窗口底部勾选\n"
+            "     「我确认：游戏正在运行，但停留在标题界面」这个确认框。\n\n"
+            "在游戏内的存档中写入会被游戏下次保存覆盖，所以这里直接拒绝。",
+        )
+        self._status(f"已拒绝{what}：游戏正在运行且未勾选“停在标题界面”的确认。")
+        return True
+
     def backup_save(self) -> None:
         if self.selected_save is None:
             messagebox.showwarning("提示", "请先选择存档")
@@ -2043,14 +2186,18 @@ class AccessoryEditorApp(tk.Tk):
         return chosen[0] if chosen else None
 
     def _restore_selected_backup(self, save: SaveDescriptor, entry: BackupEntry) -> None:
+        if self._refuse_running_game("恢复备份"):
+            return
         running = running_game_processes()
         warning = ""
         if entry.slot_index is not None and entry.slot_index != save.slot_index:
             warning += (f"\n\n⚠ 该备份来自栏位 {entry.slot_index:02d}，"
                         f"当前存档是栏位 {save.slot_index:02d}——请确认内容无误。")
         if running:
-            warning += ("\n\n⚠ 检测到游戏正在运行（" + "、".join(running) + "）。\n"
-                        "若你正处于游戏内的存档中，恢复的内容会被游戏下次保存覆盖。")
+            warning += ("\n\n检测到 " + "、".join(running) + " 正在运行，"
+                        "你已确认它停在【标题界面】；"
+                        "若其实已载入过存档，请先完全退出游戏，"
+                        "否则恢复的内容会被游戏下次保存覆盖。")
         if not messagebox.askyesno(
             "确认恢复",
             f"将用以下备份覆盖当前存档：\n{entry.plain_path}\n"
@@ -2078,20 +2225,16 @@ class AccessoryEditorApp(tk.Tk):
         if self.decrypted is None or self.selected_save is None:
             messagebox.showwarning("提示", "请先读取饰品")
             return
+        if self._refuse_running_game("写入存档"):
+            return
         running = running_game_processes()
         warning = ""
         if running:
             warning = (
-                "\n\n⚠ 检测到游戏正在运行（" + "、".join(running) + "）。\n"
-                "若你正处于游戏内的存档中，写进去的修改会被游戏下次保存覆盖。\n"
-                "正确做法：完全退出游戏，或退回到标题界面后再写入。"
+                "\n\n你已确认游戏停在【标题界面】。\n"
+                "如果你其实已经载入过存档（哪怕现在回到标题），请先完全退出游戏，"
+                "否则写进去的修改会被游戏下次保存覆盖。"
             )
-            if not messagebox.askyesno(
-                "游戏正在运行",
-                "当前游戏正在运行，只有在【标题界面】写入才是安全的。\n"
-                "确定你现在不在游戏内的存档中吗？" + warning,
-            ):
-                return
         if not messagebox.askyesno(
             "确认写入",
             "即将把修改写入存档（会自动备份原存档）。\n\n"

@@ -1138,7 +1138,7 @@ class LevelEditTests(EditorTestCase):
         view = list_accessories(self.plain)[0]
         self.assertEqual(view.level, 150)
         self.assertEqual(view.level_mirror, 150)
-        self.assertIsInstance(view.plus_candidate, int)
+        self.assertIsInstance(view.plus_value, int)
 
 
 class PlanTests(EditorTestCase):

@@ -85,22 +85,42 @@ class WriteRequirementTests(unittest.TestCase):
         self.assertIn("退出游戏", dialog)
         self.assertIn("标题界面", dialog)
 
-    def test_running_game_adds_an_extra_warning(self) -> None:
+    def test_running_game_is_refused_without_the_title_screen_tick(self) -> None:
         self._load()
+        warned: list[str] = []
+
+        def fake_showwarning(title, message, **_kwargs):
+            warned.append(f"{title}\n{message}")
+
+        with mock.patch.object(ui, "running_game_processes",
+                               return_value=("Nioh3.exe",)), \
+                mock.patch.object(ui.messagebox, "showwarning", fake_showwarning), \
+                mock.patch.object(ui.messagebox, "askyesno") as asked:
+            self.app.write_save()
+
+        self.assertEqual(len(warned), 1, "检测到游戏运行时应先拒绝并说明")
+        self.assertIn("Nioh3.exe", warned[0])
+        self.assertIn("标题界面", warned[0])
+        self.assertIn("勾选", warned[0])
+        asked.assert_not_called()
+
+    def test_the_ticked_box_keeps_the_write_confirmation_warning(self) -> None:
+        self._load()
+        self.app.title_screen_var.set(True)
         seen: list[str] = []
 
         def fake_askyesno(title, message, **_kwargs):
             seen.append(f"{title}\n{message}")
-            return False
+            return False  # decline: nothing is written
 
         with mock.patch.object(ui, "running_game_processes",
                                return_value=("Nioh3.exe",)), \
                 mock.patch.object(ui.messagebox, "askyesno", fake_askyesno):
             self.app.write_save()
 
-        self.assertEqual(len(seen), 1, "检测到游戏运行时应先提示")
-        self.assertIn("Nioh3.exe", seen[0])
+        self.assertEqual(len(seen), 1, "勾选确认后仍应弹出写入确认对话框")
         self.assertIn("标题界面", seen[0])
+        self.assertIn(SAVE_WRITE_REQUIREMENT, seen[0])
 
     def test_declining_writes_nothing(self) -> None:
         self._load()

@@ -118,7 +118,7 @@ class AccessoryView:
     kind_name: str = "装备/饰品"
     catalog_hits: int | None = None
     level_mirror: int = 0
-    plus_candidate: int = 0
+    plus_value: int = 0
 
     @property
     def is_accessory(self) -> bool | None:
@@ -584,11 +584,11 @@ def apply_level_edits(
 
 @dataclass(frozen=True, slots=True)
 class PlusPlan:
-    """A ``+0x0A`` change for one record — the in-game A/B test writer.
+    """A +値 change for one record (``+0x0A``).
 
-    The field's meaning is unverified.  This plan exists so the *user* can change
-    exactly one word, load the game, and see what the item card does; nothing else
-    in the record is touched.
+    +値 is confirmed in game: the item card's "+13 / +18 / +19" equals this field
+    byte for byte on three same-kind accessories.  Nothing else in the record is
+    touched — no affix, no level, no mirror.
     """
 
     record_index: int
@@ -597,8 +597,8 @@ class PlusPlan:
     new_value: int
 
     def describe(self) -> str:
-        return (f"记录 #{self.record_index}: +0x0A {self.old_value} → "
-                f"{self.new_value}（该字段含义未核实，仅供进游戏对照试验）")
+        return (f"记录 #{self.record_index}: +值 {self.old_value} → "
+                f"{self.new_value}（+0x0A，只写这一个字段）")
 
 
 def plan_plus_edit(
@@ -610,13 +610,14 @@ def plan_plus_edit(
     known_ids: frozenset[int] | None = None,
     layout: records.InventoryLayout | None = None,
 ) -> PlusPlan:
-    """Validate one ``+0x0A`` change (0..30, the span the save actually uses)."""
+    """Validate one +値 change (0..30, the span the reference save actually uses)."""
     if not isinstance(value, int) or isinstance(value, bool):
-        raise EditorError("+0x0A 的值必须是整数")
+        raise EditorError("+值 必须是整数")
     if not 0 <= value <= records.MAX_RECORD_PLUS:
         raise EditorError(
-            f"+0x0A 必须在 0..{records.MAX_RECORD_PLUS} 之间"
-            "（这是参考存档里实测的取值范围；含义未核实，不接受范围外的值）"
+            f"+值必须在 0..{records.MAX_RECORD_PLUS} 之间"
+            "（这是参考存档里实测的取值范围；游戏自身的上限没有可核对的依据，"
+            "不接受范围外的值）"
         )
     if not isinstance(record_index, int) or isinstance(record_index, bool):
         raise EditorError("记录索引必须是整数")
@@ -631,9 +632,9 @@ def plan_plus_edit(
     record = records.read_item_record(decrypted, record_index, layout=layout)
     if record is None:
         raise EditorError(f"记录 #{record_index} 不存在或不是物品记录")
-    current = records.read_record_plus_candidate(record.record)
+    current = records.read_record_plus(record.record)
     if current == value:
-        raise EditorError(f"记录 #{record_index} 的 +0x0A 已经是 {value}")
+        raise EditorError(f"记录 #{record_index} 的 +值已经是 {value}")
     records.patch_record_plus(record.record, value)
     return PlusPlan(record_index=record_index, offset=record.offset,
                     old_value=current, new_value=value)
@@ -682,7 +683,7 @@ class SoulCoreView:
     kind_name: str = "魂核"
     catalog_hits: int | None = None
     level_mirror: int = 0
-    plus_candidate: int = 0
+    plus_value: int = 0
     unidentified: str = ""
 
     def describe_item(self, item_db: ItemDb | None = None) -> str:
@@ -817,7 +818,7 @@ def list_accessories(
             kind_name=record.kind_name,
             catalog_hits=record.catalog_hits,
             level_mirror=records.read_record_level_mirror(record.record),
-            plus_candidate=records.read_record_plus_candidate(record.record),
+            plus_value=records.read_record_plus(record.record),
         )
         for record in records.iter_item_records(decrypted, layout=layout,
                                                known_ids=known_ids)
@@ -866,7 +867,7 @@ def identify_soul_cores(
                     rarity=view.rarity, rarity_name=view.rarity_name,
                     account_id=view.account_id, effects=view.effects,
                     catalog_hits=hits, level_mirror=view.level_mirror,
-                    plus_candidate=view.plus_candidate,
+                    plus_value=view.plus_value,
                     unidentified=(f"疑似魂核但种类 {view.record_type:#06x} "
                                   "不在魂核种类表内，未识别；本工具不会改它"),
                 ))
@@ -881,7 +882,7 @@ def identify_soul_cores(
             rarity=view.rarity, rarity_name=view.rarity_name,
             account_id=view.account_id, effects=view.effects,
             catalog_hits=hits, level_mirror=view.level_mirror,
-            plus_candidate=view.plus_candidate,
+            plus_value=view.plus_value,
         ))
     return tuple(cores)
 

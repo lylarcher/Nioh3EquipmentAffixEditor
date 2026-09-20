@@ -200,8 +200,19 @@ class BilingualDocsTests(unittest.TestCase):
 
     def test_the_chinese_readme_mirrors_every_heading_level(self) -> None:
         def levels(text: str) -> list[int]:
-            return [len(line) - len(line.lstrip("#"))
-                    for line in text.splitlines() if line.startswith("#")]
+            # A heading needs a space after its hashes, and a line inside a fenced
+            # code block is never a heading — even when it starts with "#".
+            in_fence = False
+            found: list[int] = []
+            for line in text.splitlines():
+                if line.lstrip().startswith("```"):
+                    in_fence = not in_fence
+                    continue
+                if in_fence:
+                    continue
+                if re.match(r"^#{1,6} \S", line):
+                    found.append(len(line) - len(line.lstrip("#")))
+            return found
 
         self.assertEqual(levels(self.english), levels(self.chinese))
 

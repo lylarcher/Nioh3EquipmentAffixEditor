@@ -81,9 +81,13 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   bytes + 3 checksum bytes). Stored affix values do **not** scale with level (see
   the verified note on 数值 and 等级/`+值`), so this is a caution-flagged edit:
   the GUI asks for confirmation and says to check the result in game.
+* **+値 editing (the item card's `+N`)** — `edit --plus N` or the GUI's +值 row
+  (0..30, the range the reference save actually uses) writes only the two bytes of
+  `+0x0A`; confirmed in game against three 龙笛[武士] cards reading +13 / +18 / +19
+  (records #28 / #3 / #521). Independent of the 等级 edit in both directions.
 * **Live write-condition display** — the GUI footer shows whether a Nioh 3
-  process is running (green = writable, red = the write would be refused), so the
-  game-closed requirement is visible before you click 写入存档.
+  process is running (green = writable, red = needs the title-screen
+  acknowledgement), so the condition is visible before you click 写入存档.
 * **Legal-affix-only editing** — the affix catalog is built from the
   `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
   outside the table is rejected (fail closed).
@@ -125,7 +129,9 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 > **Before writing: close the game, or park it at the title screen.** Edits are
 > written into the save file, so the game must not have that save loaded (see
 > [Safety model](#safety-model)). Every write prints this requirement; the GUI
-> shows it permanently and repeats it in the confirmation dialog.
+> shows it permanently, repeats it in the confirmation dialog, and — while a game
+> process is running — additionally requires the 「游戏停在标题界面」 box to be
+> ticked (CLI: `--at-title-screen`).
 
 ```powershell
 # GUI
@@ -317,8 +323,9 @@ line options always win over the file.
 
 `--python-crypto`, `--save-index N` and `--account ID` are global options and
 must precede the subcommand. `--no-verify` skips the pre/post write decryption
-checks (faster, riskier); `--force-while-running` overrides the game-process
-gate.
+checks (faster, riskier); `--at-title-screen` acknowledges that the running game
+sits on its title screen and therefore lifts the game-process gate (the older
+`--force-while-running` means the same thing).
 
 Every command except `edit` and `restore --from ...` is strictly read-only
 (`restore` without `--from` only lists). A write refuses to touch the save when:
@@ -787,11 +794,15 @@ missing. To check a new file, run `check` and `list`: they print the located lay
 (stride/offset/slot count, and whether it matches the reference project's captured
 layout) plus how many records identified as accessories.
 
-### The one field that is still unknown: `+0x0A`
+### `+0x0A` is the item's +値 (and it is editable)
 
 Every other header word is pinned to something: `+0x00`/`+0x02` are the 种类 id,
 `+0x04` the item count, `+0x06`/`+0x08` the level, `+0x0C` a constant, `+0x30` the
-rarity. `+0x0A` is not. What is measured about it (reference save, 213 accessories):
+rarity. `+0x0A` was the last unknown; it is now **confirmed in game**: three
+same-kind accessories read +13 / +18 / +19 on their 龙笛[武士] cards, which is exactly
+what this field holds for records #28 / #3 / #521. The mapping is 1:1, so the tool
+edits it like any other verified field. What was measured about it before that
+(reference save, 213 accessories):
 
 * it takes **25 distinct values between 0 and 30**, and it is a property of the
   *instance*, not of the kind — 42 of 74 kinds show several values;
@@ -802,18 +813,22 @@ rarity. `+0x0A` is not. What is measured about it (reference save, 213 accessori
   is not an on-disk stat multiplier — the same reason the 等级 edit does not rewrite
   affix values.
 
-Because writing it is the only way to find out what the game shows, it has one
-dedicated tool instead of a general edit path:
+Three ways to change it, all bounded to 0..30 (the span the reference save actually
+uses; no source states the game's own cap) and all writing **only** those two bytes —
+no affix, no level, no mirror:
+
+* GUI: the 饰品 tab lists +値 per record and has a `+值（0..30，字段 +0x0A）` row;
+* CLI: `edit --record 28 --plus 13`;
+* no-subcommand script:
 
 ```powershell
-python tools/set_plus.py --record 28 --value 0            # 演练，不写入
-python tools/set_plus.py --record 28 --value 0 --write    # 真正写入（自动备份）
+python tools/set_plus.py --record 28 --value 13            # 演练，不写入
+python tools/set_plus.py --record 28 --value 13 --write    # 真正写入（自动备份）
 ```
 
-It refuses anything outside 0..30, verifies that **only** the two bytes of `+0x0A`
-changed and aborts otherwise, and never touches an affix, a level or a mirror. The
-safest first step needs no write at all: open the game and compare two same-kind
-items that already differ in `+0x0A` (e.g. three 龙笛[武士] at 13 / 18 / 19).
+The script verifies that only the bytes of `+0x0A` changed and aborts otherwise. The
+safest check needs no write at all: compare two same-kind items that already differ
+(e.g. three 龙笛[武士] at 13 / 18 / 19).
 
 ### Changing 等级
 
@@ -826,10 +841,10 @@ no-op, and refuses a record whose two level fields disagree (measured equal on a
 flagged **谨慎修改** because the stored affix values do not scale with level:
 measured across levels 135–180, every copy of a kind holds the same values (e.g.
 除雷护身符[武士] `雷属性伤害降低 +15` at levels 156–170), so any in-game increase
-must be computed by the game on load — which a save file cannot prove. The `+值`
-field is **not** written: the only per-instance counter in the header (`+0x0A`,
-0..30 on accessories) is an unconfirmed candidate for it, so the tool displays it
-(`+值候选`) and waits for an in-game check.
+must be computed by the game on load — which a save file cannot prove. The `+値`
+field is a **separate** edit (see
+[`+0x0A` is the item's +値](#0x0a-is-the-items-値-and-it-is-editable)): the 等级 row never
+touches it, and the +値 row never touches the level.
 
 ## Safety model
 
@@ -842,13 +857,21 @@ field is **not** written: the only per-instance counter in the header (`+0x0A`,
   also shows the game-process state continuously (green/red line at the bottom,
   re-checked every 3 s on a worker thread), so the condition is visible before you
   click 写入存档 instead of only after a refusal.
+* **Title-screen acknowledgement**: while a game process is running, the GUI
+  refuses every write (edit, +値, 等级, 种类, 新建, 恢复备份) until the operator ticks
+  the box 「我确认：游戏正在运行，但停留在标题界面（尚未载入存档）」 at the bottom of
+  the window; the tick is spent after each write, so the next one asks again. The
+  CLI equivalent is `--at-title-screen` (`--force-while-running` is the older name
+  for the same acknowledgement). Nothing is written silently — a running game
+  without the acknowledgement is a refusal, not a warning.
 * Backups: `<state root>/_nioh3_accessory_backup/account-<id>/slot-<NN>/` holds a
   decrypted `SAVEDATA-<timestamp>-<random>-plain.bin` plus `backup-manifest.json`
   (schema, account, slot, main-save SHA-256, plaintext SHA-256); see
   [Backup and restore](#backup-and-restore).
 * Game process gate: a detected `Nioh3.exe` / `Nioh3-Win64-Shipping.exe` makes
-  the writer fail closed (`GameRunningError`, CLI exit 1) unless
-  `--force-while-running` is passed explicitly.
+  the writer fail closed (`GameRunningError`, CLI exit 1) unless the title-screen
+  acknowledgement is passed explicitly (`--at-title-screen`, or its older name
+  `--force-while-running`).
 * Quiescence: save + `BACKUP.BIN` + the account system save are hashed twice
   0.2 s apart; any change aborts with `SAVE_SYNC_ACTIVE`.
 * Fingerprint races: hashing re-stats the file and aborts if size/mtime moved.

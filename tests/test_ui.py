@@ -285,8 +285,10 @@ class SelectionTests(UiTestCase):
         self.app._populate_accessories(payload)
         self.assertIn("饰品", self.app.status_var.get())
         self.assertIn("记录表", self.app.table_var.get())
-        # The type column keeps the raw record type and adds the catalog evidence.
-        label = self.app.tree.item("3", "values")[2]
+        # The type column keeps the raw record type and adds the catalog evidence
+        # (columns are 等级 / +值 / 品质 / 种类, so the label is the last one).
+        self.assertEqual(self.app.tree["columns"][-1], "type")
+        label = self.app.tree.item("3", "values")[-1]
         self.assertIn(f"{0x4001:#06x}", label)
         self.assertIn("词条命中 1", label)
         self.assertEqual([view.kind_name for view in views], ["饰品"])
@@ -462,16 +464,29 @@ class WriteFlowTests(UiTestCase):
             self.app.write_save()
         committed.assert_not_called()
 
-    def test_running_game_asks_before_writing(self) -> None:
+    def test_running_game_is_refused_until_the_title_screen_box_is_ticked(self) -> None:
         self._select()
-        # First prompt (game running) answered "no" -> nothing is committed.
+        # Unticked: the write stops at the refusal dialog, nothing is committed.
         with mock.patch.object(ui, "running_game_processes",
                                return_value=("Nioh3.exe",)), \
-                mock.patch.object(ui.messagebox, "askyesno", return_value=False) as asked, \
+                mock.patch.object(ui.messagebox, "showwarning") as warned, \
+                mock.patch.object(ui.messagebox, "askyesno") as asked, \
                 mock.patch.object(ui, "commit_save") as committed:
             self.app.write_save()
-        asked.assert_called_once()
+        self.assertIn("Nioh3.exe", warned.call_args.args[1])
+        self.assertIn("标题界面", warned.call_args.args[1])
+        asked.assert_not_called()
         committed.assert_not_called()
+        # Ticked: the confirmation dialog runs and the write is allowed through.
+        self.app.title_screen_var.set(True)
+        with mock.patch.object(ui, "running_game_processes",
+                               return_value=("Nioh3.exe",)), \
+                mock.patch.object(ui.messagebox, "askyesno", return_value=True), \
+                mock.patch.object(ui, "commit_save", return_value={
+                    "dry_run": True, "checksum_before": "0x1", "checksum_after": "0x2",
+                }) as committed, self._run_worker_synchronously():
+            self.app.write_save()
+        committed.assert_called_once()
 
     def test_dry_run_result_shows_a_summary(self) -> None:
         self._select()
@@ -602,8 +617,24 @@ class WriteFlowTests(UiTestCase):
             self.app.restore_save()
         restored.assert_not_called()
 
-    def test_restore_warns_about_a_running_game(self) -> None:
+    def test_restore_is_refused_while_the_game_runs_and_the_box_is_unticked(self) -> None:
         self._select()
+        entry = self._backup_entry()
+        with mock.patch.object(ui, "list_backups", return_value=(entry,)), \
+                mock.patch.object(self.app, "_choose_backup_dialog", return_value=entry), \
+                mock.patch.object(ui, "running_game_processes",
+                                  return_value=("Nioh3.exe",)), \
+                mock.patch.object(ui.messagebox, "showwarning") as warned, \
+                mock.patch.object(ui.messagebox, "askyesno") as asked, \
+                mock.patch.object(ui, "restore_backup") as restored:
+            self.app.restore_save()
+        self.assertIn("Nioh3.exe", warned.call_args.args[1])
+        asked.assert_not_called()
+        restored.assert_not_called()
+
+    def test_restore_warns_about_a_running_game_once_the_box_is_ticked(self) -> None:
+        self._select()
+        self.app.title_screen_var.set(True)
         entry = self._backup_entry()
         with mock.patch.object(ui, "list_backups", return_value=(entry,)), \
                 mock.patch.object(self.app, "_choose_backup_dialog", return_value=entry), \
@@ -611,7 +642,9 @@ class WriteFlowTests(UiTestCase):
                                   return_value=("Nioh3.exe",)), \
                 mock.patch.object(ui.messagebox, "askyesno", return_value=False) as asked:
             self.app.restore_save()
-        self.assertIn("Nioh3.exe", asked.call_args[0][1])
+        message = asked.call_args.args[1]
+        self.assertIn("标题界面", message)
+        self.assertIn("Nioh3.exe", message)
 
     def test_restore_invalidates_loaded_data(self) -> None:
         """After restoring, the in-memory copy is stale and must not be written."""
@@ -790,7 +823,7 @@ class ItemKindWidgetTests(UiTestCase):
     def test_the_tree_column_names_a_real_item(self) -> None:
         self._load(0x3E3F)
         values = self.app.tree.item("3", "values")
-        self.assertEqual(values[2], "龙笛[武士]")
+        self.assertEqual(values[-1], "龙笛[武士]")
 
     def test_the_detail_line_names_the_record(self) -> None:
         self._load(0x3E3F)
@@ -801,7 +834,7 @@ class ItemKindWidgetTests(UiTestCase):
     def test_an_unlisted_id_falls_back_to_the_evidence_wording(self) -> None:
         self._load(0x1234)
         values = self.app.tree.item("3", "values")
-        self.assertIn("0x1234", values[2])
+        self.assertIn("0x1234", values[-1])
         self.assertIn("0x1234", self.app.item_var.get())
 
     def test_the_kind_row_is_an_editable_widget_now(self) -> None:
