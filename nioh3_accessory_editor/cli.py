@@ -36,12 +36,15 @@ from .editor import (
     apply_kind_swaps,
     apply_level_edits,
     apply_soul_edits,
+    apply_creations,
     commit_save,
     discover_saves,
+    find_free_slots,
     grace_edit_availability,
     list_accessories,
     list_soul_cores,
     open_save,
+    plan_creation,
     plan_kind_swap,
     plan_level_edit,
     resolve_grace_id,
@@ -167,6 +170,154 @@ def cmd_souls(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_keyword(affix_db: AffixDb, keyword: str, *, what: str = "词条"):
+    """Resolve a keyword to exactly one entry, or explain why not.
+
+    Requirement (4): typing a keyword must show **every** match instead of
+    silently picking the first one.  Zero matches and several matches are both
+    errors that list what the user can do next.
+    """
+    matches = affix_db.search(keyword)
+    if not matches:
+        raise EditorError(
+            f"没有匹配「{keyword}」的{what}。可用 edit --search {keyword} 查看，"
+            "或换一个更短的关键词（也可以直接写词条 id，如 0x0b32）"
+        )
+    if len(matches) > 1:
+        listing = "\n".join(f"    {entry.label}（数值 "
+                            f"{entry.describe_value_range()}）" for entry in matches[:20])
+        more = "" if len(matches) <= 20 else f"\n    …另有 {len(matches) - 20} 条"
+        raise EditorError(
+            f"「{keyword}」匹配到 {len(matches)} 条{what}，请写得更具体或直接用 id：\n"
+            f"{listing}{more}"
+        )
+    return matches[0]
+
+
+def _parse_effect_specs(affix_db: AffixDb, specs: list[str], *,
+                        what: str = "词条") -> list[dict[str, int]]:
+    """Parse ``slot:名称或id[:数值]`` specs into edit dicts (keyword aware)."""
+    edits: list[dict[str, int]] = []
+    for spec in specs:
+        parts = spec.split(":")
+        if len(parts) < 2 or len(parts) > 3:
+            raise EditorError(f"--effect 格式应为 slot:名称或id[:数值]，实际 {spec!r}")
+        try:
+            slot = int(parts[0], 0)
+        except ValueError as error:
+            raise EditorError(f"--effect 的槽位必须是数字：{parts[0]!r}") from error
+        target = parts[1].strip()
+        entry = None
+        if target:
+            try:
+                effect_id = int(target, 0)
+            except ValueError:
+                entry = _resolve_keyword(affix_db, target, what=what)
+                effect_id = entry.effect_id
+            else:
+                entry = affix_db.lookup(effect_id)
+                if entry is None:
+                    entry = _resolve_keyword(affix_db, target, what=what)
+                    effect_id = entry.effect_id
+        else:
+            effect_id = records.EMPTY_EFFECT_ID
+        edit: dict[str, int] = {"slot_index": slot, "effect_id": effect_id}
+        if len(parts) == 3:
+            text = parts[2].strip()
+            if not text:
+                raise EditorError(f"--effect 的数值不能为空：{spec!r}")
+            try:
+                edit["value"] = int(text, 0)
+            except ValueError as error:
+                raise EditorError(f"--effect 的数值必须是数字：{text!r}") from error
+        edits.append(edit)
+    return edits
+
+
+def _matches_kind_filter(item_db: ItemDb, record_type: int, needle: str) -> bool:
+    """Whether a record's 种类 matches a name/id substring (filter for `list`)."""
+    name = item_db.describe(record_type)
+    haystack = f"{record_type:#06x} {record_type:#x} {name or ''}".lower()
+    return needle.strip().lower() in haystack
+
+
+def _grace_name_of(view, grace_db) -> str:
+    """The 恩宠/套装 name(s) of a view's trailing slot ("" when it has none)."""
+    names: list[str] = []
+    for effect in view.occupied_effects:
+        entry = grace_db.lookup(effect.effect_id)
+        if entry is not None:
+            names.append(entry.name)
+    return " ".join(names)
+
+
+def cmd_create(args: argparse.Namespace) -> int:
+    """无中生有: write a brand-new 饰品/魂核 into a free slot."""
+    affix_db = AffixDb()
+    grace_db = GraceDb.best_effort()
+    item_db = ItemDb.best_effort()
+    if args.soul:
+        affix_db = AffixDb(load_soul_catalog())
+        item_db = ItemDb(load_soul_item_catalog())
+    crypto = _crypto(args)
+    save = _select_save(args)
+    print(DISCLAIMER)
+    print(f"存档: {save.display}")
+    data = open_save(save, crypto)
+    known_ids = (soul_catalog_ids(affix_db) if args.soul
+                 else accessory_catalog_ids(affix_db))
+    layout = records.locate_layout(data, known_ids=known_ids)
+
+    # 种类 must resolve to exactly one row of the item table.
+    item_matches = item_db.search(args.kind)
+    if not item_matches:
+        raise EditorError(f"没有匹配「{args.kind}」的{'魂核' if args.soul else '饰品'}种类")
+    if len(item_matches) > 1:
+        listing = "\n".join(f"    {entry.label}" for entry in item_matches[:20])
+        raise EditorError(
+            f"「{args.kind}」匹配到 {len(item_matches)} 个种类，请写得更具体：\n{listing}")
+    item = item_matches[0]
+
+    report = find_free_slots(data, layout=layout)
+    print(f"空位: {report.describe()}")
+    edits = _parse_effect_specs(affix_db, args.effect,
+                                what="魂核词条" if args.soul else "词条")
+    plan = plan_creation(
+        data, record_type=item.item_id, level=args.level, effects=edits,
+        affix_db=affix_db, item_db=item_db, known_ids=known_ids, layout=layout,
+        slot_index=args.slot, soul=args.soul,
+    )
+    print(f"新建计划: {plan.describe(item_db)}")
+    for slot in plan.effects:
+        if slot.is_empty:
+            continue
+        entry = affix_db.lookup(slot.effect_id)
+        role = "（固定词条，按模板带入）" if entry and entry.is_fixed else ""
+        print(f"    槽{slot.slot_index + 1}: {affix_db.describe(slot.effect_id)}"
+              f"（数值={slot.value}）{role}")
+    patched = apply_creations(data, [plan])
+    print("\n" + SAVE_WRITE_REQUIREMENT)
+    running = running_game_processes()
+    if running:
+        print(f"当前状态：检测到 {'、'.join(running)} 正在运行——"
+              f"{'已强制继续（--force-while-running）' if args.force_while_running else '将被拒绝'}。")
+    else:
+        print("当前状态：未检测到游戏进程。")
+    if args.dry_run:
+        print("本次为演练模式（--dry-run），不会写入存档。")
+    result = commit_save(
+        save, patched, crypto=crypto, state_root=_state_root(args),
+        dry_run=args.dry_run, verify=not args.no_verify,
+        allow_game_running=args.force_while_running,
+    )
+    if result.get("dry_run"):
+        print("演练完成：校验通过，未写入存档。")
+    else:
+        print(f"已写入: {save.path}")
+    print("请进游戏确认新物品是否正常出现；有问题可用 restore 还原。")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
     grace_db = GraceDb.best_effort()
@@ -187,7 +338,25 @@ def cmd_list(args: argparse.Namespace) -> int:
     print(f"记录表: {layout.describe()}")
     views = list_accessories(data, layout=layout, known_ids=known_ids)
     accessories = [view for view in views if view.is_accessory is not False]
-    print(f"\n记录表内 {len(views)} 条物品记录，其中 {len(accessories)} 条含饰品词条")
+    total = len(accessories)
+    if args.kind:
+        accessories = [view for view in accessories
+                       if _matches_kind_filter(item_db, view.record_type, args.kind)]
+    if args.grace:
+        needle = args.grace.strip().lower()
+        accessories = [view for view in accessories
+                       if needle in _grace_name_of(view, grace_db).lower()
+                       or needle in f"{view.record_type:#x}"]
+    if args.kind or args.grace:
+        filters = []
+        if args.kind:
+            filters.append(f"种类含「{args.kind}」")
+        if args.grace:
+            filters.append(f"恩宠/套装含「{args.grace}」")
+        print(f"\n筛选（{'，'.join(filters)}）：{total} 件中 {len(accessories)} 件")
+        if not accessories:
+            print("没有符合条件的饰品；去掉筛选参数可看全部。")
+    print(f"\n记录表内 {len(views)} 条物品记录，其中 {total} 条含饰品词条")
     print(f"列出 {len(accessories)} 条饰品记录\n")
     for view in accessories:
         # 种类 is printed by describe_effects below, so the header keeps the
@@ -260,18 +429,39 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 0
 
 
-def _parse_edit_spec(spec: str) -> dict[str, int]:
-    """Parse 'slot:effect_id[:value[:metadata]]' into an effect-slot edit.
+def _parse_edit_spec(spec: str, affix_db: AffixDb | None = None,
+                     *, what: str = "词条") -> dict[str, int]:
+    """Parse 'slot:词条或id[:value[:metadata]]' into an effect-slot edit.
 
-    The target record index is supplied separately via ``--record``.
+    The second field may be a **keyword** (需求 4): ``3:火抗性`` resolves through
+    :func:`_resolve_keyword`, which refuses ambiguity by listing every match
+    instead of silently picking the first one.  The target record index is
+    supplied separately via ``--record``.
     """
     parts = spec.split(":")
     if len(parts) < 2:
-        raise EditorError("编辑格式应为 slot:effect_id[:value[:metadata]]")
+        raise EditorError("编辑格式应为 slot:词条名称或id[:value[:metadata]]")
     try:
         slot = int(parts[0], 0)
-        effect_id = int(parts[1], 0)
-        edit: dict[str, int] = {"slot_index": slot, "effect_id": effect_id}
+    except ValueError as error:
+        raise EditorError(f"非法编辑参数（槽位必须是数字）: {spec!r}") from error
+    target = parts[1].strip()
+    effect_id: int | None = None
+    if target:
+        try:
+            effect_id = int(target, 0)
+        except ValueError:
+            effect_id = None
+        if effect_id is None or (effect_id != records.EMPTY_EFFECT_ID
+                                 and affix_db is not None
+                                 and affix_db.lookup(effect_id) is None):
+            if affix_db is None:
+                raise EditorError(f"非法编辑参数（词条必须是 id）: {spec!r}")
+            effect_id = _resolve_keyword(affix_db, target, what=what).effect_id
+    else:
+        effect_id = records.EMPTY_EFFECT_ID
+    edit: dict[str, int] = {"slot_index": slot, "effect_id": effect_id}
+    try:
         if len(parts) >= 3:
             edit["value"] = int(parts[2], 0)
         if len(parts) >= 4:
@@ -279,7 +469,7 @@ def _parse_edit_spec(spec: str) -> dict[str, int]:
         if len(parts) > 4:
             raise EditorError(f"编辑参数过多: {spec!r}")
     except ValueError as error:
-        raise EditorError(f"非法编辑参数: {spec!r}") from error
+        raise EditorError(f"非法编辑参数（数值/标识必须是数字）: {spec!r}") from error
     return edit
 
 
@@ -303,13 +493,16 @@ def cmd_edit(args: argparse.Namespace) -> int:
         grace_id = resolve_grace_id(grace_db, args.grace)
     chosen = sum(1 for flag in (bool(args.edit), grace_id is not None,
                                 args.level is not None,
-                                args.kind is not None) if flag)
+                                args.kind is not None,
+                                args.search is not None) if flag)
     if chosen != 1:
-        raise EditorError("请四选一：--edit 改饰品词条，--grace 改恩宠，"
-                          "--level 改等级，--kind 改种类"
+        raise EditorError("五选一：--edit 改词条，--grace 改恩宠，--level 改等级，"
+                          "--kind 改种类，--search 只搜索词条不改存档"
                           "（不能同时使用，也不能都不给）")
     edits = tuple(
-        {"record_index": args.record, **_parse_edit_spec(spec)}
+        {"record_index": args.record,
+         **_parse_edit_spec(spec, affix_db,
+                            what="魂核词条" if args.soul else "词条")}
         for spec in (args.edit or ())
     )
 
@@ -319,6 +512,22 @@ def cmd_edit(args: argparse.Namespace) -> int:
     known_ids = (soul_catalog_ids(affix_db) if args.soul
                  else accessory_catalog_ids(affix_db))
     layout = records.locate_layout(data, known_ids=known_ids)
+    if args.search is not None:
+        # 需求(4): 只搜索、不改存档；把全部匹配列出来供选择。
+        matches = affix_db.search(args.search)
+        what = "魂核词条" if args.soul else "饰品词条"
+        print(f"\n关键词「{args.search}」匹配到 {len(matches)} 条{what}：")
+        if not matches:
+            print("  （没有匹配结果）请换更短的关键词，或直接写词条 id。")
+            return 0
+        for entry in matches[:60]:
+            extra = "（同名固定，不能手动写入）" if entry.is_fixed else ""
+            print(f"  {entry.label}\n      数值区间 {entry.describe_value_range()} "
+                  f"{extra}")
+        if len(matches) > 60:
+            print(f"  …另有 {len(matches) - 60} 条，请写得更具体。")
+        print("\n用法：edit --record N --edit 槽位:名称或id[:数值]")
+        return 0
     if args.soul:
         cores = {core.slot_index: core
                  for core in list_soul_cores(data, soul_db=affix_db,
@@ -627,6 +836,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     parser_list = sub.add_parser("list", help="列出存档中的饰品记录与词条")
+    parser_list.add_argument("--kind", default=None,
+                             help="只列出该种类（名称或 id，可只写一部分，如 八尺琼）")
+    parser_list.add_argument("--grace", default=None,
+                             help="只列出带该恩宠/套装的饰品（名称或 id 的一部分）")
     parser_list.set_defaults(func=cmd_list)
 
     parser_scan = sub.add_parser(
@@ -662,12 +875,37 @@ def build_parser() -> argparse.ArgumentParser:
                              help="改种类：目标必须是同分类（武士饰品/忍者饰品）"
                                   "且在存档里已有实例的饰品种类，"
                                   "固定词条会按该种类的真实样本自动同步")
+    parser_edit.add_argument("--search", default=None, metavar="关键词",
+                             help="只按关键词搜索合法词条并列出全部匹配结果"
+                                  "（不修改存档；用于先看有哪些候选再决定）")
     parser_edit.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
     parser_edit.add_argument("--no-verify", action="store_true",
                              help="跳过写入前后的解密校验（更快，但风险更高）")
     parser_edit.add_argument("--force-while-running", action="store_true",
                              help="即使检测到游戏正在运行也继续写入（不推荐）")
     parser_edit.set_defaults(func=cmd_edit)
+
+    parser_create = sub.add_parser(
+        "create", help="无中生有：新建一件饰品/魂核放进存档空槽（背包满则拒绝）")
+    parser_create.add_argument("--kind", required=True,
+                               help="要新建的种类（名称或 id，如 八尺琼勾玉[武士]）")
+    parser_create.add_argument("--level", type=int, default=records.MAX_ITEM_LEVEL,
+                               help=f"等级（{records.MIN_ITEM_LEVEL}.."
+                                    f"{records.MAX_ITEM_LEVEL}，默认 "
+                                    f"{records.MAX_ITEM_LEVEL}）")
+    parser_create.add_argument("--effect", action="append", default=[],
+                               help="词条 slot:名称或id[:数值]，可多次指定"
+                                    "（固定词条槽由模板自动带入，不能指定）")
+    parser_create.add_argument("--slot", type=int, default=None,
+                               help="指定写入哪个空槽（默认第一个空位）")
+    parser_create.add_argument("--soul", action="store_true",
+                               help="新建魂核（用魂核词条库与魂核种类表）")
+    parser_create.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
+    parser_create.add_argument("--no-verify", action="store_true",
+                               help="跳过写入前后的解密校验（更快，但风险更高）")
+    parser_create.add_argument("--force-while-running", action="store_true",
+                               help="即使检测到游戏正在运行也继续写入（不推荐）")
+    parser_create.set_defaults(func=cmd_create)
 
     parser_backup = sub.add_parser("backup", help="备份存档（解密明文副本）")
     parser_backup.set_defaults(func=cmd_backup)

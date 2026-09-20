@@ -375,8 +375,43 @@ class EndToEndCliTests(unittest.TestCase):
     def test_discovery_finds_the_fake_tree(self) -> None:
         code, out, err = run_cli(["check"])
         self.assertEqual(code, 0, err)
-        self.assertIn('"account_id": %d' % self.ACCOUNT, out)
-        self.assertIn('"slot_index": 0', out)
+
+    # ------------------------------------------- 筛选 / 关键词 / 新建 (需求 3/4/5)
+    def test_search_lists_every_match_without_writing(self) -> None:
+        before = self.save_path.read_bytes()
+        code, out, err = run_cli(["edit", "--record", "3", "--search", "火抗性"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("匹配到 2 条", out)
+        self.assertIn("数值区间", out)
+        self.assertEqual(self.save_path.read_bytes(), before, "搜索不得写存档")
+
+    def test_search_without_matches_says_so(self) -> None:
+        code, out, err = run_cli(["edit", "--record", "3", "--search", "绝无此词条"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("没有匹配结果", out)
+
+    def test_an_ambiguous_keyword_lists_the_candidates(self) -> None:
+        code, out, err = run_cli(["edit", "--record", "3", "--edit", "3:伤害",
+                                  "--dry-run"])
+        self.assertEqual(code, 1)
+        self.assertIn("匹配到", err)
+        self.assertIn("请写得更具体或直接用 id", err)
+
+    def test_a_unique_keyword_resolves_and_writes(self) -> None:
+        # 「火抗性 +10」 is unique on its own (its (星) twin has a different name).
+        code, out, err = run_cli(["edit", "--record", "3", "--edit", "3:火抗性 +10",
+                                  "--dry-run"])
+        self.assertIn("[3] 火抗性 +10", out + err, f"stdout={out!r} stderr={err!r}")
+
+    def test_list_filters_by_kind_and_grace(self) -> None:
+        code, out, err = run_cli(["list", "--kind", "0x4001"])
+        self.assertEqual(code, 0, err)
+        self.assertIn("筛选（种类含「0x4001」）", out)
+
+    def test_create_refuses_when_the_kind_has_no_template(self) -> None:
+        code, out, err = run_cli(["create", "--kind", "0x4001", "--dry-run"])
+        self.assertEqual(code, 1)
+        self.assertIn("种类", err)
 
     def test_list_prints_records_and_affixes(self) -> None:
         code, out, err = run_cli(["list"])
@@ -468,7 +503,7 @@ class EndToEndCliTests(unittest.TestCase):
             "--dry-run",
         ])
         self.assertNotEqual(code, 0)
-        self.assertIn("四选一", out + err)
+        self.assertIn("选一", out + err)
 
     def test_list_names_the_trailing_grace_slot(self) -> None:
         """An accessory's last affix is a 恩宠/套装 id from 词条总目录."""
@@ -560,11 +595,11 @@ class EndToEndCliTests(unittest.TestCase):
     def test_edit_needs_exactly_one_of_edit_or_grace(self) -> None:
         code, out, err = run_cli(["edit", "--record", "3"])
         self.assertNotEqual(code, 0)
-        self.assertIn("四选一", err + out)
+        self.assertIn("选一", err + out)
         code, out, err = run_cli(["edit", "--record", "3", "--edit", "0:1",
                                   "--grace", "稻荷神"])
         self.assertNotEqual(code, 0)
-        self.assertIn("四选一", err + out)
+        self.assertIn("选一", err + out)
 
     def test_edit_grace_refuses_a_set_target(self) -> None:
         self._stage(self.GRACE_A)

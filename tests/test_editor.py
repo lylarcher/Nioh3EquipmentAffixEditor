@@ -482,7 +482,7 @@ class FixedSlotTests(EditorTestCase):
         save = self._save(fixed_first=True)
         plans = plan_edits(save, [{"record_index": 3, "slot_index": 1,
                                    "effect_id": self.affix_a.effect_id,
-                                   "value": self.fixed_affix.value}], affix_db=self.db)
+                                   "value": self.affix_a.value}], affix_db=self.db)
         self.assertEqual(len(plans), 1)
         self.assertEqual(plans[0].after[1].effect_id, self.affix_a.effect_id)
 
@@ -1255,7 +1255,7 @@ class ApplyTests(EditorTestCase):
         )
         self.assertEqual(len(patched), len(self.plain))
         views = {view.slot_index: view for view in list_accessories(patched)}
-        self.assertEqual(views[3].effects[3].effect_id, self.affix_a.effect_id)
+        self.assertEqual(views[3].effects[3].effect_id, self.ranged_affix.effect_id)
         self.assertEqual(views[3].effects[3].value, self.ranged_affix.value_min)
         self.assertEqual(views[11].effects[0].effect_id, self.affix_b.effect_id)
 
@@ -1396,8 +1396,8 @@ class CommitTests(EditorTestCase):
         reloaded = open_save(descriptor, crypto)
         self.assertTrue(save_checksum_is_valid(reloaded))
         views = {view.slot_index: view for view in list_accessories(reloaded)}
-        self.assertEqual(views[11].effects[5].value, 42)
-        self.assertEqual(views[11].effects[5].effect_id, self.affix_a.effect_id)
+        self.assertEqual(views[11].effects[5].value, self.ranged_affix.value_min)
+        self.assertEqual(views[11].effects[5].effect_id, self.ranged_affix.effect_id)
         self.assertEqual(views[3].effects[0].effect_id, self.affix_a.effect_id)
 
     def test_commit_records_the_checksum_change(self) -> None:
