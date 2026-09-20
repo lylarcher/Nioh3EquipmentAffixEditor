@@ -39,6 +39,8 @@ from nioh3_accessory_editor.affixdb import (
     save_catalog,
     save_grace_catalog,
     save_item_catalog,
+    save_soul_catalog,
+    save_soul_item_catalog,
 )
 
 NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
@@ -73,6 +75,15 @@ ITEMS_SHEET = "物品总目录"
 ITEM_BIG_CLASS = "饰品"
 #: 物品代码 in the sheet lists the low byte first ("BB F5" == 0xF5BB).
 ITEM_CODE_PATTERN = re.compile(r"^(?:0x)?([0-9A-Fa-f]{2})\s*([0-9A-Fa-f]{2})$")
+
+#: 魂核 (soul cores) have their own affix pool in the 绘卷-魂核词条 sheet, whose
+#: 种类 column is 绘卷 or 魂核; measured on the reporting user's save, 132 of the
+#: 134 records that look like 魂核 carry exactly the 魂核 sheet's 固定词条代码
+#: (0 mismatches), which is why that sheet — not 饰品词条 — gates 魂核 edits.
+SOUL_AFFIX_SHEET = "绘卷-魂核词条"
+SOUL_AFFIX_KIND = "魂核"
+#: 魂核 rows of 物品总目录 (大类 = 魂核): the id a 魂核 record's header carries.
+SOUL_ITEM_BIG_CLASS = "魂核"
 
 
 def resolve_source(explicit: str | Path | None = None) -> Path:
@@ -269,6 +280,73 @@ def collect_item_entries(source: Path) -> tuple[list[ItemEntry], list[str], int]
     return entries, conflicts, skipped
 
 
+def collect_soul_entries(source: Path) -> tuple[list[AffixEntry], int]:
+    """Read the 魂核 rows of 绘卷-魂核词条 as the legal 魂核 affix table.
+
+    That sheet's 种类 column is 绘卷 or 魂核; a 魂核 core has no 恩宠/套装 affix and
+    its own affix pool, so this table — not the 饰品词条 one — decides what may be
+    written to a 魂核 record.  ``(entries, skipped)``.
+    """
+    rows = _rows_from_xlsx(source, SOUL_AFFIX_SHEET)
+    entries: list[AffixEntry] = []
+    seen: set[int] = set()
+    skipped = 0
+    for row in rows[1:]:  # skip header: 种类 / 类别 / 词条代码 / 词条名称 / ...
+        if len(row) < 4:
+            skipped += 1
+            continue
+        kind, category, code, name = (cell.strip() for cell in row[:4])
+        if kind != SOUL_AFFIX_KIND or not name:
+            skipped += 1
+            continue
+        effect_id, value, flags = parse_code(code)
+        if effect_id == 0xFFFFFFFF or effect_id in seen:
+            skipped += 1
+            continue
+        seen.add(effect_id)
+        entries.append(AffixEntry(effect_id=effect_id, value=value, flags=flags,
+                                  name=name, category=category or SOUL_AFFIX_KIND))
+    return entries, skipped
+
+
+def collect_soul_item_entries(source: Path) -> tuple[list[ItemEntry], list[str], int]:
+    """Read the 魂核 rows of 物品总目录 as display-only item entries.
+
+    Same shape as :func:`collect_item_entries` (``BB F5`` low byte first), but for
+    大类 = 魂核 (83 ids in v2.21).  ``(entries, conflicts, skipped)``.
+    """
+    rows = _rows_from_xlsx(source, ITEMS_SHEET)
+    entries: list[ItemEntry] = []
+    conflicts: list[str] = []
+    by_id: dict[int, ItemEntry] = {}
+    skipped = 0
+    for row in rows[1:]:
+        if len(row) < 5:
+            skipped += 1
+            continue
+        big, mid, _small, code, name = (cell.strip() for cell in row[:5])
+        if big != SOUL_ITEM_BIG_CLASS or not name:
+            skipped += 1
+            continue
+        item_id = parse_item_code(code)
+        if item_id is None:
+            skipped += 1
+            continue
+        if item_id in by_id:
+            existing = by_id[item_id]
+            if existing.name != name:
+                conflicts.append(
+                    f"{item_id:#06x} 同时是「{existing.name}」与「{name}」；"
+                    f"表中保留「{existing.name}」"
+                )
+            skipped += 1
+            continue
+        entry = ItemEntry(item_id=item_id, name=name, category=mid)
+        by_id[item_id] = entry
+        entries.append(entry)
+    return entries, conflicts, skipped
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     dry_run = "--dry-run" in sys.argv[1:]
@@ -386,6 +464,50 @@ def main() -> int:
         print(f"    同一物品 ID 多名称: {len(item_conflicts)} 处")
         for line in item_conflicts[:10]:
             print("      -", line)
+
+    # 魂核 affix table + 魂核 item table (own 大类, own affix pool).
+    souls: list[AffixEntry] = []
+    souls_skipped = 0
+    try:
+        souls, souls_skipped = collect_soul_entries(source)
+    except (FileNotFoundError, KeyError, zipfile.BadZipFile) as error:
+        print(f"    警告：未能读取 {SOUL_AFFIX_SHEET}（{error}）；魂核词条库未更新")
+    if souls:
+        if dry_run:
+            print(f"演练：将生成 {len(souls)} 条魂核词条（未写入）")
+        else:
+            save_soul_catalog(
+                souls, source=f"{source.name} / {SOUL_AFFIX_SHEET}（{SOUL_AFFIX_KIND}）")
+            print(f"OK: 已生成魂核词条库，共 {len(souls)} 条")
+        print(f"    跳过行: {souls_skipped}")
+
+    soul_items: list[ItemEntry] = []
+    soul_item_conflicts: list[str] = []
+    soul_items_skipped = 0
+    try:
+        soul_items, soul_item_conflicts, soul_items_skipped = (
+            collect_soul_item_entries(source))
+    except (FileNotFoundError, KeyError, zipfile.BadZipFile) as error:
+        print(f"    警告：未能读取 {ITEMS_SHEET} 魂核行（{error}）；魂核物品种类表未更新")
+    if soul_items:
+        if dry_run:
+            print(f"演练：将生成 {len(soul_items)} 条魂核物品种类（未写入）")
+        else:
+            save_soul_item_catalog(
+                soul_items,
+                source=f"{source.name} / {ITEMS_SHEET}（{SOUL_ITEM_BIG_CLASS}）",
+                conflicts=soul_item_conflicts)
+            print(f"OK: 已生成魂核物品种类表，共 {len(soul_items)} 条")
+        soul_categories: dict[str, int] = {}
+        for entry in soul_items:
+            soul_categories[entry.category] = soul_categories.get(entry.category, 0) + 1
+        print("    分类:", "，".join(f"{name} {count}"
+                                   for name, count in sorted(soul_categories.items())))
+        print(f"    跳过行: {soul_items_skipped}")
+        if soul_item_conflicts:
+            print(f"    同一魂核 ID 多名称: {len(soul_item_conflicts)} 处")
+            for line in soul_item_conflicts[:10]:
+                print("      -", line)
     return 0
 
 

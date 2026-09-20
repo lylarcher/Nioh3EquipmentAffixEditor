@@ -346,13 +346,19 @@ class InventoryLayout:
         index = delta // self.stride
         return index if index < self.slot_count else None
 
-    def describe(self) -> str:
+    def describe(self, catalog_label: str = "饰品") -> str:
+        """One-line summary; ``catalog_label`` names the catalog that matched.
+
+        The located array is shared by every item class, so the label depends on
+        *which* catalog the caller located it with (饰品 or 魂核) — the counts are
+        the same bytes either way, the wording must not claim otherwise.
+        """
         text = (f"记录表 {self.anchor:#08x} 起 {self.slot_count} 槽（步长 "
                 f"{self.stride:#x}，占用 {self.record_count}：绘卷 "
                 f"{self.scroll_count} / 其它物品 "
                 f"{self.record_count - self.scroll_count}）· {self.anchor_note}")
         if self.catalog_checked:
-            text += f" · 饰品（词条命中库）{self.accessory_count} 件"
+            text += f" · {catalog_label}（词条命中库）{self.accessory_count} 件"
         if self.truncated:
             text += " · 已截断到槽位上限"
         return text

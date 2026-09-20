@@ -22,7 +22,13 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .paths import default_catalog_path, default_grace_path, default_items_path
+from .paths import (
+    default_catalog_path,
+    default_grace_path,
+    default_items_path,
+    default_soul_catalog_path,
+    default_soul_items_path,
+)
 
 __all__ = [
     "DEFAULT_CATALOG",
@@ -44,6 +50,14 @@ __all__ = [
     "save_catalog",
     "save_grace_catalog",
     "save_item_catalog",
+    "save_soul_catalog",
+    "save_soul_item_catalog",
+    "load_soul_catalog",
+    "load_soul_item_catalog",
+    "DEFAULT_SOUL_CATALOG",
+    "DEFAULT_SOUL_ITEM_CATALOG",
+    "SOUL_CATALOG_SCHEMA",
+    "SOUL_ITEM_CATALOG_SCHEMA",
 ]
 
 DEFAULT_CATALOG = default_catalog_path()
@@ -68,6 +82,16 @@ GRACE_KINDS = ("恩宠", "上位恩宠")
 #: accessories resolve to one of these 88 ids.
 DEFAULT_ITEM_CATALOG = default_items_path()
 ITEM_CATALOG_SCHEMA = "nioh3-accessory-items/v1"
+
+#: 魂核 (soul cores) have their own affix pool: 绘卷-魂核词条, 种类 = 魂核 → 287 ids in
+#: v2.21, of which exactly one id also appears in the 饰品词条 table.  A 魂核 has no
+#: 恩宠/套装 affix, so its edits are gated by this table (and its own item table).
+DEFAULT_SOUL_CATALOG = default_soul_catalog_path()
+SOUL_CATALOG_SCHEMA = "nioh3-soul-affixes/v1"
+
+#: 魂核 rows of 物品总目录 (大类 = 魂核, 83 ids in v2.21) — what a 魂核 *is*.
+DEFAULT_SOUL_ITEM_CATALOG = default_soul_items_path()
+SOUL_ITEM_CATALOG_SCHEMA = "nioh3-soul-items/v1"
 
 # Metadata flag bits decoded from the 词条代码 byte layout:
 # byte 9 bit6 = 固定 (同名固定 variants carry 0x43/0x45/0x46), byte 10 bit2 = 星.
@@ -193,6 +217,63 @@ def load_grace_catalog(path: Path = DEFAULT_GRACE_CATALOG) -> list[AffixEntry]:
     """Load the 恩宠/套装 name table (display only, never used for legality)."""
     payload = _load_payload(path, "恩宠/套装名表")
     return _entries_from_payload(payload, path)
+
+
+def load_soul_catalog(path: Path = DEFAULT_SOUL_CATALOG) -> list[AffixEntry]:
+    """Load the legal 魂核 affix table (绘卷-魂核词条, 种类=魂核)."""
+    payload = _load_payload(path, "魂核词条库")
+    return _entries_from_payload(payload, path)
+
+
+def load_soul_item_catalog(path: Path = DEFAULT_SOUL_ITEM_CATALOG) -> list[ItemEntry]:
+    """Load the 魂核 item table (物品总目录 大类=魂核; display only)."""
+    payload = _load_payload(path, "魂核物品种类表", list_key="items")
+    raw_items = payload["items"]
+    entries: list[ItemEntry] = []
+    for index, raw in enumerate(raw_items):
+        where = f"{path} 第 {index + 1} 条"
+        if not isinstance(raw, dict):
+            raise AffixError(f"{where} 必须是对象")
+        item_id = _require_uint32(raw, "item_id", where)
+        name = raw.get("name")
+        category = raw.get("category", "")
+        if not isinstance(name, str) or not name.strip():
+            raise AffixError(f"{where} 缺少 name")
+        if not isinstance(category, str):
+            raise AffixError(f"{where} 的 category 必须是字符串")
+        entries.append(ItemEntry(item_id=item_id, name=name.strip(),
+                                 category=category.strip()))
+    return entries
+
+
+def save_soul_catalog(
+    entries: list[AffixEntry],
+    path: Path = DEFAULT_SOUL_CATALOG,
+    *,
+    conflicts: list[str] | None = None,
+    source: str = "",
+) -> None:
+    """Write the 魂核 affix table (its own schema, same JSON shape)."""
+    save_catalog(
+        entries, path, source=source, schema=SOUL_CATALOG_SCHEMA,
+        conflicts=conflicts,
+        default_source="仁王3词条装备库v2.21.xlsx / 绘卷-魂核词条（魂核）",
+    )
+
+
+def save_soul_item_catalog(
+    entries: list[ItemEntry],
+    path: Path = DEFAULT_SOUL_ITEM_CATALOG,
+    *,
+    conflicts: list[str] | None = None,
+    source: str = "",
+) -> None:
+    """Write the 魂核 item table (物品总目录 大类=魂核; display only)."""
+    save_item_catalog(
+        entries, path, source=source, conflicts=conflicts,
+        schema=SOUL_ITEM_CATALOG_SCHEMA,
+        default_source="仁王3词条装备库v2.21.xlsx / 物品总目录（魂核）",
+    )
 
 
 def _load_payload(path: Path, what: str, *,
@@ -421,17 +502,19 @@ def save_item_catalog(
     *,
     source: str = "",
     conflicts: list[str] | None = None,
+    schema: str = ITEM_CATALOG_SCHEMA,
+    default_source: str = "仁王3词条装备库v2.21.xlsx / 物品总目录（饰品）",
 ) -> None:
-    """Write the 饰品 item table (same envelope, its own ``items`` list)."""
+    """Write an item table (same envelope, its own ``items`` list)."""
     seen: set[int] = set()
     for entry in entries:
         if entry.item_id in seen:
             raise AffixError(f"拒绝写出含重复物品 ID 的表：{entry.item_id:#x}")
         seen.add(entry.item_id)
     payload = {
-        "schema": ITEM_CATALOG_SCHEMA,
+        "schema": schema,
         "count": len(entries),
-        "source": source or "仁王3词条装备库v2.21.xlsx / 物品总目录（饰品）",
+        "source": source or default_source,
         "conflicts": conflicts or [],
         "items": [
             {"item_id": entry.item_id, "name": entry.name,

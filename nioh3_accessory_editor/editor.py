@@ -50,20 +50,26 @@ __all__ = [
     "LevelEditError",
     "LevelPlan",
     "SaveDescriptor",
+    "SoulCoreView",
     "apply_edits",
     "apply_kind_swaps",
     "apply_level_edits",
+    "apply_soul_edits",
     "collect_kind_samples",
     "commit_save",
     "discover_saves",
+    "identify_soul_cores",
     "list_accessories",
     "list_backups",
+    "list_soul_cores",
     "open_save",
     "plan_edits",
     "plan_kind_swap",
     "plan_level_edit",
+    "plan_soul_edits",
     "resolve_item_id",
     "restore_backup",
+    "soul_catalog_ids",
 ]
 
 
@@ -567,6 +573,105 @@ def apply_level_edits(
     return bytes(output)
 
 
+@dataclass(frozen=True, slots=True)
+class SoulCoreView:
+    """User-facing view of one 魂核 (soul core) record.
+
+    A 魂核 is identified by evidence, not by a type table: its header item id must
+    be a 物品总目录 魂核 row, and its effect slots must name affixes from the
+    绘卷-魂核词条 魂核 pool.  Measured on the reporting user's save: 132 of 134
+    candidate records satisfy both, and the workbook's own 固定词条代码 matched
+    those 132 with 0 mismatches (the other 2 are the two copies of `0xda62`, whose
+    id is not in the 魂核 sheet — they are reported as unidentified, never guessed).
+
+    A 魂核 has **no 恩宠/套装 affix**: its affix pool is separate from 饰品词条 and
+    the 恩宠/套装 table is not consulted anywhere in this view.
+    """
+
+    slot_index: int
+    offset: int
+    record_type: int
+    level: int
+    rarity: int
+    rarity_name: str
+    account_id: int
+    effects: tuple[records.EffectSlot, ...]
+    kind_name: str = "魂核"
+    catalog_hits: int | None = None
+    level_mirror: int = 0
+    plus_candidate: int = 0
+    unidentified: str = ""
+
+    def describe_item(self, item_db: ItemDb | None = None) -> str:
+        """``魂核 0x1234 夜刀神`` when the item table has the id."""
+        name = item_db.describe(self.record_type) if item_db else None
+        if name:
+            return f"魂核 {self.record_type:#06x} {name}"
+        if item_db is not None and item_db.is_loaded:
+            return f"魂核 {self.record_type:#06x}（不在魂核种类表内）"
+        return f"魂核 {self.record_type:#06x}（未加载魂核种类表）"
+
+    def slot_is_fixed(self, slot_index: int, soul_db: AffixDb) -> bool:
+        """Whether this slot holds the 魂核's own 同名固定 affix (never editable).
+
+        Same rule as accessories, and the same evidence: the 魂核 sheet lists the
+        fixed 词条代码 of every core (its 词条代码 preimage carries the 0x40 bit, so
+        the catalog flag applies), and the save marks the slot the same way.
+        """
+        if not 0 <= slot_index < len(self.effects):
+            return False
+        effect = self.effects[slot_index]
+        if effect.is_empty:
+            return False
+        entry = soul_db.lookup(effect.effect_id)
+        if entry is None:
+            return False
+        if entry.is_fixed:
+            return True
+        return records.effect_metadata_is_fixed(effect.metadata)
+
+    def fixed_slots(self, soul_db: AffixDb) -> frozenset[int]:
+        return frozenset(
+            effect.slot_index for effect in self.occupied_effects
+            if self.slot_is_fixed(effect.slot_index, soul_db)
+        )
+
+    def slot_role(self, slot_index: int, soul_db: AffixDb) -> str:
+        effect = self.effects[slot_index]
+        if effect.is_empty:
+            return "空"
+        if soul_db.lookup(effect.effect_id) is None:
+            return "不在魂核词条库内"
+        return "魂核固定词条" if self.slot_is_fixed(slot_index, soul_db) else "魂核词条"
+
+    @property
+    def occupied_effects(self) -> tuple[records.EffectSlot, ...]:
+        return tuple(effect for effect in self.effects if not effect.is_empty)
+
+    def describe_effects(self, soul_db: AffixDb,
+                         item_db: ItemDb | None = None) -> tuple[str, ...]:
+        lines: list[str] = [f"  {self.describe_item(item_db)}"]
+        if self.unidentified:
+            lines.append(f"  ⚠ {self.unidentified}")
+        for effect in self.effects:
+            if effect.is_empty:
+                lines.append(f"  [{effect.slot_index}] (空)")
+                continue
+            if self.slot_is_fixed(effect.slot_index, soul_db):
+                lines.append(
+                    f"  [{effect.slot_index}] {soul_db.describe(effect.effect_id)}"
+                    f"（固定词条，不可修改，id={effect.effect_id:#06x}） "
+                    f"(数值={effect.value} 标识={effect.metadata:#010x})"
+                )
+                continue
+            lines.append(
+                f"  [{effect.slot_index}] {soul_db.describe(effect.effect_id)} "
+                f"(id={effect.effect_id:#06x} 数值={effect.value} "
+                f"标识={effect.metadata:#010x})"
+            )
+        return tuple(lines)
+
+
 # --------------------------------------------------------------------------
 # Discovery / reading
 # --------------------------------------------------------------------------
@@ -639,6 +744,82 @@ def list_accessories(
 def accessory_catalog_ids(affix_db: AffixDb) -> frozenset[int]:
     """The effect ids of every 饰品词条 in the shipped catalog."""
     return frozenset(entry.effect_id for entry in affix_db.all())
+
+
+def soul_catalog_ids(soul_db: AffixDb) -> frozenset[int]:
+    """The effect ids of every 魂核词条 in the shipped 魂核 catalog."""
+    return frozenset(entry.effect_id for entry in soul_db.all())
+
+
+def identify_soul_cores(
+    views: tuple[AccessoryView, ...] | list[AccessoryView],
+    *,
+    soul_db: AffixDb,
+    soul_item_db: ItemDb,
+) -> tuple[SoulCoreView, ...]:
+    """Keep the records that are provably 魂核, and say why the rest are not.
+
+    Two independent facts are required, because either alone over-matches:
+
+    * the header item id is a 物品总目录 魂核 row (an id outside the sheet — e.g.
+      `0xda62`, both copies of which carry 9 heads' 恩宠 — is not a 魂核 we can
+      identify, so it is reported instead of being edited), **and**
+    * at least one effect slot names an affix from the 魂核 pool.
+
+    A record that satisfies both but whose slots mix in 饰品 ids is still listed,
+    with an explicit note, so nothing is silently reclassified.
+    """
+    cores: list[SoulCoreView] = []
+    accessory_ids = None
+    for view in views:
+        kind = soul_item_db.describe(view.record_type)
+        hits = view.catalog_hits or 0
+        if kind is None:
+            if hits:
+                # Looks like a core, but the save's id is not in the 魂核 sheet.
+                cores.append(SoulCoreView(
+                    slot_index=view.slot_index, offset=view.offset,
+                    record_type=view.record_type, level=view.level,
+                    rarity=view.rarity, rarity_name=view.rarity_name,
+                    account_id=view.account_id, effects=view.effects,
+                    catalog_hits=hits, level_mirror=view.level_mirror,
+                    plus_candidate=view.plus_candidate,
+                    unidentified=(f"疑似魂核但种类 {view.record_type:#06x} "
+                                  "不在魂核种类表内，未识别；本工具不会改它"),
+                ))
+            continue
+        if not hits:
+            continue
+        if accessory_ids is None:
+            accessory_ids = frozenset()
+        cores.append(SoulCoreView(
+            slot_index=view.slot_index, offset=view.offset,
+            record_type=view.record_type, level=view.level,
+            rarity=view.rarity, rarity_name=view.rarity_name,
+            account_id=view.account_id, effects=view.effects,
+            catalog_hits=hits, level_mirror=view.level_mirror,
+            plus_candidate=view.plus_candidate,
+        ))
+    return tuple(cores)
+
+
+def list_soul_cores(
+    decrypted: bytes,
+    *,
+    soul_db: AffixDb,
+    soul_item_db: ItemDb,
+    layout: records.InventoryLayout | None = None,
+    known_ids: frozenset[int] | None = None,
+) -> tuple[SoulCoreView, ...]:
+    """List the save's 魂核 records (identified by two independent facts)."""
+    if known_ids is None:
+        known_ids = soul_catalog_ids(soul_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    return identify_soul_cores(
+        list_accessories(decrypted, layout=layout, known_ids=known_ids),
+        soul_db=soul_db, soul_item_db=soul_item_db,
+    )
 
 
 def save_checksum_is_valid(decrypted: bytes) -> bool:
@@ -766,6 +947,117 @@ def plan_edits(
             )
         )
     return tuple(plans)
+
+
+def plan_soul_edits(
+    decrypted: bytes,
+    edits: tuple[dict[str, int], ...] | list[dict[str, int]],
+    *,
+    soul_db: AffixDb,
+    soul_item_db: ItemDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> tuple[EditPlan, ...]:
+    """Validate 魂核 affix edits (the 魂核 pool, not the 饰品 one).
+
+    A 魂核 has no 恩宠/套装 affix, and that falls out of the gate rather than being
+    special-cased: every written id must be a 绘卷-魂核词条 魂核 row, so an 恩宠 id
+    (which is not in that table) is refused as "not a legal 魂核 affix".  Fixed slots
+    are refused exactly as for accessories — the 魂核 sheet's own 固定词条代码 matched
+    the save on 132/134 candidates with 0 mismatches, so the catalog flag is the
+    right evidence.
+    """
+    if not edits:
+        raise EditorError("至少需要一个编辑项")
+    normalized = tuple(_validate_edit(dict(edit), soul_db) for edit in edits)
+    if known_ids is None and layout is None:
+        known_ids = soul_catalog_ids(soul_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    cores = {view.slot_index: view
+             for view in list_soul_cores(decrypted, soul_db=soul_db,
+                                          soul_item_db=soul_item_db,
+                                          layout=layout, known_ids=known_ids)}
+    missing = sorted({edit["record_index"] for edit in normalized} - set(cores))
+    if missing:
+        raise EditorError(
+            "以下记录不在当前存档的魂核记录中："
+            + "、".join(f"#{index}" for index in missing)
+        )
+    refusals = []
+    for edit in normalized:
+        view = cores[edit["record_index"]]
+        if view.unidentified:
+            refusals.append(f"#{edit['record_index']}（{view.unidentified}）")
+            continue
+        if view.slot_is_fixed(edit["slot_index"], soul_db):
+            entry = soul_db.lookup(view.effects[edit["slot_index"]].effect_id)
+            refusals.append(
+                f"#{edit['record_index']} 槽{edit['slot_index']}"
+                f"（{entry.name if entry else '未收录'}）"
+            )
+    if refusals:
+        raise EditorError(
+            "魂核固定词条不能修改：" + "、".join(refusals)
+            + "。它是该魂核固有的一部分（随种类决定），"
+            "只有「改种类」会按新种类的固定词条自动同步"
+        )
+
+    by_record: dict[int, list[dict[str, int]]] = {}
+    for edit in normalized:
+        by_record.setdefault(edit["record_index"], []).append(edit)
+    plans: list[EditPlan] = []
+    for record_index, record_edits in sorted(by_record.items()):
+        view = cores[record_index]
+        offset = view.offset
+        record = decrypted[offset:offset + records.SCROLL_RECORD_SIZE]
+        patched = records.patch_effect_slots(
+            record, [dict(edit, record_index=record_index) for edit in record_edits],
+            allow_record_index=True,
+        )
+        plans.append(
+            EditPlan(
+                record_index=record_index,
+                offset=offset,
+                edits=tuple(record_edits),
+                before=view.effects,
+                after=records.read_effect_slots(patched),
+            )
+        )
+    return tuple(plans)
+
+
+def apply_soul_edits(
+    decrypted: bytes,
+    edits: tuple[dict[str, int], ...] | list[dict[str, int]],
+    *,
+    soul_db: AffixDb,
+    soul_item_db: ItemDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> bytes:
+    """Return new save bytes with validated 魂核 effect edits applied."""
+    plans = plan_soul_edits(decrypted, edits, soul_db=soul_db,
+                            soul_item_db=soul_item_db, known_ids=known_ids,
+                            layout=layout)
+    output = bytearray(decrypted)
+    for plan in plans:
+        offset = plan.offset
+        record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        patched = records.patch_effect_slots(
+            record,
+            [dict(edit, record_index=plan.record_index) for edit in plan.edits],
+            allow_record_index=True,
+        )
+        output[offset:offset + records.SCROLL_RECORD_SIZE] = patched
+    for plan in plans:
+        offset = plan.offset
+        applied = records.read_effect_slots(
+            bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        )
+        if applied != plan.after:
+            raise EditorError(f"记录 #{plan.record_index} 的修改未能正确写入，已中止")
+    return bytes(output)
 
 
 def apply_edits(

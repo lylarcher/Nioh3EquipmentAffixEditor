@@ -17,12 +17,20 @@ from nioh3_accessory_editor.affixdb import (
     GraceDb,
     ItemDb,
     ItemEntry,
+    load_grace_catalog,
+    load_soul_catalog,
+    load_soul_item_catalog,
 )
 from nioh3_accessory_editor.editor import (
     KindSwapError,
     LevelEditError,
     apply_kind_swaps,
     apply_level_edits,
+    apply_soul_edits,
+    identify_soul_cores,
+    list_soul_cores,
+    plan_soul_edits,
+    soul_catalog_ids,
     collect_kind_samples,
     plan_kind_swap,
     plan_level_edit,
@@ -642,6 +650,165 @@ class KindSwapTests(EditorTestCase):
             resolve_item_id(self.item_db, "不存在的饰品")
         with self.assertRaises(KindSwapError):
             resolve_item_id(self.item_db, "0x9999")
+
+
+class SoulCoreTests(unittest.TestCase):
+    """魂核: own affix pool, no 恩宠/套装, 同名固定 and 种类/等级 rules unchanged."""
+
+    #: Two real 魂核 kinds and two real 魂核 affixes from the shipped tables.
+    SOUL_A = 0x3da6
+    SOUL_B = 0x9443
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.soul_db = AffixDb(load_soul_catalog())
+        cls.soul_item_db = ItemDb(load_soul_item_catalog())
+        cls.fixed = [entry for entry in cls.soul_db.all() if entry.is_fixed]
+        cls.free = [entry for entry in cls.soul_db.all() if not entry.is_fixed]
+        cls.soul_known = soul_catalog_ids(cls.soul_db)
+
+    def _record(self, item_id: int, fixed_id: int, *, level: int = 170,
+                value: int = 7) -> bytes:
+        return support.build_record(
+            record_type=item_id, level=level, rarity=5,
+            effects=((fixed_id, value, 0x5C000000 | 0x4C << 8),
+                     (self.free[0].effect_id, 15, 0x0040)),
+        )
+
+    def _save(self, **records: bytes) -> bytes:
+        return support.build_plain_save(
+            records_by_slot={int(slot): record for slot, record in records.items()})
+
+    def _layout(self, save: bytes):
+        return records.locate_layout(save, known_ids=self.soul_known)
+
+    def _cores(self, save: bytes):
+        layout = self._layout(save)
+        return layout, list_soul_cores(save, soul_db=self.soul_db,
+                                       soul_item_db=self.soul_item_db,
+                                       layout=layout, known_ids=self.soul_known)
+
+    def test_a_real_core_is_identified_with_its_fixed_slot(self) -> None:
+        save = self._save(**{"3": self._record(self.SOUL_A, self.fixed[0].effect_id)})
+        _layout, cores = self._cores(save)
+        self.assertEqual([core.slot_index for core in cores], [3])
+        self.assertFalse(cores[0].unidentified)
+        self.assertEqual(cores[0].describe_item(self.soul_item_db),
+                         f"魂核 {self.SOUL_A:#06x} 狱卒鬼（焦热）的魂核")
+        self.assertEqual(cores[0].fixed_slots(self.soul_db), frozenset({0}))
+        self.assertEqual(cores[0].slot_role(1, self.soul_db), "魂核词条")
+
+    def test_an_id_outside_the_soul_table_is_reported_not_edited(self) -> None:
+        """`0xda62` in the real save: core-shaped, but not in the 魂核 sheet."""
+        save = self._save(**{"3": self._record(0xDA62, self.fixed[0].effect_id)})
+        _layout, cores = self._cores(save)
+        self.assertEqual(len(cores), 1)
+        self.assertTrue(cores[0].unidentified)
+        self.assertIn("不在魂核种类表内", cores[0].unidentified)
+        with self.assertRaises(EditorError) as caught:
+            plan_soul_edits(save, ({"record_index": 3, "slot_index": 1,
+                                    "effect_id": self.free[1].effect_id,
+                                    "value": 19, "metadata": 0x40},
+                                   ),
+                            soul_db=self.soul_db,
+                            soul_item_db=self.soul_item_db,
+                            known_ids=self.soul_known, layout=self._layout(save))
+        self.assertIn("未识别", str(caught.exception))
+
+    def test_a_fixed_slot_cannot_be_edited(self) -> None:
+        save = self._save(**{"3": self._record(self.SOUL_A, self.fixed[0].effect_id)})
+        with self.assertRaises(EditorError) as caught:
+            plan_soul_edits(save, ({"record_index": 3, "slot_index": 0,
+                                    "effect_id": self.free[1].effect_id,
+                                    "value": 19, "metadata": 0x40},),
+                            soul_db=self.soul_db,
+                            soul_item_db=self.soul_item_db,
+                            known_ids=self.soul_known, layout=self._layout(save))
+        self.assertIn("魂核固定词条不能修改", str(caught.exception))
+
+    def test_a_normal_slot_may_become_another_soul_affix(self) -> None:
+        save = self._save(**{"3": self._record(self.SOUL_A, self.fixed[0].effect_id)})
+        layout = self._layout(save)
+        patched = apply_soul_edits(
+            save,
+            ({"record_index": 3, "slot_index": 1,
+              "effect_id": self.free[1].effect_id,
+              "value": self.free[1].value, "metadata": 0x40},),
+            soul_db=self.soul_db, soul_item_db=self.soul_item_db,
+            known_ids=self.soul_known, layout=layout,
+        )
+        core = list_soul_cores(patched, soul_db=self.soul_db,
+                               soul_item_db=self.soul_item_db, layout=layout,
+                               known_ids=self.soul_known)[0]
+        self.assertEqual(core.effects[1].effect_id, self.free[1].effect_id)
+        self.assertEqual(core.effects[0].effect_id, self.fixed[0].effect_id,
+                         "固定词条必须原样保留")
+
+    def test_a_grace_id_is_refused_because_a_core_has_none(self) -> None:
+        """魂核没有恩宠/套装: the 恩宠 id is simply not in the 魂核 pool."""
+        grace_id = next(entry.effect_id for entry in load_grace_catalog()
+                        if entry.category in ("恩宠", "上位恩宠"))
+        self.assertIsNone(self.soul_db.lookup(grace_id))
+        save = self._save(**{"3": self._record(self.SOUL_A, self.fixed[0].effect_id)})
+        with self.assertRaises(AffixError):
+            plan_soul_edits(save, ({"record_index": 3, "slot_index": 4,
+                                    "effect_id": grace_id, "value": 1,
+                                    "metadata": 0x0C},),
+                            soul_db=self.soul_db,
+                            soul_item_db=self.soul_item_db,
+                            known_ids=self.soul_known, layout=self._layout(save))
+
+    def test_the_level_cap_applies_to_cores_too(self) -> None:
+        save = self._save(**{"3": self._record(self.SOUL_A, self.fixed[0].effect_id)})
+        layout = self._layout(save)
+        plan = plan_level_edit(save, 3, 180, affix_db=self.soul_db,
+                               known_ids=self.soul_known, layout=layout)
+        patched = apply_level_edits(save, [plan])
+        core = list_soul_cores(patched, soul_db=self.soul_db,
+                               soul_item_db=self.soul_item_db, layout=layout,
+                               known_ids=self.soul_known)[0]
+        self.assertEqual(core.level, 180)
+        with self.assertRaises(LevelEditError):
+            plan_level_edit(save, 3, 181, affix_db=self.soul_db,
+                            known_ids=self.soul_known, layout=layout)
+
+    def test_a_core_swap_copies_the_target_kinds_fixed_affix(self) -> None:
+        save = self._save(
+            **{"3": self._record(self.SOUL_A, self.fixed[0].effect_id),
+               "5": self._record(self.SOUL_B, self.fixed[1].effect_id, value=9)}
+        )
+        layout = self._layout(save)
+        plan = plan_kind_swap(save, 3, self.SOUL_B, affix_db=self.soul_db,
+                              item_db=self.soul_item_db, known_ids=self.soul_known,
+                              layout=layout)
+        patched = apply_kind_swaps(save, [plan])
+        core = list_soul_cores(patched, soul_db=self.soul_db,
+                               soul_item_db=self.soul_item_db, layout=layout,
+                               known_ids=self.soul_known)[0]
+        self.assertEqual(core.record_type, self.SOUL_B)
+        self.assertEqual(core.effects[0].effect_id, self.fixed[1].effect_id,
+                         "固定词条按新种类自动同步")
+        self.assertEqual(core.effects[0].value, 9)
+        self.assertEqual(core.levels_ok if hasattr(core, "levels_ok") else core.level,
+                         core.level)
+
+    def test_an_accessory_id_is_never_treated_as_a_core(self) -> None:
+        """The one shared id (0xfb24) is 饰品词条 *and* 魂核词条; the item table decides."""
+        shared = next(entry for entry in self.soul_db.all()
+                      if self.db_lookup_shared(entry.effect_id))
+        self.assertIsNotNone(shared)
+        save = self._save(**{"3": support.build_record(
+            record_type=0x4987,  # 八尺琼勾玉[武士], an accessory
+            effects=((self.free[0].effect_id, 15, 0x40),))})
+        _layout, cores = self._cores(save)
+        self.assertEqual([core.unidentified for core in cores if core.unidentified],
+                         [cores[0].unidentified] if cores else [])
+        for core in cores:
+            self.assertTrue(core.unidentified, "非魂核种类不得进入魂核列表")
+
+    @staticmethod
+    def db_lookup_shared(effect_id: int) -> bool:
+        return AffixDb().lookup(effect_id) is not None
 
 
 class LevelEditTests(EditorTestCase):

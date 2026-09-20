@@ -16,7 +16,14 @@ import sys
 from pathlib import Path
 
 from . import paths, records, version
-from .affixdb import AffixDb, AffixError, GraceDb, ItemDb
+from .affixdb import (
+    AffixDb,
+    AffixError,
+    GraceDb,
+    ItemDb,
+    load_soul_catalog,
+    load_soul_item_catalog,
+)
 from .bootstrap import ensure_once
 from .config import ConfigError, EditorConfig, load_config, write_default_config
 from .editor import (
@@ -28,10 +35,12 @@ from .editor import (
     apply_grace_edit,
     apply_kind_swaps,
     apply_level_edits,
+    apply_soul_edits,
     commit_save,
     discover_saves,
     grace_edit_availability,
     list_accessories,
+    list_soul_cores,
     open_save,
     plan_kind_swap,
     plan_level_edit,
@@ -39,6 +48,7 @@ from .editor import (
     resolve_item_id,
     restore_backup,
     save_checksum_is_valid,
+    soul_catalog_ids,
 )
 from .records import RecordError
 from .savefile import (
@@ -120,6 +130,41 @@ def _select_save(args: argparse.Namespace) -> SaveDescriptor:
         print(f"提示：发现 {len(saves)} 个候选存档，使用第一个；可用 --save-index/--account 选择。",
               file=sys.stderr)
     return saves[0]
+
+
+def cmd_souls(args: argparse.Namespace) -> int:
+    """List the save's 魂核 records (read-only)."""
+    soul_db = AffixDb(load_soul_catalog())
+    soul_item_db = ItemDb(load_soul_item_catalog())
+    known_ids = soul_catalog_ids(soul_db)
+    crypto = _crypto(args)
+    save = _select_save(args)
+    print(f"存档: {save.display}")
+    print(f"路径: {save.path}")
+    data = open_save(save, crypto)
+    try:
+        layout = records.locate_layout(data, known_ids=known_ids)
+    except RecordError as error:
+        print(f"\n未找到物品记录表：{error}")
+        return 1
+    print(f"记录表: {layout.describe('魂核')}")
+    cores = list_soul_cores(data, soul_db=soul_db, soul_item_db=soul_item_db,
+                            layout=layout, known_ids=known_ids)
+    identified = [core for core in cores if not core.unidentified]
+    print(f"\n魂核词条库 {len(soul_db)} 条 / 魂核种类表 {len(soul_item_db)} 条；"
+          f"候选记录 {len(cores)} 条，其中已识别 {len(identified)} 条")
+    print(f"列出 {len(identified)} 条魂核记录（魂核没有恩宠/套装词条）\n")
+    for core in cores:
+        print(
+            f"记录 #{core.slot_index} @ {core.offset:#x}  "
+            f"Lv{core.level} {core.rarity_name}  魂核词条命中 {core.catalog_hits}"
+        )
+        for line in core.describe_effects(soul_db, soul_item_db):
+            print(line)
+        print()
+    if not identified:
+        print("该存档里没有能识别的魂核记录。")
+    return 0
 
 
 def cmd_list(args: argparse.Namespace) -> int:
@@ -242,6 +287,13 @@ def cmd_edit(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
     grace_db = GraceDb.best_effort()
     item_db = ItemDb.best_effort()
+    if args.soul:
+        # 魂核 use their own affix pool and have no 恩宠/套装 affix, so the whole
+        # edit path switches catalogs; the 恩宠 option is meaningless there.
+        affix_db = AffixDb(load_soul_catalog())
+        item_db = ItemDb(load_soul_item_catalog())
+        if args.grace:
+            raise EditorError("魂核没有恩宠/套装词条，--grace 不适用于 --soul")
     crypto = _crypto(args)
     save = _select_save(args)
     if args.record < 0:
@@ -264,8 +316,19 @@ def cmd_edit(args: argparse.Namespace) -> int:
     print(DISCLAIMER)
     print(f"存档: {save.display}")
     data = open_save(save, crypto)
-    known_ids = accessory_catalog_ids(affix_db)
+    known_ids = (soul_catalog_ids(affix_db) if args.soul
+                 else accessory_catalog_ids(affix_db))
     layout = records.locate_layout(data, known_ids=known_ids)
+    if args.soul:
+        cores = {core.slot_index: core
+                 for core in list_soul_cores(data, soul_db=affix_db,
+                                             soul_item_db=item_db,
+                                             layout=layout, known_ids=known_ids)}
+        current = cores.get(args.record)
+        if current is None:
+            raise EditorError(f"记录 #{args.record} 不在当前存档的魂核记录中"
+                              "（魂核按「种类表 + 魂核词条库」双重证据识别）")
+        print(f"目标魂核: {current.describe_item(item_db)} Lv{current.level}")
     if args.level is not None:
         plan = plan_level_edit(data, args.record, args.level,
                                 affix_db=affix_db, known_ids=known_ids,
@@ -307,15 +370,30 @@ def cmd_edit(args: argparse.Namespace) -> int:
             known_ids=known_ids, layout=layout,
         )
     else:
-        patched = apply_edits(data, edits, affix_db=affix_db,
-                              known_ids=known_ids, layout=layout)
+        if args.soul:
+            patched = apply_soul_edits(data, edits, soul_db=affix_db,
+                                       soul_item_db=item_db,
+                                       known_ids=known_ids, layout=layout)
+        else:
+            patched = apply_edits(data, edits, affix_db=affix_db,
+                                  known_ids=known_ids, layout=layout)
 
-    for view in list_accessories(patched, layout=layout, known_ids=known_ids):
-        if view.slot_index != args.record:
-            continue
-        print(f"修改后记录 #{view.slot_index}:")
-        for line in view.describe_effects(affix_db, grace_db, item_db):
-            print(line)
+    if args.soul:
+        for core in list_soul_cores(patched, soul_db=affix_db,
+                                     soul_item_db=item_db, layout=layout,
+                                     known_ids=known_ids):
+            if core.slot_index != args.record:
+                continue
+            print(f"修改后记录 #{core.slot_index}:")
+            for line in core.describe_effects(affix_db, item_db):
+                print(line)
+    else:
+        for view in list_accessories(patched, layout=layout, known_ids=known_ids):
+            if view.slot_index != args.record:
+                continue
+            print(f"修改后记录 #{view.slot_index}:")
+            for line in view.describe_effects(affix_db, grace_db, item_db):
+                print(line)
 
     # State the requirement before touching the file, and say whether the gate
     # is currently satisfied so the user is never surprised by a refusal.
@@ -561,7 +639,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser_check = sub.add_parser("check", help="只读检查存档完整性与饰品数量")
     parser_check.set_defaults(func=cmd_check)
 
+    parser_souls = sub.add_parser(
+        "souls", help="列出存档中的魂核记录与词条（只读，魂核无恩宠/套装）")
+    parser_souls.set_defaults(func=cmd_souls)
+
     parser_edit = sub.add_parser("edit", help="修改饰品词条或恩宠并写回存档")
+    parser_edit.add_argument("--soul", action="store_true",
+                             help="改为编辑魂核（用魂核词条库，魂核没有恩宠/套装词条）")
     parser_edit.add_argument("--record", type=int, default=-1,
                              help="目标饰品记录索引（list 输出中的 #N）")
     parser_edit.add_argument("--edit", action="append",

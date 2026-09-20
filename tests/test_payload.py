@@ -37,6 +37,8 @@ class CollectorTests(unittest.TestCase):
         for expected in ("data/accessory_affixes.json",
                          "data/grace_affixes.json",
                          "data/accessory_items.json",
+                         "data/soul_affixes.json",
+                         "data/soul_items.json",
                          "config/editor.json",
                          "assets/app.ico",
                          "assets/logo.png",

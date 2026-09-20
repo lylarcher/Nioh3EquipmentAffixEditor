@@ -32,6 +32,8 @@ __all__ = [
     "default_crypto_exe",
     "default_grace_path",
     "default_items_path",
+    "default_soul_catalog_path",
+    "default_soul_items_path",
     "default_state_root",
     "icon_path",
     "is_frozen",
@@ -132,6 +134,16 @@ def default_grace_path() -> Path:
 def default_items_path() -> Path:
     """Bundled 物品总目录 subset: 饰品 item ids (display only)."""
     return resource_path("data", "accessory_items.json")
+
+
+def default_soul_catalog_path() -> Path:
+    """Bundled 魂核 affix catalogue (绘卷-魂核词条, 种类=魂核)."""
+    return resource_path("data", "soul_affixes.json")
+
+
+def default_soul_items_path() -> Path:
+    """Bundled 物品总目录 subset: 魂核 item ids (display only)."""
+    return resource_path("data", "soul_items.json")
 
 
 def default_config_path() -> Path:

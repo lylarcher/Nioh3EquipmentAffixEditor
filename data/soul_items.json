@@ -1,0 +1,423 @@
+{
+  "schema": "nioh3-soul-items/v1",
+  "count": 83,
+  "source": "仁王3词条装备库v2.21.xlsx / 物品总目录（魂核）",
+  "conflicts": [],
+  "items": [
+    {
+      "item_id": 15782,
+      "name": "狱卒鬼（焦热）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 37955,
+      "name": "狱卒鬼（八寒）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 46000,
+      "name": "狱卒鬼（针山）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 13110,
+      "name": "狱卒鬼（业风）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 9040,
+      "name": "雷兽的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 28243,
+      "name": "山狗的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 21470,
+      "name": "野槌的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 5769,
+      "name": "夜行兵的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 62712,
+      "name": "山彦的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 47985,
+      "name": "撒沙婆婆的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 24284,
+      "name": "地狱蜂的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 15109,
+      "name": "人鱼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 53754,
+      "name": "见越入道的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 37158,
+      "name": "朱盆的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 33859,
+      "name": "饿鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 11220,
+      "name": "棘饿鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 5397,
+      "name": "饿鬼大将的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 62845,
+      "name": "妖鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 27271,
+      "name": "忍者妖鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 33358,
+      "name": "亡骸武者的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 27034,
+      "name": "狂骨的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 45916,
+      "name": "敷次郎的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 38242,
+      "name": "鬼火（火）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 48436,
+      "name": "鬼火（水）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 36913,
+      "name": "鬼火（雷）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 54892,
+      "name": "鬼火（风）的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 42632,
+      "name": "小海坊主的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 15217,
+      "name": "乌鸦天狗的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 51193,
+      "name": "轮入道的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 37203,
+      "name": "独脚踏鞴的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 11776,
+      "name": "妖蟹的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 41820,
+      "name": "濡女的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 43183,
+      "name": "猿鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 58929,
+      "name": "独眼鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 34872,
+      "name": "防人的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 22961,
+      "name": "以津真天的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 49046,
+      "name": "子泣爷爷的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 38661,
+      "name": "山姥的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 41863,
+      "name": "猥裸的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 28426,
+      "name": "古笼火的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 31705,
+      "name": "姑获鸟的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 48453,
+      "name": "冰柱女的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 31544,
+      "name": "一反木棉的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 42052,
+      "name": "油伞妖的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 25284,
+      "name": "祸津武士的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 24567,
+      "name": "肉瘤怪的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 57339,
+      "name": "夜叉的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 52763,
+      "name": "外道兵的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 50190,
+      "name": "蛇骨婆的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 61171,
+      "name": "大天狗的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 15600,
+      "name": "惧鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 60256,
+      "name": "茨木童子的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 2669,
+      "name": "涂佛的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 55206,
+      "name": "傲岸鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 41960,
+      "name": "冒疾鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 17919,
+      "name": "执心鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 11074,
+      "name": "马头鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 36989,
+      "name": "牛头鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 30568,
+      "name": "镰触的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 5659,
+      "name": "飞缘魔的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 22697,
+      "name": "烟烟罗的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 54609,
+      "name": "两面宿傩的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 4639,
+      "name": "女郎蜘蛛的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 28790,
+      "name": "火车的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 49798,
+      "name": "阴摩罗鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 22035,
+      "name": "怨灵鬼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 27958,
+      "name": "血刀修罗的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 50350,
+      "name": "比留呼的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 39083,
+      "name": "河童的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 40713,
+      "name": "赤河童的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 18077,
+      "name": "琵琶牧牧的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 24625,
+      "name": "泥墙的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 53492,
+      "name": "貉的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 48665,
+      "name": "木灵的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 48491,
+      "name": "魑魅的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 53310,
+      "name": "善擦的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 30821,
+      "name": "千千古的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 31726,
+      "name": "大太法师的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 20413,
+      "name": "蛤蟆附身的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 49342,
+      "name": "铁鼠的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 56028,
+      "name": "垢尝的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 36404,
+      "name": "一目连的魂核",
+      "category": "魂核"
+    },
+    {
+      "item_id": 12196,
+      "name": "大蛤蟆的魂核",
+      "category": "魂核"
+    }
+  ]
+}

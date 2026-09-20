@@ -25,6 +25,7 @@ from nioh3_accessory_editor import bootstrap
 #: Kept in sync with the CLI subcommands by tests/test_entrypoints.py.
 CLI_COMMANDS = frozenset(
     {"list", "scan", "check", "edit", "backup", "restore", "version", "config",
+     "souls",
      "-h", "--help", "--version", "--config", "--python-crypto"}
 )
 

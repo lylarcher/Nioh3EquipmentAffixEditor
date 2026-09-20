@@ -21,18 +21,26 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 
 from . import paths
-from .affixdb import AffixDb, GraceDb, ItemDb
+from .affixdb import (
+    AffixDb,
+    AffixError,
+    GraceDb,
+    ItemDb,
+    load_soul_catalog,
+)
 from .bootstrap import ensure_once, last_report
 from .config import ConfigError, EditorConfig, load_config
 from .editor import (
     AccessoryView,
     GraceEditError,
     SaveDescriptor,
+    SoulCoreView,
     accessory_catalog_ids,
     apply_edits,
     apply_grace_edit,
     apply_kind_swaps,
     apply_level_edits,
+    apply_soul_edits,
     collect_kind_samples,
     commit_save,
     discover_saves,
@@ -40,14 +48,16 @@ from .editor import (
     inspect_layout,
     list_accessories,
     list_backups,
+    list_soul_cores,
     open_save,
     plan_kind_swap,
     plan_level_edit,
     resolve_grace_id,
     restore_backup,
     save_checksum_is_valid,
+    soul_catalog_ids,
 )
-from .paths import resource_root
+from .paths import default_soul_items_path, resource_root
 from .records import (
     EFFECT_COUNT,
     EMPTY_EFFECT_ID,
@@ -140,6 +150,19 @@ class AccessoryEditorApp(tk.Tk):
         # stale file must not stop the editor from running, it only costs names.
         self.grace_db = GraceDb.best_effort()
         self.item_db = ItemDb.best_effort()
+        # 魂核 use their own affix pool and item table; a missing file disables the
+        # 魂核 tab instead of failing the app (fail closed: no data, no edits).
+        self.soul_db_error = ""
+        try:
+            self.soul_db = AffixDb(load_soul_catalog())
+        except AffixError as error:
+            self.soul_db = AffixDb([])
+            self.soul_db_error = str(error)
+        self.soul_item_db = ItemDb.best_effort(default_soul_items_path())
+        self.soul_views: list[SoulCoreView] = []
+        self.selected_soul: int | None = None
+        self.soul_layout = None
+        self.soul_known_ids: frozenset[int] = frozenset()
         self.grace_availability = None
         self._backend_note = ""
         self.crypto = self._build_crypto()
@@ -290,7 +313,14 @@ class AccessoryEditorApp(tk.Tk):
                                      justify=tk.LEFT)
         self.table_label.pack(side=tk.BOTTOM, fill=tk.X, padx=8)
 
-        mid = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        self.accessory_tab = ttk.Frame(self.notebook, padding=(2, 2))
+        self.soul_tab = ttk.Frame(self.notebook, padding=(2, 2))
+        self.notebook.add(self.accessory_tab, text="饰品")
+        self.notebook.add(self.soul_tab, text="魂核")
+
+        mid = ttk.Panedwindow(self.accessory_tab, orient=tk.HORIZONTAL)
         mid.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=4)
 
         left = ttk.Frame(mid)
@@ -418,6 +448,337 @@ class AccessoryEditorApp(tk.Tk):
         self.item_label.pack(anchor=tk.W, pady=(6, 0))
 
         mid.add(right, weight=3)
+
+        self._build_soul_tab()
+
+    # --------------------------------------------------------------- 魂核 tab
+    def _build_soul_tab(self) -> None:
+        """The 魂核 tab: same three edits, but on the 魂核 catalog.
+
+        A 魂核 has no 恩宠/套装 affix, so there is no 恩宠 row here — an id outside
+        the 魂核 pool is refused by the engine rather than special-cased in the UI.
+        """
+        ttk.Label(
+            self.soul_tab,
+            text=("魂核（魂核没有恩宠/套装词条；同名固定词条不可修改，"
+                  "改种类时按新种类的真实样本自动同步）"),
+            foreground="#1a4f8f",
+        ).pack(anchor=tk.W, padx=8, pady=(4, 0))
+        mid = ttk.Panedwindow(self.soul_tab, orient=tk.HORIZONTAL)
+        mid.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        left = ttk.Frame(mid)
+        ttk.Label(left, text="魂核记录（选择后编辑右侧词条槽）").pack(anchor=tk.W)
+        self.soul_tree = ttk.Treeview(
+            left, columns=("level", "rarity", "type"), show="tree headings",
+            height=16,
+        )
+        self.soul_tree.heading("#0", text="记录")
+        self.soul_tree.heading("level", text="等级")
+        self.soul_tree.heading("rarity", text="品质")
+        self.soul_tree.heading("type", text="种类")
+        self.soul_tree.column("#0", width=70, anchor=tk.CENTER)
+        self.soul_tree.column("level", width=70, anchor=tk.CENTER)
+        self.soul_tree.column("rarity", width=76, anchor=tk.CENTER)
+        self.soul_tree.column("type", width=210, anchor=tk.W)
+        self.soul_tree.pack(fill=tk.BOTH, expand=True)
+        self.soul_tree.bind("<<TreeviewSelect>>",
+                            lambda _event: self._on_soul_selected())
+        mid.add(left, weight=2)
+
+        right = ttk.Frame(mid)
+        ttk.Label(right, text="魂核词条槽（选择词条后点 应用修改）").pack(anchor=tk.W)
+        slot_frame = ttk.Frame(right)
+        slot_frame.pack(fill=tk.BOTH, expand=True)
+        self.soul_slot_combos: list[ttk.Combobox] = []
+        self.soul_slot_labels: list[tk.StringVar] = []
+        # Label -> entry, exactly like the 饰品 rows: a combo only ever holds a
+        # shipped label, so an unknown label means "not a legal affix" and is
+        # skipped instead of being written.
+        self.soul_choices = {entry.label: entry for entry in self.soul_db.all()}
+        for index in range(EFFECT_COUNT):
+            row = ttk.Frame(slot_frame)
+            row.pack(fill=tk.X, pady=1)
+            ttk.Label(row, text=f"槽{index + 1}:", width=5).pack(side=tk.LEFT)
+            combo = ttk.Combobox(row, state="readonly", width=54,
+                                 values=self.soul_db.labels())
+            combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            self.soul_slot_combos.append(combo)
+            self.soul_slot_labels.append(tk.StringVar(value=""))
+            ttk.Label(row, textvariable=self.soul_slot_labels[index],
+                      foreground="#666666").pack(side=tk.LEFT)
+        ttk.Button(right, text="应用魂核词条",
+                   command=self.apply_soul_edits_to_selection).pack(anchor=tk.W,
+                                                                   pady=(4, 0))
+
+        level_frame = ttk.LabelFrame(right, text="魂核等级（上限 180）", padding=(6, 4))
+        level_frame.pack(fill=tk.X, pady=(6, 0))
+        level_row = ttk.Frame(level_frame)
+        level_row.pack(fill=tk.X)
+        ttk.Label(level_row, text="改成:").pack(side=tk.LEFT)
+        self.soul_level_var = tk.StringVar(value="")
+        self.soul_level_entry = ttk.Entry(level_row, textvariable=self.soul_level_var,
+                                          width=8)
+        self.soul_level_entry.pack(side=tk.LEFT, padx=4)
+        self.soul_level_button = ttk.Button(level_row, text="应用魂核等级",
+                                            command=self.apply_soul_level_to_selection)
+        self.soul_level_button.pack(side=tk.LEFT, padx=2)
+        self.soul_level_status_var = tk.StringVar(
+            value="选择一条魂核记录后，这里会显示它的等级是否可以修改。")
+        ttk.Label(level_frame, textvariable=self.soul_level_status_var,
+                  foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+
+        kind_frame = ttk.LabelFrame(right, text="魂核种类（同分类互换）", padding=(6, 4))
+        kind_frame.pack(fill=tk.X, pady=(6, 0))
+        kind_row = ttk.Frame(kind_frame)
+        kind_row.pack(fill=tk.X)
+        ttk.Label(kind_row, text="改成:").pack(side=tk.LEFT)
+        self.soul_kind_combo = ttk.Combobox(kind_row, state="readonly", width=36,
+                                            values=self.soul_item_db.labels())
+        self.soul_kind_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.soul_kind_button = ttk.Button(kind_row, text="应用魂核种类",
+                                           command=self.apply_soul_kind_to_selection)
+        self.soul_kind_button.pack(side=tk.LEFT, padx=2)
+        self.soul_kind_status_var = tk.StringVar(
+            value="选择一条魂核记录后，这里会显示它能换成哪些同类魂核。")
+        ttk.Label(kind_frame, textvariable=self.soul_kind_status_var,
+                  foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        self.soul_kind_choices: dict[str, object] = {}
+        self._set_soul_controls(False)
+        if self.soul_db_error:
+            self.soul_kind_status_var.set(
+                f"魂核词条库不可用：{self.soul_db_error}（本页只读）")
+
+    def _set_soul_controls(self, enabled: bool) -> None:
+        state = ["!disabled"] if enabled else ["disabled"]
+        self.soul_level_entry.state(state)
+        self.soul_level_button.state(state)
+        self.soul_kind_combo.state(["!disabled", "readonly"] if enabled
+                                   else ["disabled"])
+        self.soul_kind_button.state(state)
+
+    def _populate_soul_cores(self) -> None:
+        """Fill the 魂核 tree from the same loaded save bytes."""
+        self.soul_tree.delete(*self.soul_tree.get_children())
+        self.soul_views = []
+        if self.decrypted is None or not len(self.soul_db) or \
+                not self.soul_item_db.is_loaded:
+            for index in range(EFFECT_COUNT):
+                self.soul_slot_combos[index].set("")
+                self.soul_slot_labels[index].set("")
+            return
+        known_ids = soul_catalog_ids(self.soul_db)
+        try:
+            layout = inspect_layout(self.decrypted, known_ids=known_ids)
+        except RecordError:
+            return
+        self.soul_layout = layout
+        self.soul_known_ids = known_ids
+        views = list_soul_cores(self.decrypted, soul_db=self.soul_db,
+                                 soul_item_db=self.soul_item_db, layout=layout,
+                                 known_ids=known_ids)
+        self.soul_views = list(views)
+        for view in views:
+            if view.unidentified:
+                continue
+            self.soul_tree.insert(
+                "", tk.END, iid=str(view.slot_index),
+                text=f"#{view.slot_index}",
+                values=(f"Lv{view.level}", view.rarity_name,
+                        view.describe_item(self.soul_item_db)),
+            )
+
+    def _selected_soul(self) -> SoulCoreView | None:
+        if self.selected_soul is None:
+            return None
+        for view in self.soul_views:
+            if view.slot_index == self.selected_soul:
+                return view
+        return None
+
+    def _on_soul_selected(self) -> None:
+        selection = self.soul_tree.selection()
+        if not selection:
+            return
+        self.selected_soul = int(selection[0])
+        view = self._selected_soul()
+        if view is None:
+            return
+        for index, effect in enumerate(view.effects):
+            if effect.is_empty:
+                self.soul_slot_combos[index].set(EMPTY_LABEL)
+                self.soul_slot_labels[index].set("")
+                self.soul_slot_combos[index].state(["!disabled", "readonly"])
+                continue
+            entry = self.soul_db.lookup(effect.effect_id)
+            label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
+            if view.slot_is_fixed(index, self.soul_db):
+                self.soul_slot_combos[index].set(f"{label}（固定，不可修改）")
+                self.soul_slot_labels[index].set(
+                    f"数值={effect.value} 标识={effect.metadata:#010x}"
+                    " ← 固定词条，禁止修改")
+                self.soul_slot_combos[index].state(["disabled"])
+                continue
+            self.soul_slot_combos[index].set(label)
+            self.soul_slot_labels[index].set(
+                f"数值={effect.value} 标识={effect.metadata:#010x}")
+            self.soul_slot_combos[index].state(["!disabled", "readonly"])
+        self.soul_level_var.set(str(view.level))
+        self.soul_level_status_var.set(
+            f"当前 Lv{view.level}（范围 1..{MAX_ITEM_LEVEL}）。"
+            "只改等级字段，词条数值不随等级变化；请谨慎修改并进游戏确认。"
+        )
+        allowed = view.level_mirror == view.level
+        self.soul_level_entry.state(["!disabled"] if allowed else ["disabled"])
+        self.soul_level_button.state(["!disabled"] if allowed else ["disabled"])
+        samples = collect_kind_samples(self.decrypted, affix_db=self.soul_db,
+                                        known_ids=self.soul_known_ids,
+                                        layout=self.soul_layout)
+        choices = []
+        for entry in self.soul_item_db.all():
+            if entry.item_id == view.record_type:
+                continue
+            sample = samples.get(entry.item_id)
+            if sample is None or sample.ambiguous:
+                continue
+            choices.append(entry)
+        self.soul_kind_choices = {entry.label: entry for entry in choices}
+        self.soul_kind_combo.configure(values=tuple(self.soul_kind_choices))
+        self.soul_kind_combo.set("")
+        self.soul_kind_status_var.set(
+            f"当前 {view.describe_item(self.soul_item_db)}；"
+            f"存档里可换的同类魂核 {len(choices)} 个（只列出已有实例、"
+            "固定词条唯一可复制的种类）。")
+        self._set_soul_controls(True)
+        self.soul_kind_combo.state(["!disabled", "readonly"] if choices
+                                   else ["disabled"])
+        self.soul_kind_button.state(["!disabled"] if choices else ["disabled"])
+
+    def _soul_edit_for(self, index: int, view: SoulCoreView) -> dict[str, int] | None:
+        """Build the pending 魂核 edit for one slot (``None`` when unchanged)."""
+        text = self.soul_slot_combos[index].get()
+        current = view.effects[index]
+        if text == EMPTY_LABEL:
+            if current.is_empty:
+                return None
+            return {"slot_index": index, "effect_id": EMPTY_EFFECT_ID,
+                    "value": 0, "metadata": 0}
+        entry = self.soul_choices.get(text)
+        if entry is None:
+            return None
+        if entry.effect_id == current.effect_id and entry.value == current.value:
+            return None
+        return {"slot_index": index, "effect_id": entry.effect_id,
+                "value": entry.value, "metadata": current.metadata}
+
+    def apply_soul_edits_to_selection(self) -> None:
+        view = self._selected_soul()
+        if self.decrypted is None or view is None:
+            messagebox.showwarning("提示", "请先读取存档并在魂核页选择一条记录")
+            return
+        edits = []
+        for index in range(EFFECT_COUNT):
+            try:
+                edit = self._soul_edit_for(index, view)
+            except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+                messagebox.showwarning("提示", str(error))
+                return
+            if edit is not None:
+                edits.append(dict(edit, record_index=view.slot_index))
+        if not edits:
+            messagebox.showwarning("提示", "当前没有检测到改动")
+            return
+        target = view.slot_index
+        try:
+            self.decrypted = apply_soul_edits(
+                self.decrypted, tuple(edits), soul_db=self.soul_db,
+                soul_item_db=self.soul_item_db, known_ids=self.soul_known_ids,
+                layout=self.soul_layout)
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        self._refresh_after_edit(target)
+
+    def apply_soul_level_to_selection(self) -> None:
+        view = self._selected_soul()
+        if self.decrypted is None or view is None:
+            messagebox.showwarning("提示", "请先读取存档并在魂核页选择一条记录")
+            return
+        try:
+            level = int(self.soul_level_var.get().strip(), 10)
+        except ValueError:
+            messagebox.showwarning("提示", f"等级必须是整数：{self.soul_level_var.get()!r}")
+            return
+        target = view.slot_index
+        if not messagebox.askokcancel(
+            "确认修改魂核等级",
+            f"把魂核记录 #{target} 的等级改成 {level}？\n\n"
+            "· 只写入等级字段（+0x06/+0x08），词条数值不会被改写；\n"
+            "· 请谨慎修改：改完请进游戏确认显示与属性是否正常；\n"
+            "· 存档写入前会自动备份。",
+            icon="warning",
+        ):
+            return
+        try:
+            plan = plan_level_edit(self.decrypted, target, level,
+                                    affix_db=self.soul_db,
+                                    known_ids=self.soul_known_ids,
+                                    layout=self.soul_layout)
+            self.decrypted = apply_level_edits(self.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        self._refresh_after_edit(target)
+
+    def apply_soul_kind_to_selection(self) -> None:
+        view = self._selected_soul()
+        if self.decrypted is None or view is None:
+            messagebox.showwarning("提示", "请先读取存档并在魂核页选择一条记录")
+            return
+        chosen = self.soul_kind_choices.get(self.soul_kind_combo.get())
+        if chosen is None:
+            messagebox.showwarning("提示", "请先选择要换成的魂核种类")
+            return
+        target = view.slot_index
+        if not messagebox.askokcancel(
+            "确认改魂核种类",
+            f"把魂核记录 #{target} 换成 {chosen.label}？\n\n"
+            "· 只允许同分类（魂核 ↔ 魂核）互换；\n"
+            "· 该魂核的固定词条会从本存档里同种类的真实样本复制；\n"
+            "· 普通词条保持原样；改完请进游戏确认；写入前会自动备份。",
+            icon="warning",
+        ):
+            return
+        try:
+            plan = plan_kind_swap(self.decrypted, target, chosen.item_id,
+                                  affix_db=self.soul_db,
+                                  item_db=self.soul_item_db,
+                                  known_ids=self.soul_known_ids,
+                                  layout=self.soul_layout)
+            self.decrypted = apply_kind_swaps(self.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        self._refresh_after_edit(target)
+
+    def _refresh_after_edit(self, target: int) -> None:
+        """Reload both tabs from the patched memory image, keeping the selection."""
+        known_ids = accessory_catalog_ids(self.affix_db)
+        layout = inspect_layout(self.decrypted, known_ids=known_ids)
+        self._populate_accessories(
+            (self.decrypted,
+             list_accessories(self.decrypted, layout=layout, known_ids=known_ids),
+             self.checksum_ok, layout),
+            keep_selection=True,
+        )
+        self._populate_soul_cores()
+        if self.soul_tree.exists(str(target)):
+            self.soul_tree.selection_set(str(target))
+            self.selected_soul = target
+            self._on_soul_selected()
+        self._status(f"记录 #{target} 的修改已应用到内存数据（尚未写入存档）")
 
     # ------------------------------------------------------------- version
 
@@ -638,6 +999,7 @@ class AccessoryEditorApp(tk.Tk):
         # every later edit reuses these two, so a record index can never resolve to
         # a different item than the one the user selected.
         self.known_ids = accessory_catalog_ids(self.affix_db)
+        self._populate_soul_cores()
         # Only records whose affixes really are 饰品词条 are editable accessories;
         # weapons/armour/绘卷 share the same array and are reported separately.
         # ``is_accessory is None`` means no catalog evidence was supplied, so the
