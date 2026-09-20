@@ -42,8 +42,11 @@ from .savefile import (
 
 __all__ = [
     "AccessoryView",
+    "CreationError",
+    "CreationPlan",
     "EditPlan",
     "EditorError",
+    "FreeSlotReport",
     "KindSample",
     "KindSwapError",
     "KindSwapPlan",
@@ -51,6 +54,7 @@ __all__ = [
     "LevelPlan",
     "SaveDescriptor",
     "SoulCoreView",
+    "apply_creations",
     "apply_edits",
     "apply_kind_swaps",
     "apply_level_edits",
@@ -58,11 +62,13 @@ __all__ = [
     "collect_kind_samples",
     "commit_save",
     "discover_saves",
+    "find_free_slots",
     "identify_soul_cores",
     "list_accessories",
     "list_backups",
     "list_soul_cores",
     "open_save",
+    "plan_creation",
     "plan_edits",
     "plan_kind_swap",
     "plan_level_edit",
@@ -863,6 +869,21 @@ def _validate_edit(edit: dict[str, int], affix_db: AffixDb) -> dict[str, int]:
                     f"词条 {effect_id:#010x}「{entry.name}」是饰品的同名固定词条，"
                     "只能由「改种类」自动带入，不能手动写入其它饰品"
                 )
+            # 数值: the workbook's own span is the gate.  None of the 807 catalogued
+            # slots of the reporting user's save falls outside its affix's span, so
+            # a value outside it describes an affix the game cannot roll.
+            requested = edit.get("value")
+            if requested is not None and requested != entry.value:
+                if not entry.has_value_range:
+                    raise EditorError(
+                        f"词条「{entry.name}」在原始表里没有数值区间，"
+                        f"因此只允许写目录值 {entry.value}，不能改成 {requested}"
+                    )
+                if not entry.allows_value(requested):
+                    raise EditorError(
+                        f"词条「{entry.name}」的数值必须在 "
+                        f"{entry.describe_value_range()} 之内，{requested} 超出范围"
+                    )
     # Reuse the record-layer validation for the remaining fields and ranges.
     stripped = {key: value for key, value in edit.items() if key != "record_index"}
     records.patch_effect_slots(bytes(records.SCROLL_RECORD_SIZE), [stripped])
@@ -1362,6 +1383,277 @@ def apply_grace_edit(
     )
     if applied != plan.after:
         raise GraceEditError(f"记录 #{record_index} 的恩宠修改未能正确写入，已中止")
+    return bytes(output)
+
+
+# --------------------------------------------------------------------------
+# 无中生有: create a new item in a free slot
+# --------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class FreeSlotReport:
+    """How many slots of the located array are free (``type == 0``)."""
+
+    slot_count: int
+    free_slots: tuple[int, ...]
+
+    @property
+    def free_count(self) -> int:
+        return len(self.free_slots)
+
+    @property
+    def is_full(self) -> bool:
+        return not self.free_slots
+
+    def describe(self) -> str:
+        if self.is_full:
+            return (f"背包已满：记录表 {self.slot_count} 个槽位全部被占用，"
+                    "请先在游戏里清理背包后再添加")
+        return (f"记录表 {self.slot_count} 槽，空位 {self.free_count} 个"
+                f"（首个空位 #{self.free_slots[0]}）")
+
+
+@dataclass(frozen=True, slots=True)
+class CreationPlan:
+    """A brand-new item record to be written into a free slot."""
+
+    slot_index: int
+    offset: int
+    record_type: int
+    level: int
+    donor_slot: int
+    donor_offset: int
+    record: bytes
+    effects: tuple[records.EffectSlot, ...]
+    free_before: int
+
+    def describe(self, item_db: ItemDb | None = None) -> str:
+        name = item_db.describe(self.record_type) if item_db else None
+        text = (f"新建 #{self.slot_index} {name or f'{self.record_type:#06x}'} "
+                f"Lv{self.level}")
+        if self.donor_slot == self.slot_index:
+            return text
+        return f"{text}（模板 #{self.donor_slot}）"
+
+
+class CreationError(EditorError):
+    """Raised when a new item cannot be created legally."""
+
+
+def find_free_slots(
+    decrypted: bytes,
+    *,
+    layout: records.InventoryLayout | None = None,
+    known_ids: frozenset[int] | None = None,
+) -> FreeSlotReport:
+    """Every slot whose type word is 0 -- the game's own "empty" marker.
+
+    Measured on the reporting user's save: 465 of the 2000 slots carry type 0,
+    they are scattered (209 have occupied neighbours on both sides), and their
+    effect slots hold no residual affix, so the game marks emptiness with the
+    type word alone -- which is exactly what a deleted item leaves behind.
+    """
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    free: list[int] = []
+    for index in range(layout.slot_count):
+        offset = layout.offset(index)
+        record = bytes(decrypted[offset:offset + records.SCROLL_RECORD_SIZE])
+        if len(record) < records.SCROLL_RECORD_SIZE:
+            break
+        if records.record_is_empty(record):
+            free.append(index)
+    return FreeSlotReport(slot_count=layout.slot_count, free_slots=tuple(free))
+
+
+def _donor_for_kind(view_type: int,
+                    views: tuple[AccessoryView, ...] | list[AccessoryView],
+                    ) -> AccessoryView | None:
+    """The lowest-indexed real record of ``view_type`` -- the creation template.
+
+    A new item is copied from a *real* record of the same kind, because the header
+    carries fields this tool has not decoded (``+0x18`` takes 6 distinct values,
+    ``+0x1c``/``+0x20``/``+0x28`` are unique per record).  Guessing them would be
+    an unverified write; copying them makes the new record structurally identical
+    to one the game itself wrote, and the three per-record words are documented as
+    the one unverified part of 无中生有.
+    """
+    for view in views:
+        if view.record_type == view_type:
+            return view
+    return None
+
+
+def plan_creation(
+    decrypted: bytes,
+    *,
+    record_type: int,
+    level: int,
+    effects: tuple[dict[str, int], ...] | list[dict[str, int]] = (),
+    affix_db: AffixDb,
+    item_db: ItemDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+    slot_index: int | None = None,
+    soul: bool = False,
+) -> CreationPlan:
+    """Plan a new 饰品/魂核 in a free slot, or refuse with the reason.
+
+    ``effects`` lists the wanted slots as ``{"slot_index": i, "effect_id": id,
+    "value": v, "metadata": m}``.  Everything else is copied from the donor, and
+    the donor's own 同名固定 slots are enforced: they must stay exactly as they are
+    (a new item may not gain, lose or change a fixed affix), which is the creation
+    side of the "no adding fixed affixes" rule.
+    """
+    if known_ids is None:
+        known_ids = frozenset(entry.effect_id for entry in affix_db.all())
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    if item_db.describe(record_type) is None:
+        raise CreationError(
+            f"{record_type:#06x} 不在{'魂核' if soul else '饰品'}种类表内，"
+            "无法生成（本工具只生成原始表里有的种类）"
+        )
+    if not isinstance(level, int) or isinstance(level, bool):
+        raise CreationError("等级必须是整数")
+    if not records.MIN_ITEM_LEVEL <= level <= records.MAX_ITEM_LEVEL:
+        raise CreationError(
+            f"等级必须在 {records.MIN_ITEM_LEVEL}..{records.MAX_ITEM_LEVEL} 之内，"
+            f"{level} 超出范围"
+        )
+
+    # Donor: a real record of this exact kind (see _donor_for_kind).
+    if soul:
+        donor_views = list_soul_cores(decrypted, soul_db=affix_db,
+                                       soul_item_db=item_db, layout=layout,
+                                       known_ids=known_ids)
+        donors = [view for view in donor_views if not view.unidentified]
+    else:
+        donors = [view for view in list_accessories(decrypted, layout=layout,
+                                                    known_ids=known_ids)
+                  if view.catalog_hits]
+    donor = _donor_for_kind(record_type, donors)
+    if donor is None:
+        raise CreationError(
+            f"存档里没有 {item_db.describe(record_type)} 的样本，无法生成："
+            "新物品的固定词条与逐件字段必须从同种类的真实样本复制，"
+            "本工具不会凭空猜这些字节"
+        )
+
+    report = find_free_slots(decrypted, layout=layout)
+    if report.is_full:
+        raise CreationError(report.describe())
+    target = report.free_slots[0] if slot_index is None else slot_index
+    if target not in report.free_slots:
+        raise CreationError(
+            f"槽位 #{target} 不是空位（只有 type==0 的槽位可以新建）；"
+            f"{report.describe()}"
+        )
+
+    donor_record = bytes(decrypted[donor.offset:
+                                   donor.offset + records.SCROLL_RECORD_SIZE])
+    record = bytearray(donor_record)
+    # Header: kind (both mirrored copies) and level (both mirrored copies).
+    records.patch_record_item_id(bytes(record), record_type)
+    record = bytearray(records.patch_record_item_id(bytes(record), record_type))
+    record = bytearray(records.patch_record_level(bytes(record), level))
+
+    fixed_slots = donor.fixed_slots(affix_db)
+    by_slot = {}
+    for effect in donor.effects:
+        by_slot[effect.slot_index] = effect
+    for edit in effects:
+        slot = edit.get("slot_index")
+        if not isinstance(slot, int) or isinstance(slot, bool):
+            raise CreationError("新建词条缺少 slot_index")
+        if not 0 <= slot < records.EFFECT_COUNT:
+            raise CreationError(f"效果槽索引必须位于 0..{records.EFFECT_COUNT - 1}")
+        if slot in fixed_slots:
+            entry = affix_db.lookup(by_slot[slot].effect_id)
+            raise CreationError(
+                f"槽{slot + 1} 是 {item_db.describe(record_type)} 的同名固定词条"
+                f"（{entry.name if entry else '未收录'}），新建时不能改动；"
+                "它会按模板自动带入"
+            )
+        effect_id = edit.get("effect_id")
+        if effect_id is None:
+            raise CreationError(f"槽{slot + 1} 的新建词条缺少 effect_id")
+        if effect_id == records.EMPTY_EFFECT_ID:
+            value = 0
+            metadata = 0
+        else:
+            entry = affix_db.require(effect_id)
+            if entry.is_fixed:
+                raise CreationError(
+                    f"词条 {effect_id:#010x}「{entry.name}」是同名固定词条，"
+                    "只能由模板带入，不能新增固定词条"
+                )
+            value = edit.get("value", entry.value)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise CreationError(f"槽{slot + 1} 的数值必须是整数")
+            if value != entry.value:
+                if not entry.has_value_range:
+                    raise CreationError(
+                        f"词条「{entry.name}」在原始表里没有数值区间，"
+                        f"只能写目录值 {entry.value}"
+                    )
+                if not entry.allows_value(value):
+                    raise CreationError(
+                        f"词条「{entry.name}」的数值必须在 "
+                        f"{entry.describe_value_range()} 之内，{value} 超出范围"
+                    )
+            metadata = edit.get("metadata", entry.flags << 8)
+            if not isinstance(metadata, int) or isinstance(metadata, bool):
+                raise CreationError(f"槽{slot + 1} 的标识必须是整数")
+        try:
+            record = bytearray(records.patch_effect_slots(
+                bytes(record),
+                [{"slot_index": slot, "effect_id": effect_id, "value": value,
+                  "metadata": metadata}],
+            ))
+        except RecordError as error:
+            raise CreationError(f"槽{slot + 1} 无法写入：{error}") from error
+
+    parsed = records.read_effect_slots(bytes(record))
+    # The fixed slots must still hold the donor's own fixed affixes.
+    for slot in fixed_slots:
+        if parsed[slot].effect_id != by_slot[slot].effect_id:
+            raise CreationError(f"槽{slot + 1} 的固定词条未能保留，已中止")
+    if records.record_is_empty(bytes(record)) or \
+            not records.looks_like_item_record(bytes(record)):
+        raise CreationError("生成的新记录头不合法，已中止（请把该存档反馈给作者）")
+    return CreationPlan(
+        slot_index=target,
+        offset=layout.offset(target),
+        record_type=record_type,
+        level=level,
+        donor_slot=donor.slot_index,
+        donor_offset=donor.offset,
+        record=bytes(record),
+        effects=parsed,
+        free_before=report.free_count,
+    )
+
+
+def apply_creations(
+    decrypted: bytes,
+    plans: tuple[CreationPlan, ...] | list[CreationPlan],
+) -> bytes:
+    """Write planned new records into their free slots (verify after writing)."""
+    if not plans:
+        raise EditorError("至少需要一个新建计划")
+    output = bytearray(decrypted)
+    for plan in plans:
+        offset = plan.offset
+        if not records.record_is_empty(bytes(output[offset:offset +
+                                                      records.SCROLL_RECORD_SIZE])):
+            raise CreationError(f"槽位 #{plan.slot_index} 在写入前已被占用，已中止")
+        output[offset:offset + records.SCROLL_RECORD_SIZE] = plan.record
+    for plan in plans:
+        offset = plan.offset
+        written = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        if written != plan.record:
+            raise CreationError(f"新建 #{plan.slot_index} 未能正确写入，已中止")
     return bytes(output)
 
 

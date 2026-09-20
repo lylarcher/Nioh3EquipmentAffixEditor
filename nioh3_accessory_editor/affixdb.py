@@ -113,6 +113,14 @@ class AffixEntry:
     flags: int
     name: str
     category: str
+    #: Legal value span of this affix, from the workbook's own value table
+    #: (全词条数值 取值集合 for 饰品, 数值区间/数值集合 for 魂核).  ``None`` means the
+    #: workbook gave no span, and then the editor refuses to write any value other
+    #: than the catalog's own — guessing a range would be exactly the kind of
+    #: unverified write this tool must not do.  Measured on the reporting user's
+    #: save: all 807 catalogued accessory slots hold a value inside their span.
+    value_min: int | None = None
+    value_max: int | None = None
 
     @property
     def is_fixed(self) -> bool:
@@ -121,6 +129,23 @@ class AffixEntry:
     @property
     def is_star(self) -> bool:
         return bool(self.flags & FLAG_STAR)
+
+    @property
+    def has_value_range(self) -> bool:
+        return self.value_min is not None and self.value_max is not None
+
+    def allows_value(self, value: int) -> bool:
+        """Whether ``value`` is inside the workbook's span for this affix."""
+        if not self.has_value_range:
+            return False
+        return bool(self.value_min <= value <= self.value_max)  # type: ignore[operator]
+
+    def describe_value_range(self) -> str:
+        if not self.has_value_range:
+            return "数值区间未知（原始表未给出）"
+        if self.value_min == self.value_max:
+            return f"固定值 {self.value_min}"
+        return f"{self.value_min}..{self.value_max}"
 
     @property
     def label(self) -> str:
@@ -196,6 +221,28 @@ class AffixDb:
     def labels(self) -> tuple[str, ...]:
         """Combo-box labels, prefixed with the empty-slot choice."""
         return ("(空)",) + tuple(entry.label for entry in self._entries)
+
+    def search(self, keyword: str, *, limit: int = 0) -> tuple[AffixEntry, ...]:
+        """Every entry whose name, category or id text contains ``keyword``.
+
+        Typing a keyword must never silently pick one affix: the caller shows the
+        whole match list (empty, one, or many) and the user chooses from it.  A
+        blank keyword matches nothing, so an empty search box can never be
+        mistaken for "everything".
+        """
+        text = keyword.strip().lower()
+        if not text:
+            return ()
+        compact = text.replace(" ", "")
+        matches = [
+            entry for entry in self._entries
+            if text in entry.name.lower() or text in entry.category.lower()
+            or compact in entry.name.lower().replace(" ", "")
+            or compact in f"{entry.effect_id:#x}".lower()
+        ]
+        if limit > 0:
+            return tuple(matches[:limit])
+        return tuple(matches)
 
 
 def _require_uint32(payload: dict[str, object], key: str, where: str) -> int:
@@ -317,9 +364,18 @@ def _entries_from_payload(payload: dict, path: Path) -> list[AffixEntry]:
                 flags=_require_uint32(item, "flags", where),
                 name=name.strip(),
                 category=category.strip(),
+                value_min=_optional_uint32(item, "value_min", where),
+                value_max=_optional_uint32(item, "value_max", where),
             )
         )
     return entries
+
+
+def _optional_uint32(item: dict, key: str, where: str) -> int | None:
+    """Read an optional unsigned int; a present-but-invalid value is an error."""
+    if key not in item or item[key] is None:
+        return None
+    return _require_uint32(item, key, where)
 
 
 def save_catalog(
@@ -349,6 +405,8 @@ def save_catalog(
                 "flags": entry.flags,
                 "name": entry.name,
                 "category": entry.category,
+                **({"value_min": entry.value_min, "value_max": entry.value_max}
+                   if entry.has_value_range else {}),
             }
             for entry in entries
         ],
@@ -470,6 +528,46 @@ class ItemDb:
     def labels(self) -> tuple[str, ...]:
         """``0x4987 八尺琼勾玉[武士]`` for every row, for comboboxes."""
         return tuple(entry.label for entry in self._entries)
+
+    def search(self, keyword: str, *, limit: int = 0) -> tuple[AffixEntry, ...]:
+        """Every entry whose name, category or id text contains ``keyword``.
+
+        Typing a keyword must never silently pick an affix: the caller shows the
+        whole match list (which may be empty, one, or many) and the user chooses.
+        A blank keyword matches nothing, so an empty search box cannot be mistaken
+        for "everything".
+        """
+        text = keyword.strip().lower()
+        if not text:
+            return ()
+        compact = text.replace(" ", "")
+        matches = [
+            entry for entry in self._entries
+            if text in entry.name.lower() or text in entry.category.lower()
+            or compact in entry.name.lower().replace(" ", "")
+            or compact in f"{entry.effect_id:#06x}".lower()
+            or compact in f"{entry.effect_id:#x}".lower()
+        ]
+        if limit > 0:
+            return tuple(matches[:limit])
+        return tuple(matches)
+
+
+    def search(self, keyword: str, *, limit: int = 0) -> tuple[ItemEntry, ...]:
+        """Item rows whose name or category contains ``keyword`` (filtering)."""
+        text = keyword.strip().lower()
+        if not text:
+            return ()
+        matches = [entry for entry in self._entries
+                   if text in entry.name.lower() or text in entry.category.lower()]
+        return tuple(matches[:limit]) if limit > 0 else tuple(matches)
+
+    def items_in_category(self, category: str | None) -> tuple[ItemEntry, ...]:
+        """Every row of one 中类 (``None``/blank means "no filter")."""
+        if not category:
+            return self._entries
+        return tuple(entry for entry in self._entries
+                     if entry.category == category)
 
 
 def load_item_catalog(path: Path = DEFAULT_ITEM_CATALOG) -> list[ItemEntry]:

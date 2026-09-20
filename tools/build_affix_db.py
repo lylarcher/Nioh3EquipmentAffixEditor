@@ -28,6 +28,7 @@ from __future__ import annotations
 import re
 import sys
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -82,6 +83,10 @@ ITEM_CODE_PATTERN = re.compile(r"^(?:0x)?([0-9A-Fa-f]{2})\s*([0-9A-Fa-f]{2})$")
 #: (0 mismatches), which is why that sheet — not 饰品词条 — gates 魂核 edits.
 SOUL_AFFIX_SHEET = "绘卷-魂核词条"
 SOUL_AFFIX_KIND = "魂核"
+#: The workbook's value table (sheet name is truncated by Excel's 31-char limit).
+#: Its 取值集合 column gives each affix's legal value span; a prefix match is used
+#: because the sheet name is not stable across workbook revisions.
+VALUE_SHEET_PREFIX = "全词条数值*"
 #: 魂核 rows of 物品总目录 (大类 = 魂核): the id a 魂核 record's header carries.
 SOUL_ITEM_BIG_CLASS = "魂核"
 
@@ -141,7 +146,9 @@ def _rows_from_xlsx(path: Path, sheet_name: str = TARGET_SHEET) -> list[list[str
         )
     }
     for sheet in wb.iter("{http://schemas.openxmlformats.org/spreadsheetml/2006/main}sheet"):
-        if sheet.get("name") == sheet_name:
+        name = sheet.get("name") or ""
+        if name == sheet_name or (sheet_name.endswith("*")
+                                  and name.startswith(sheet_name[:-1])):
             target = rel_map.get(sheet.get("{http://schemas.openxmlformats.org/officeDocument/2006/relationships}id"))
             if target:
                 if not target.startswith("xl/"):
@@ -347,6 +354,83 @@ def collect_soul_item_entries(source: Path) -> tuple[list[ItemEntry], list[str],
     return entries, conflicts, skipped
 
 
+def collect_value_ranges(source: Path) -> tuple[dict[int, tuple[int, int]], int]:
+    """Read the legal value span of every affix from 全词条数值(3稀有度…).
+
+    That sheet is the workbook's own value table: columns
+    ``下标 / 标识 / 规范标识 / 类别 / 代码 / 名称 / 最大值 / 最大值(16进制) /
+    取值计数 / 取值集合 / 绘卷环境``.  ``取值集合`` lists every value the affix may
+    roll, so its min..max *is* the legal range.  ``代码`` is the affix id's **low
+    two bytes** (``BC 53`` → ``0x53BC``), which is why this table is keyed by
+    ``effect_id & 0xFFFF``.
+
+    Measured on the reporting user's save: all 807 accessory slots whose affix is
+    in this table store a value inside its range — 0 exceptions — which is what
+    makes the range a safe write gate.  ``(ranges, skipped)``.
+    """
+    rows = _rows_from_xlsx(source, VALUE_SHEET_PREFIX)
+    ranges: dict[int, tuple[int, int]] = {}
+    skipped = 0
+    for row in rows[1:]:
+        if len(row) < 10:
+            skipped += 1
+            continue
+        code = row[4].strip()
+        pooled = row[9].strip()
+        parts = [part for part in code.replace("0x", "").split()]
+        if len(parts) != 2 or not pooled:
+            skipped += 1
+            continue
+        try:
+            key = int(parts[1] + parts[0], 16) if len(parts[1]) == 2 else int(code, 16)
+        except ValueError:
+            skipped += 1
+            continue
+        values = [int(chunk) for chunk in pooled.split("|") if chunk.strip().isdigit()]
+        if not values:
+            skipped += 1
+            continue
+        ranges[key] = (min(values), max(values))
+    return ranges, skipped
+
+
+def collect_soul_value_ranges(source: Path) -> dict[int, tuple[int, int]]:
+    """Legal value span of every 魂核词条, from the sheet's own 数值区间 columns.
+
+    绘卷-魂核词条 carries 词条名称/数值区间 (two cells: min and max) and 数值集合
+    (every rollable value, pipe separated); the pooled set is preferred when it is
+    present, because it is the more precise statement of the same range.
+    """
+    rows = _rows_from_xlsx(source, SOUL_AFFIX_SHEET)
+    ranges: dict[int, tuple[int, int]] = {}
+    for row in rows[1:]:
+        if len(row) < 5:
+            continue
+        kind, code = row[0].strip(), row[2].strip()
+        if kind != SOUL_AFFIX_KIND:
+            continue
+        try:
+            effect_id, _value, _flags = parse_code(code)
+        except ValueError:
+            continue
+        pooled = row[6].strip() if len(row) > 6 else ""
+        values = [int(chunk) for chunk in pooled.split("|") if chunk.strip().isdigit()]
+        if not values:
+            low = row[4].strip() if len(row) > 4 else ""
+            high = row[5].strip() if len(row) > 5 else ""
+            numbers = []
+            for text in (low, high):
+                try:
+                    numbers.append(int(float(text)))
+                except ValueError:
+                    continue
+            values = numbers
+        if not values:
+            continue
+        ranges[effect_id] = (min(values), max(values))
+    return ranges
+
+
 def main() -> int:
     args = [a for a in sys.argv[1:] if not a.startswith("-")]
     dry_run = "--dry-run" in sys.argv[1:]
@@ -403,6 +487,26 @@ def main() -> int:
         print("错误：未解析到任何词条")
         return 1
 
+    # Attach the workbook's own value spans: 取值集合 min..max per affix, keyed by
+    # the low two bytes of the id in 全词条数值 (see collect_value_ranges).
+    spans: dict[int, tuple[int, int]] = {}
+    spans_skipped = 0
+    try:
+        spans, spans_skipped = collect_value_ranges(source)
+    except (FileNotFoundError, KeyError, zipfile.BadZipFile) as error:
+        print(f"    警告：未能读取 {VALUE_SHEET_PREFIX}（{error}）；数值区间未更新")
+    ranged = 0
+    if spans:
+        updated = []
+        for entry in entries:
+            span = spans.get(entry.effect_id & 0xFFFF)
+            if span is None:
+                updated.append(entry)
+                continue
+            ranged += 1
+            updated.append(replace(entry, value_min=span[0], value_max=span[1]))
+        entries = updated
+
     if dry_run:
         print(f"演练：将生成 {len(entries)} 条词条（未写入）")
     else:
@@ -411,6 +515,9 @@ def main() -> int:
         print(f"OK: 已生成词条库，共 {len(entries)} 条饰品合法词条")
     print("    来源:", source)
     print(f"    跳过行: {skipped_rows}")
+    if spans:
+        print(f"    数值区间: 覆盖 {ranged}/{len(entries)} 条"
+              f"（表内 {len(spans)} 条，未识别行 {spans_skipped}）")
     if conflicts:
         print(f"    同一词条 ID 多值冲突: {len(conflicts)} 处（已保留首个）")
         for item in conflicts[:10]:
@@ -473,6 +580,22 @@ def main() -> int:
     except (FileNotFoundError, KeyError, zipfile.BadZipFile) as error:
         print(f"    警告：未能读取 {SOUL_AFFIX_SHEET}（{error}）；魂核词条库未更新")
     if souls:
+        try:
+            soul_spans = collect_soul_value_ranges(source)
+        except (FileNotFoundError, KeyError, zipfile.BadZipFile):
+            soul_spans = {}
+        soul_ranged = 0
+        if soul_spans:
+            updated_souls = []
+            for entry in souls:
+                span = soul_spans.get(entry.effect_id)
+                if span is None:
+                    updated_souls.append(entry)
+                    continue
+                soul_ranged += 1
+                updated_souls.append(
+                    replace(entry, value_min=span[0], value_max=span[1]))
+            souls = updated_souls
         if dry_run:
             print(f"演练：将生成 {len(souls)} 条魂核词条（未写入）")
         else:
@@ -480,6 +603,7 @@ def main() -> int:
                 souls, source=f"{source.name} / {SOUL_AFFIX_SHEET}（{SOUL_AFFIX_KIND}）")
             print(f"OK: 已生成魂核词条库，共 {len(souls)} 条")
         print(f"    跳过行: {souls_skipped}")
+        print(f"    数值区间: 覆盖 {soul_ranged}/{len(souls)} 条")
 
     soul_items: list[ItemEntry] = []
     soul_item_conflicts: list[str] = []

@@ -22,13 +22,17 @@ from nioh3_accessory_editor.affixdb import (
     load_soul_item_catalog,
 )
 from nioh3_accessory_editor.editor import (
+    CreationError,
     KindSwapError,
     LevelEditError,
+    apply_creations,
     apply_kind_swaps,
     apply_level_edits,
     apply_soul_edits,
+    find_free_slots,
     identify_soul_cores,
     list_soul_cores,
+    plan_creation,
     plan_soul_edits,
     soul_catalog_ids,
     collect_kind_samples,
@@ -66,6 +70,11 @@ class EditorTestCase(unittest.TestCase):
         # Editable slots must use affixes that are NOT (同名固定): a fixed affix is
         # part of the item kind and the editor refuses to change it.
         cls.free_affixes = [entry for entry in cls.db.all() if not entry.is_fixed]
+        #: A 词条 whose 数值区间 spans several values (most 饰品词条 are single
+        #: valued, so tests that write a *chosen* value need one of these).
+        cls.ranged_affix = next(
+            entry for entry in cls.free_affixes
+            if entry.has_value_range and entry.value_min != entry.value_max)
         cls.fixed_affixes = [entry for entry in cls.db.all() if entry.is_fixed]
         cls.fixed_affix = cls.fixed_affixes[0]
         cls.affix_a = cls.free_affixes[0]
@@ -449,7 +458,8 @@ class FixedSlotTests(EditorTestCase):
         save = self._save(fixed_first=True)
         with self.assertRaises(EditorError) as caught:
             plan_edits(save, [{"record_index": 3, "slot_index": 0,
-                               "effect_id": self.affix_b.effect_id, "value": 5}],
+                               "effect_id": self.affix_b.effect_id,
+                        "value": self.affix_b.value}],
                        affix_db=self.db)
         self.assertIn("同名固定词条不能修改", str(caught.exception))
 
@@ -463,7 +473,8 @@ class FixedSlotTests(EditorTestCase):
         with self.assertRaises(EditorError) as caught:
             plan_edits(self.plain,
                        [{"record_index": 3, "slot_index": 1,
-                         "effect_id": self.fixed_affix.effect_id, "value": 20}],
+                         "effect_id": self.fixed_affix.effect_id,
+                        "value": self.fixed_affix.value}],
                        affix_db=self.db)
         self.assertIn("同名固定词条", str(caught.exception))
 
@@ -471,7 +482,7 @@ class FixedSlotTests(EditorTestCase):
         save = self._save(fixed_first=True)
         plans = plan_edits(save, [{"record_index": 3, "slot_index": 1,
                                    "effect_id": self.affix_a.effect_id,
-                                   "value": 20}], affix_db=self.db)
+                                   "value": self.fixed_affix.value}], affix_db=self.db)
         self.assertEqual(len(plans), 1)
         self.assertEqual(plans[0].after[1].effect_id, self.affix_a.effect_id)
 
@@ -811,6 +822,257 @@ class SoulCoreTests(unittest.TestCase):
         return AffixDb().lookup(effect_id) is not None
 
 
+class ValueRangeTests(EditorTestCase):
+    """词条数值: bounded by the workbook's own 取值集合 span."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.ranged = [entry for entry in cls.free_affixes
+                      if entry.has_value_range and entry.value_min != entry.value_max]
+        cls.single = [entry for entry in cls.free_affixes
+                      if entry.has_value_range and entry.value_min == entry.value_max]
+
+    def _save(self, effect_id: int, value: int) -> bytes:
+        return support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=ITEM_TYPE, level=150,
+                                    effects=((effect_id, value, 0x0040),))})
+
+    def test_the_catalogue_carries_a_range_for_every_affix(self) -> None:
+        self.assertTrue(all(entry.has_value_range for entry in self.db.all()),
+                        "原始表给出的区间必须覆盖全部词条")
+        self.assertTrue(self.ranged, "应当存在可调数值的词条")
+
+    def test_a_value_inside_the_span_is_written(self) -> None:
+        entry = self.ranged[0]
+        for wanted in (entry.value_min, entry.value_max):
+            save = self._save(entry.effect_id, entry.value_min)
+            patched = apply_edits(
+                save, ({"record_index": 3, "slot_index": 0,
+                        "effect_id": entry.effect_id, "value": wanted,
+                        "metadata": 0x40},),
+                affix_db=self.db)
+            layout = records.locate_layout(patched)
+            slots = records.read_effect_slots(
+                patched[layout.offset(3):][:records.SCROLL_RECORD_SIZE])
+            self.assertEqual(slots[0].value, wanted)
+
+    def test_a_value_outside_the_span_is_refused(self) -> None:
+        entry = self.ranged[0]
+        save = self._save(entry.effect_id, entry.value_min)
+        for bad in (entry.value_min - 1, entry.value_max + 1):
+            with self.assertRaises(EditorError) as caught:
+                plan_edits(save, ({"record_index": 3, "slot_index": 0,
+                                   "effect_id": entry.effect_id, "value": bad,
+                                   "metadata": 0x40},), affix_db=self.db)
+            self.assertIn("数值必须在", str(caught.exception))
+
+    def test_a_single_valued_affix_keeps_its_value(self) -> None:
+        entry = self.single[0]
+        save = self._save(entry.effect_id, entry.value_max)
+        with self.assertRaises(EditorError):
+            plan_edits(save, ({"record_index": 3, "slot_index": 0,
+                               "effect_id": entry.effect_id,
+                               "value": entry.value_max + 1, "metadata": 0x40},),
+                       affix_db=self.db)
+
+
+class AffixSearchTests(unittest.TestCase):
+    """关键词匹配: every match is returned, and no match returns nothing."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.db = AffixDb()
+
+    def test_a_keyword_matches_many_entries(self) -> None:
+        matches = self.db.search("伤害")
+        self.assertGreater(len(matches), 1)
+        self.assertTrue(any("伤害" in entry.name for entry in matches))
+
+    def test_spaces_inside_the_keyword_are_ignored(self) -> None:
+        self.assertEqual(self.db.search("近距离 攻击"), self.db.search("近距离攻击"))
+        self.assertTrue(self.db.search("近距离攻击"))
+
+    def test_an_id_matches_its_own_entry(self) -> None:
+        entry = self.db.all()[3]
+        self.assertIn(entry, self.db.search(f"{entry.effect_id:x}"))
+
+    def test_a_keyword_with_no_match_returns_nothing(self) -> None:
+        self.assertEqual(self.db.search("绝不可能存在的词条名字"), ())
+
+    def test_a_blank_keyword_matches_nothing(self) -> None:
+        self.assertEqual(self.db.search("   "), ())
+
+    def test_a_limit_caps_the_result(self) -> None:
+        self.assertGreater(len(self.db.search("伤害")), 3)
+        self.assertEqual(len(self.db.search("伤害", limit=3)), 3)
+
+
+class CreationTests(EditorTestCase):
+    """无中生有: a new item in a free slot, or a refusal with the reason."""
+
+    KIND = ITEM_TYPE
+
+    def _record(self, *, level: int = 150,
+                effects: tuple[tuple[int, int, int], ...] | None = None) -> bytes:
+        if effects is None:
+            effects = ((self.fixed_affix.effect_id, 7, 0x40 << 8),)
+        return support.build_record(record_type=self.KIND, level=level,
+                                    effects=effects)
+
+    def _db(self, item_id: int | None = None, name: str = "甲[武士]") -> ItemDb:
+        return ItemDb([ItemEntry(item_id if item_id is not None else self.KIND,
+                                 name, "武士饰品")])
+
+    def test_a_new_item_fills_the_first_free_slot(self) -> None:
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        layout = records.locate_layout(save)
+        first_free = find_free_slots(save, layout=layout).free_slots[0]
+        plan = plan_creation(save, record_type=self.KIND, level=180,
+                             effects=({"slot_index": 1,
+                                       "effect_id": self.affix_a.effect_id,
+                                       "value": self.affix_a.value},),
+                             affix_db=self.db, item_db=self._db(), layout=layout)
+        self.assertEqual(plan.slot_index, first_free)
+        patched = apply_creations(save, [plan])
+        views = [view for view in list_accessories(patched, layout=layout,
+                                                  known_ids=frozenset())
+                 if view.slot_index == plan.slot_index]
+        self.assertEqual(len(views), 1)
+        self.assertEqual(views[0].record_type, self.KIND)
+        self.assertEqual(views[0].level, 180)
+        self.assertEqual(views[0].effects[0].effect_id,
+                         self.fixed_affix.effect_id, "固定词条按模板带入")
+        self.assertEqual(views[0].effects[1].effect_id, self.affix_a.effect_id)
+
+    def test_a_full_bag_is_refused_with_the_users_wording(self) -> None:
+        one = support.build_plain_save(records_by_slot={3: self._record()})
+        slots = records.locate_layout(one).slot_count
+        every = {index: self._record() for index in range(slots)}
+        save = support.build_plain_save(records_by_slot=every)
+        self.assertTrue(find_free_slots(save).is_full, "该 fixture 必须是满背包")
+        with self.assertRaises(CreationError) as caught:
+            plan_creation(save, record_type=self.KIND, level=180,
+                          affix_db=self.db, item_db=self._db())
+        self.assertIn("背包已满", str(caught.exception))
+        self.assertIn("清理", str(caught.exception))
+
+    def test_a_kind_without_a_donor_is_refused(self) -> None:
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        with self.assertRaises(CreationError) as caught:
+            plan_creation(save, record_type=0x2202, level=180, affix_db=self.db,
+                          item_db=self._db(0x2202, "乙[武士]"))
+        self.assertIn("没有", str(caught.exception))
+
+    def test_a_kind_outside_the_item_table_is_refused(self) -> None:
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        with self.assertRaises(CreationError) as caught:
+            plan_creation(save, record_type=0x9999, level=180, affix_db=self.db,
+                          item_db=self._db())
+        self.assertIn("不在", str(caught.exception))
+
+    def test_the_level_cap_applies_to_new_items(self) -> None:
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        with self.assertRaises(CreationError):
+            plan_creation(save, record_type=self.KIND, level=181, affix_db=self.db,
+                          item_db=self._db())
+
+    def test_a_new_item_may_not_gain_a_fixed_affix(self) -> None:
+        """要求 (1): 未改种类时，任何情况下都不能再加一个固定词条。"""
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        with self.assertRaises(CreationError) as caught:
+            plan_creation(save, record_type=self.KIND, level=180,
+                          effects=({"slot_index": 1,
+                                    "effect_id": self.fixed_affixes[1].effect_id},),
+                          affix_db=self.db, item_db=self._db())
+        self.assertIn("固定词条", str(caught.exception))
+
+    def test_a_new_items_own_fixed_slot_cannot_be_rewritten(self) -> None:
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        with self.assertRaises(CreationError) as caught:
+            plan_creation(save, record_type=self.KIND, level=180,
+                          effects=({"slot_index": 0,
+                                    "effect_id": self.affix_a.effect_id},),
+                          affix_db=self.db, item_db=self._db())
+        self.assertIn("同名固定词条", str(caught.exception))
+
+    def test_a_created_value_must_stay_inside_the_span(self) -> None:
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        entry = next(entry for entry in self.free_affixes
+                     if entry.has_value_range and entry.value_min != entry.value_max)
+        with self.assertRaises(CreationError) as caught:
+            plan_creation(save, record_type=self.KIND, level=180,
+                          effects=({"slot_index": 1, "effect_id": entry.effect_id,
+                                    "value": entry.value_max + 1},),
+                          affix_db=self.db, item_db=self._db())
+        self.assertIn("数值必须在", str(caught.exception))
+
+    def test_an_occupied_slot_is_refused_as_a_target(self) -> None:
+        save = support.build_plain_save(records_by_slot={3: self._record()})
+        with self.assertRaises(CreationError) as caught:
+            plan_creation(save, record_type=self.KIND, level=180, affix_db=self.db,
+                          item_db=self._db(), slot_index=3)
+        self.assertIn("不是空位", str(caught.exception))
+
+    def test_the_free_slot_report_counts_type_zero_slots(self) -> None:
+        save = support.build_plain_save(
+            records_by_slot={index: self._record() for index in range(5)})
+        report = find_free_slots(save)
+        self.assertFalse(report.is_full)
+        self.assertEqual(report.free_count + 5, report.slot_count)
+        self.assertEqual(report.free_slots[0], 5)
+
+
+class FixedSlotAdditionTests(EditorTestCase):
+    """要求 (1): 0→1、1→2、2→3 三种情况都必须拒绝。"""
+
+    def _save(self, *, extra_fixed: bool) -> bytes:
+        effects = [(self.fixed_affix.effect_id, 7, 0x40 << 8)]
+        if extra_fixed:
+            effects.append((self.fixed_affixes[1].effect_id, 9, 0x40 << 8))
+        effects.append((self.affix_a.effect_id, 20, 0x40))
+        return support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=ITEM_TYPE,
+                                    effects=tuple(effects))})
+
+    def test_a_record_with_one_fixed_affix_cannot_gain_a_second(self) -> None:
+        save = self._save(extra_fixed=False)
+        with self.assertRaises(EditorError) as caught:
+            plan_edits(save, ({"record_index": 3, "slot_index": 1,
+                               "effect_id": self.fixed_affixes[1].effect_id,
+                               "value": self.fixed_affixes[1].value},),
+                       affix_db=self.db)
+        self.assertIn("固定词条", str(caught.exception))
+
+    def test_a_record_with_two_fixed_affixes_cannot_gain_a_third(self) -> None:
+        save = self._save(extra_fixed=True)
+        with self.assertRaises(EditorError) as caught:
+            plan_edits(save, ({"record_index": 3, "slot_index": 2,
+                               "effect_id": self.fixed_affixes[2].effect_id,
+                               "value": self.fixed_affixes[2].value},),
+                       affix_db=self.db)
+        self.assertIn("固定词条", str(caught.exception))
+
+    def test_a_record_with_no_fixed_affix_cannot_gain_one(self) -> None:
+        """A kind that has no fixed affix must never acquire one either."""
+        save = support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=ITEM_TYPE, level=150,
+                                    effects=((self.affix_a.effect_id, 20, 0x40),))})
+        for entry in self.fixed_affixes[:3]:
+            with self.assertRaises(EditorError):
+                plan_edits(save, ({"record_index": 3, "slot_index": 1,
+                                   "effect_id": entry.effect_id,
+                                   "value": entry.value},), affix_db=self.db)
+
+    def test_a_fixed_affix_can_never_be_edited_in_place(self) -> None:
+        save = self._save(extra_fixed=False)
+        with self.assertRaises(EditorError) as caught:
+            plan_edits(save, ({"record_index": 3, "slot_index": 0,
+                               "effect_id": self.affix_a.effect_id,
+                               "value": self.affix_a.value},), affix_db=self.db)
+        self.assertIn("不能修改", str(caught.exception))
+
+
 class LevelEditTests(EditorTestCase):
     """等级 edits: ``+0x06`` and its mirror ``+0x08``, capped at 180."""
 
@@ -884,7 +1146,8 @@ class PlanTests(EditorTestCase):
         plans = plan_edits(
             self.plain,
             [{"record_index": 3, "slot_index": 2,
-              "effect_id": self.affix_b.effect_id, "value": 33}],
+              "effect_id": self.affix_b.effect_id,
+                        "value": self.affix_b.value}],
             affix_db=self.db,
         )
         self.assertEqual(len(plans), 1)
@@ -892,7 +1155,7 @@ class PlanTests(EditorTestCase):
         self.assertEqual(plan.record_index, 3)
         self.assertTrue(plan.before[2].is_empty)
         self.assertEqual(plan.after[2].effect_id, self.affix_b.effect_id)
-        self.assertEqual(plan.after[2].value, 33)
+        self.assertEqual(plan.after[2].value, self.affix_b.value)
 
     def test_plan_groups_edits_per_record(self) -> None:
         plans = plan_edits(
@@ -986,13 +1249,14 @@ class ApplyTests(EditorTestCase):
         patched = apply_edits(
             self.plain,
             [{"record_index": 3, "slot_index": 3,
-              "effect_id": self.affix_a.effect_id, "value": 77}],
+              "effect_id": self.ranged_affix.effect_id,
+                        "value": self.ranged_affix.value_min}],
             affix_db=self.db,
         )
         self.assertEqual(len(patched), len(self.plain))
         views = {view.slot_index: view for view in list_accessories(patched)}
         self.assertEqual(views[3].effects[3].effect_id, self.affix_a.effect_id)
-        self.assertEqual(views[3].effects[3].value, 77)
+        self.assertEqual(views[3].effects[3].value, self.ranged_affix.value_min)
         self.assertEqual(views[11].effects[0].effect_id, self.affix_b.effect_id)
 
     def test_apply_only_touches_the_target_record(self) -> None:
@@ -1117,7 +1381,8 @@ class CommitTests(EditorTestCase):
         patched = apply_edits(
             self.plain,
             [{"record_index": 11, "slot_index": 5,
-              "effect_id": self.affix_a.effect_id, "value": 42}],
+              "effect_id": self.ranged_affix.effect_id,
+                        "value": self.ranged_affix.value_min}],
             affix_db=self.db,
         )
         state_root = self.root / "state"
