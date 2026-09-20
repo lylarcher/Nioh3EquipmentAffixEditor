@@ -699,6 +699,48 @@ soul cores with the same three edits, switched to the core tables by `--soul`:
   confirmed cores with **0 mismatches**, which is what makes the catalog flag the
   right fixed-affix evidence here too.
 
+### 筛选、关键词搜索、数值区间与「无中生有」
+
+Five behaviours added on request, all fail-closed and all reachable from both the
+GUI and the CLI:
+
+| # | what | GUI | CLI | rule (evidence) |
+| --- | --- | --- | --- | --- |
+| 1 | 不能再加固定词条 | fixed rows are disabled | any write of a fixed id is refused | a 同名固定 affix is part of *what the item is*; 0→1 / 1→2 / 2→3 are all refused (measured: 795/795 slots agree with the catalog flag, 0 exceptions) |
+| 2 | 改词条数值（限区间） | 数值 box per slot | `--edit 槽:名称或id:数值` | the value must be inside the affix's own span from `全词条数值(3稀有度…)` 取值集合; **807/807** catalogued slots of the reporting save are inside, 0 outside |
+| 3 | 按种类 / 恩宠·套装筛选 | 筛选 row above the tree | `list --kind <名称\|id> --grace <名称\|id>` | filters are pure display: they change which rows are listed, never what is written |
+| 4 | 关键词匹配词条 | 关键词 box → 搜索词条 | `edit --search <关键词>`, or `--edit 槽:关键词[:数值]` | **every** match is listed; 0 matches and >1 matches are both refused with the candidate list, so an ambiguous keyword can never silently pick one |
+| 5 | 无中生有 | 无中生有 区块 on both tabs | `create --kind … [--soul]` | a new record is copied from a **same-kind real sample**; 背包满 is refused with 「背包已满…请先在游戏里清理背包后再添加」 |
+
+Notes that matter in practice:
+
+* **数值区间** — the 饰品词条 sheet has *no* span columns; the span lives in
+  `全词条数值(3稀有度…)`'s 取值集合 column, keyed by the **low 16 bits** of the affix
+  id (its 代码 column is little-endian, e.g. `BC 53` → `0x53BC`). 魂核 spans come from
+  `绘卷-魂核词条`'s 数值区间/数值集合. Coverage after regenerating:
+  **276/276** 饰品 and **287/287** 魂核 affixes carry a span.
+  Most 饰品词条 are **single-valued** (`火抗性 +10` → 固定值 10: the value *is* the
+  affix's identity), so the value box only really opens up for the rows the workbook
+  gives a real range — e.g. `0xfb24 获得魂核时恢复体力` 158..230 (the only ranged 饰品
+  row in this workbook). Where there is no span at all, only the catalog value may be
+  written; the tool never guesses one.
+* **固定词条优先** — a fixed slot is refused *before* the value check, so it reports
+  「同名固定词条不能修改」 rather than a range error.
+* **无中生有 的模板** — `find_free_slots` uses `type == 0` as the empty-slot marker
+  (measured on the reporting save: **465** of 2000 slots, scattered — 209 of them have
+  occupied neighbours on both sides — with clean effect slots). The new record is
+  byte-copied from the lowest-indexed sample of the same 种类 and only 种类 (two
+  mirrored words)、等级 (two mirrored words) and the chosen affixes are rewritten.
+  That is deliberate: `+0x18` takes 6 distinct values across records while
+  `+0x1c`/`+0x20`/`+0x28` are **unique per record** (213/213), and their meaning is not
+  decoded — inventing them would be guessing, so a kind with no sample in the save is
+  refused with 「存档里没有 … 的样本」 and nothing is written. The fixed affixes come
+  from the template and cannot be edited in this flow.
+* **背包已满** — with no `type == 0` slot left, creation refuses and prints
+  「背包已满：记录表 2000 个槽位全部被占用，请先在游戏里清理背包后再添加」.
+* **A read-only search** — `edit --search` loads and reports only; the save bytes are
+  byte-identical afterwards (asserted in the tests).
+
 ### Changing 等级
 
 `edit --level <1..180>` (CLI) or the GUI's 等级 row writes `+0x06` **and** its mirror

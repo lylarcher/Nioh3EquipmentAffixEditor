@@ -26,6 +26,7 @@ from nioh3_accessory_editor import bootstrap
 CLI_COMMANDS = frozenset(
     {"list", "scan", "check", "edit", "backup", "restore", "version", "config",
      "souls",
+    "create",
      "-h", "--help", "--version", "--config", "--python-crypto"}
 )
 

@@ -819,6 +819,8 @@ class AccessoryEditorApp(tk.Tk):
             combo = ttk.Combobox(row, state="readonly", width=46,
                                  values=self.soul_db.labels())
             combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            combo.bind("<<ComboboxSelected>>",
+                       lambda _event, slot=index: self._on_soul_slot_picked(slot))
             self.soul_slot_combos.append(combo)
             self.soul_slot_labels.append(tk.StringVar(value=""))
             ttk.Label(row, textvariable=self.soul_slot_labels[index],
@@ -1665,6 +1667,18 @@ class AccessoryEditorApp(tk.Tk):
     def _on_slot_picked(self, index: int) -> None:
         text = self.slot_combos[index].get()
         self.slot_labels[index].set("" if text == EMPTY_LABEL else text)
+        # Picking another affix refreshes the 数值 box to *that* affix's own value:
+        # the previous affix's number is meaningless for the new one (and would be
+        # refused by the span gate anyway).  The user can then adjust it in range.
+        entry = self.affix_by_label.get(text)
+        if entry is None:
+            self.value_vars[index].set("")
+        else:
+            self.value_vars[index].set(str(entry.value))
+
+    def _on_soul_slot_picked(self, index: int) -> None:
+        entry = self.soul_by_label.get(self.soul_slot_combos[index].get())
+        self.soul_value_vars[index].set("" if entry is None else str(entry.value))
 
     def _pending_edit(self, index: int, current: EffectSlot) -> dict[str, int] | None:
         """Turn one slot widget into an edit, or ``None`` when nothing changed.
@@ -1698,6 +1712,14 @@ class AccessoryEditorApp(tk.Tk):
         if entry is None:
             raise UiEditError(f"词条 {effect_id:#06x} 不在合法的饰品词条表中")
         typed = self._slot_value(index)
+        if typed is not None and typed == current.value \
+                and not entry.allows_value(typed):
+            # The box was pre-filled with the *old* affix's value and the affix
+            # changed (programmatic combo changes do not fire <<ComboboxSelected>>):
+            # that stale number means nothing for the new affix, so use the new
+            # affix's own value instead of failing on the old one.  A number the
+            # user typed that is out of range still fails in the engine.
+            typed = None
         return {
             "slot_index": index,
             "effect_id": effect_id,

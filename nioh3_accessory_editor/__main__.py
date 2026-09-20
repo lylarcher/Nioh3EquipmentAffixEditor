@@ -12,7 +12,7 @@ from . import bootstrap
 
 CLI_COMMANDS = frozenset(
     {"list", "scan", "check", "edit", "backup", "restore", "version", "config",
-     "souls",
+     "souls", "create",
      "-h", "--help", "--version", "--config", "--python-crypto"}
 )
 

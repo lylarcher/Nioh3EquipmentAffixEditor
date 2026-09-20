@@ -452,9 +452,10 @@ def _parse_edit_spec(spec: str, affix_db: AffixDb | None = None,
             effect_id = int(target, 0)
         except ValueError:
             effect_id = None
-        if effect_id is None or (effect_id != records.EMPTY_EFFECT_ID
-                                 and affix_db is not None
-                                 and affix_db.lookup(effect_id) is None):
+        # A *text* keyword (需求 4) resolves through the catalog; a number is taken
+        # literally, so an id outside the table still gets the catalog's own
+        # refusal message instead of a "no keyword match" one.
+        if effect_id is None:
             if affix_db is None:
                 raise EditorError(f"非法编辑参数（词条必须是 id）: {spec!r}")
             effect_id = _resolve_keyword(affix_db, target, what=what).effect_id

@@ -476,7 +476,7 @@ class EndToEndCliTests(unittest.TestCase):
 
         code, out, err = run_cli([
             "edit", "--record", "3",
-            "--edit", f"0:{self.affix.effect_id:#x}:20",
+            "--edit", f"0:{self.affix.effect_id:#x}:{self.affix.value}",
         ])
         combined = out + err
         self.assertNotEqual(code, 0)
@@ -670,7 +670,7 @@ class EndToEndCliTests(unittest.TestCase):
     def test_edit_dry_run_writes_nothing(self) -> None:
         before = self.save_path.read_bytes()
         code, out, err = run_cli([
-            "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:55",
+            "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:{self.affix.value}",
             "--dry-run",
         ])
         self.assertEqual(code, 0, err)
@@ -682,7 +682,7 @@ class EndToEndCliTests(unittest.TestCase):
     def test_edit_states_the_write_requirement(self) -> None:
         """Both the notice and the current gate state must be visible."""
         code, out, err = run_cli([
-            "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:55",
+            "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:{self.affix.value}",
             "--dry-run",
         ])
         self.assertEqual(code, 0, err)
@@ -696,7 +696,7 @@ class EndToEndCliTests(unittest.TestCase):
         with mock.patch.object(cli, "running_game_processes",
                                return_value=("Nioh3.exe",)):
             code, out, err = run_cli([
-                "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:55",
+                "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:{self.affix.value}",
                 "--dry-run",
             ])
         self.assertEqual(code, 0, err)
@@ -711,7 +711,7 @@ class EndToEndCliTests(unittest.TestCase):
         with mock.patch.object(savefile, "running_game_processes",
                                return_value=("Nioh3.exe",)):
             code, _out, err = run_cli([
-                "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:55",
+                "edit", "--record", "3", "--edit", f"1:{self.affix.effect_id:#x}:{self.affix.value}",
             ])
         self.assertEqual(code, 1)
         self.assertIn("正在运行", err)
@@ -722,20 +722,20 @@ class EndToEndCliTests(unittest.TestCase):
 
     def test_success_message_warns_about_overwriting(self) -> None:
         code, out, err = run_cli([
-            "edit", "--record", "3", "--edit", f"2:{self.affix.effect_id:#x}:66",
+            "edit", "--record", "3", "--edit", f"2:{self.affix.effect_id:#x}:{self.affix.value}",
         ])
         self.assertEqual(code, 0, err)
         self.assertIn("覆盖本次修改", out)
 
     def test_edit_writes_and_persists(self) -> None:
         code, out, err = run_cli([
-            "edit", "--record", "3", "--edit", f"2:{self.affix.effect_id:#x}:66",
+            "edit", "--record", "3", "--edit", f"2:{self.affix.effect_id:#x}:{self.affix.value}",
         ])
         self.assertEqual(code, 0, err)
         self.assertIn('"dry_run": false', out)
         view = next(v for v in self._reload() if v.slot_index == 3)
         self.assertEqual(view.effects[2].effect_id, self.affix.effect_id)
-        self.assertEqual(view.effects[2].value, 66)
+        self.assertEqual(view.effects[2].value, self.affix.value)
         self.assertTrue(list((self.root / "_nioh3_accessory_backup").rglob("backup-manifest.json")))
 
     def test_backup_command(self) -> None:

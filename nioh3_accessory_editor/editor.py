@@ -911,7 +911,6 @@ def plan_edits(
     """
     if not edits:
         raise EditorError("至少需要一个编辑项")
-    normalized = tuple(_validate_edit(dict(edit), affix_db) for edit in edits)
 
     if known_ids is None and layout is None:
         known_ids = accessory_catalog_ids(affix_db)
@@ -920,6 +919,32 @@ def plan_edits(
     known = {view.slot_index: view
              for view in list_accessories(decrypted, layout=layout,
                                           known_ids=known_ids)}
+
+    # 同名固定词条 is refused **first**: such a slot is not editable at all, so
+    # reporting a 数值区间 error for it would be misleading (and the value the
+    # caller happened to pass is irrelevant).  需求(1).
+    fixed_refusals = []
+    for edit in edits:
+        record_index = edit.get("record_index")
+        slot_index = edit.get("slot_index")
+        if not isinstance(record_index, int) or not isinstance(slot_index, int):
+            continue  # malformed edits are reported by _validate_edit below
+        view = known.get(record_index)
+        if view is None or not 0 <= slot_index < records.EFFECT_COUNT:
+            continue
+        if view.slot_is_fixed(slot_index, affix_db):
+            entry = affix_db.lookup(view.effects[slot_index].effect_id)
+            fixed_refusals.append(
+                f"#{record_index} 槽{slot_index}"
+                f"（{entry.name if entry else '未收录'}）"
+            )
+    if fixed_refusals:
+        raise EditorError(
+            "同名固定词条不能修改：" + "、".join(fixed_refusals)
+        )
+
+    normalized = tuple(_validate_edit(dict(edit), affix_db) for edit in edits)
+
     missing = sorted({edit["record_index"] for edit in normalized} - set(known))
     if missing:
         raise EditorError(
@@ -932,17 +957,6 @@ def plan_edits(
         view = known[edit["record_index"]]
         if view.slot_is_fixed(edit["slot_index"], affix_db):
             entry = affix_db.lookup(view.effects[edit["slot_index"]].effect_id)
-            fixed_refusals.append(
-                f"#{edit['record_index']} 槽{edit['slot_index']}"
-                f"（{entry.name if entry else '未收录'}）"
-            )
-    if fixed_refusals:
-        raise EditorError(
-            "同名固定词条不能修改：" + "、".join(fixed_refusals)
-            + "。它是该饰品固有的一部分（随种类决定），"
-            "只有「改种类」会按新种类的固定词条自动同步"
-        )
-
     by_record: dict[int, list[dict[str, int]]] = {}
     for edit in normalized:
         by_record.setdefault(edit["record_index"], []).append(edit)
