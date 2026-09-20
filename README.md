@@ -1,3 +1,5 @@
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 # Nioh3AccessoryEditor
 
 A Python accessory (饰品) affix editor for **Nioh 3 (PC)** that writes edits

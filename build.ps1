@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Build Nioh3AccessoryEditor and stamp it with its build/version identity.
 
@@ -563,7 +563,8 @@ function Invoke-Build {
                 'data\grace_affixes.json', 'data\accessory_items.json',
                 'data\soul_affixes.json', 'data\soul_items.json',
                 'assets\app.ico', 'assets\logo-32.png', 'assets\logo.png',
-                'bin\Nioh_Savefile_decrypt.exe', 'README.md', 'CHANGELOG.md',
+                'bin\Nioh_Savefile_decrypt.exe', 'README.md', 'README.zh-CN.md',
+                'CHANGELOG.md',
                 'third_party\source-data')) {
             if (-not (Test-Path -LiteralPath (Join-Path $smokeRoot $relative))) {
                 throw "exe 未在自身目录解压: $relative"

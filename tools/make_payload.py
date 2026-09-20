@@ -13,7 +13,8 @@ relative directories they occupy in a checkout:
     assets/app.ico, logo*.png       程序图标与 logo（GUI 使用，可替换）
     bin/Nioh_Savefile_decrypt.exe   随附的加解密组件（可替换）
     third_party/source-data/...     原始数据（xlsx / CT，供重新生成词条库）
-    README.md, CHANGELOG.md         文档
+    README.md, README.zh-CN.md      文档（英文 / 简体中文）
+    CHANGELOG.md                    变更日志
 
 Usage:
     python tools/make_payload.py [--output build/app-payload.zip] [--verify]
@@ -40,7 +41,7 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "build" / "app-payload.zip"
 PAYLOAD_DIRECTORIES = ("assets", "bin", "data", "third_party")
 
 #: Individual files copied verbatim.
-PAYLOAD_FILES = ("README.md", "CHANGELOG.md")
+PAYLOAD_FILES = ("README.md", "README.zh-CN.md", "CHANGELOG.md")
 
 EXCLUDED_SUFFIXES = (".pyc", ".pyo", ".tmp", ".zip")
 EXCLUDED_DIRECTORIES = ("__pycache__", ".git")

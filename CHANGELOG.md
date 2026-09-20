@@ -6,8 +6,8 @@
 
 > **仅供测试学习用，不要用于联机影响游戏平衡。**
 
-本仓库目前只在本地提交、尚未配置远端，因此无法使用 `compare`/`releases` 链接，
-条目改为标注提交号前缀（`git log --oneline` 显示的 7 位）。注意 `build.ps1` 打印的
+本仓库有一个 `gitea` 远端，因此条目用提交号前缀标注（`git log --oneline` 显示的
+7 位），便于和 `BUILD-INFO`、发行包文件名互相对照。注意 `build.ps1` 打印的
 `commit` 是**提交号后 8 位**（本项目约定，见 [README 的 Version information](README.md#version-information)），
 两者指同一个提交。
 
@@ -201,6 +201,16 @@
 * `tools/inspect_save.py` 的末位槽统计带上了名字，并汇总「名表未收录」的 id。
 * `tests/test_build_affix_db.py`：新增「已提交的 JSON 必须与原始表一致」的漂移检查
   （两个表都查），以及恩宠/套装解析、"恩宠 id 不得进入合法词条库" 等断言。
+
+* **简体中文版 README（`README.zh-CN.md`）**：与英文版 `README.md` 逐节对应
+  （878 行 / 60 个标题 / 13 个代码块 / 51 行表格，层级与顺序一致；全部数字、
+  命令、十六进制偏移、JSON 键与 Python 标识符保持原样），两份文件首行互相切换。
+  同时把 `README.zh-CN.md` 加进随 exe 解压的载荷与构建冒烟检查清单，
+  发行包里现在同时带英文与中文文档。
+* **面向发布的措辞整理**：取证所用的那一份存档在 README、CHANGELOG、代码注释与
+  运行时提示里统一称为「参考存档 / the reference save」（不再出现把某份存档写成
+  某个报告者文件的说法），README 新增「参考存档」定义小节；对话客体是使用本工具的
+  用户，而不是提供样本的人。提交信息同样按此措辞撰写。
 
 ### 修复
 
