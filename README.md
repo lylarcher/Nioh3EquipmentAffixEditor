@@ -17,6 +17,20 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 
 ## Features
 
+* **Two tabs: 饰品 and 魂核** — the 魂核 (soul core) tab edits cores through their
+  *own* tables, because a 魂核 has no 恩宠/套装 affix and its own affix pool:
+  287 ids from the workbook's `绘卷-魂核词条` sheet (`种类 = 魂核`) plus 83 core ids
+  from `物品总目录` (`大类 = 魂核`), shipped as `data/soul_affixes.json` and
+  `data/soul_items.json`. A record is identified as a core only when **both**
+  facts hold — its header id is a 魂核 row *and* a slot names a 魂核 affix — since
+  exactly one id (`0xfb24`) is listed in both pools and the item table is what
+  keeps 八尺琼勾玉[武士]-style accessories out. On the reporting user's save 137
+  candidates resolved to 132 cores; the other 5 (two `0xda62`, which is not in
+  the 魂核 sheet, and three accessories carrying `0xfb24`) are listed as
+  unidentified and refused rather than guessed. The same rules as accessories
+  apply: 同名固定 affixes are never editable (each core carries two), 等级 caps at
+  180, and 种类 swaps are 魂核 ↔ 魂核 with the target kind's fixed affix copied
+  from a real sample.
 * **Persistent edits** — decrypt the PC user save, patch accessory effect
   slots, recompute the user checksum, re-encrypt, verify, and atomically replace
   the save with a plaintext backup + manifest.
@@ -663,6 +677,27 @@ is, under three fail-closed rules:
    (4 header bytes + the fixed slot's id/value) plus the 3 checksum bytes, and the
    record reads back as `0x4987 八尺琼勾玉[武士]` with
    `(同名固定)组合效果的所需装备数 -1 id=0x53d4 数值=1`.
+
+### The 魂核 tab
+
+`python launch_editor.py souls` (CLI, read-only) or the GUI's 魂核 tab works on
+soul cores with the same three edits, switched to the core tables by `--soul`:
+
+| what | CLI | rule |
+| --- | --- | --- |
+| 魂核词条 | `edit --soul --record N --edit 3=<名称\|id>` | id must be one of the 287 `绘卷-魂核词条` rows with `种类 = 魂核` |
+| 等级 | `edit --soul --record N --level 180` | 1..180, writes `+0x06`/`+0x08` only |
+| 种类 | `edit --soul --record N --kind <名称\|id>` | 魂核 ↔ 魂核; the fixed affix is copied from a real sample |
+
+* **No 恩宠/套装** — that falls out of the gate instead of being special-cased: an
+  恩宠 id is simply not in the 魂核 pool, so `--soul --grace` is refused outright and
+  the tab has no 恩宠 row. Measured on the save: 0 confirmed cores carry 恩宠/套装.
+* **同名固定词条不可修改** — every confirmed core carries **two** fixed affixes
+  (`#12 魑魅的魂核`: `id=0xd0c5` and `id=0x74df`); both rows are disabled and
+  labelled `固定词条，禁止修改` in the tab and refused by the engine.
+* **Verification** — the workbook's own 固定词条代码 matched the save on all 132
+  confirmed cores with **0 mismatches**, which is what makes the catalog flag the
+  right fixed-affix evidence here too.
 
 ### Changing 等级
 
