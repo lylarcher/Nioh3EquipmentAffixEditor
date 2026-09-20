@@ -42,7 +42,8 @@ class UiTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.db = AffixDb()
-        cls.affix = cls.db.all()[0]
+        cls.free_affixes = [e for e in cls.db.all() if not e.is_fixed]
+        cls.affix = cls.free_affixes[0]
         cls.plan = support.build_plain_save(
             records_by_slot={
                 3: support.build_record(
@@ -317,7 +318,7 @@ class EditCollectionTests(UiTestCase):
 
     def test_picking_a_new_affix_writes_id_and_value_only(self) -> None:
         self._select()
-        other = self.db.all()[1]
+        other = self.free_affixes[1]
         self.app.slot_combos[2].set(other.label)
         edits = self.app._current_edits()
         self.assertEqual(len(edits), 1)
@@ -340,7 +341,7 @@ class EditCollectionTests(UiTestCase):
         self.app._populate_accessories((plan, ui.list_accessories(plan), True, records.locate_layout(plan)))
         self.app.tree.selection_set("3")
         self.app._on_accessory_selected()
-        other = self.db.all()[1]
+        other = self.free_affixes[1]
         self.app.slot_combos[0].set(other.label)
         self.app.apply_edits_to_selection()
         view = next(v for v in self.app.accessory_views if v.slot_index == 3)
@@ -396,7 +397,7 @@ class EditCollectionTests(UiTestCase):
 
     def test_apply_updates_memory_and_reselects(self) -> None:
         self._select()
-        other = self.db.all()[1]
+        other = self.free_affixes[1]
         self.app.slot_combos[3].set(other.label)
         self.app.apply_edits_to_selection()
         view = next(v for v in self.app.accessory_views if v.slot_index == 3)
@@ -699,7 +700,7 @@ class GraceWidgetTests(UiTestCase):
     def _load(self, last_id: int, *, byte9: int = 0x0C) -> None:
         record = support.build_record(
             record_type=0x4001,
-            effects=((self.db.all()[0].effect_id, 20, 0x40),
+            effects=((self.free_affixes[0].effect_id, 20, 0x40),
                      (last_id, 0, 0x5C000000 | (byte9 << 8) | 0x020000)),
         )
         plain = support.build_plain_save(records_by_slot={3: record})
@@ -733,7 +734,7 @@ class GraceWidgetTests(UiTestCase):
         self.assertIn("不能改", text)
 
     def test_a_plain_affix_disables_the_control(self) -> None:
-        self._load(self.db.all()[1].effect_id)
+        self._load(self.free_affixes[1].effect_id)
         self.assertIn("disabled", self.app.grace_button.state())
         self.assertIn("恩宠只能替换恩宠", self.app.grace_status_var.get())
 
@@ -775,7 +776,7 @@ class ItemKindWidgetTests(UiTestCase):
     def _load(self, record_type: int) -> None:
         record = support.build_record(
             record_type=record_type,
-            effects=((self.db.all()[0].effect_id, 20, 0x40),),
+            effects=((self.free_affixes[0].effect_id, 20, 0x40),),
         )
         plain = support.build_plain_save(records_by_slot={3: record})
         self.app.decrypted = plain
@@ -803,11 +804,66 @@ class ItemKindWidgetTests(UiTestCase):
         self.assertIn("0x1234", values[2])
         self.assertIn("0x1234", self.app.item_var.get())
 
-    def test_the_kind_is_not_an_editable_widget(self) -> None:
-        """Only 词条 combos and the 恩宠 row exist; 种类 has nothing to write it."""
+    def test_the_kind_row_is_an_editable_widget_now(self) -> None:
+        """种类/等级 are writable through their own rows (同分类互换)."""
         self.assertEqual(len(self.app.slot_combos), EFFECT_COUNT)
+        for name in ("kind_combo", "kind_button", "level_entry", "level_button"):
+            self.assertTrue(hasattr(self.app, name), name)
         self.assertFalse(hasattr(self.app, "item_combo"))
-        self.assertFalse(hasattr(self.app, "item_button"))
+
+
+class LevelAndKindWidgetTests(UiTestCase):
+    """等级 / 种类 rows: enabled only when the evidence allows the edit."""
+
+    def test_the_level_row_mirrors_the_selected_record(self) -> None:
+        self._select()
+        self.assertEqual(self.app.level_var.get(), "150")
+        self.assertIn("当前 Lv150", self.app.level_status_var.get())
+        self.assertEqual(str(self.app.level_button.state()), "()")
+
+    def test_a_level_above_the_cap_is_refused_by_the_dialog_path(self) -> None:
+        self._select()
+        self.app.level_var.set("181")
+        # The gate lives in plan_level_edit; the GUI surfaces its message and the
+        # in-memory data must be untouched.  The question dialog is answered yes so
+        # the refusal provably comes from the legality gate, not from the user.
+        with mock.patch.object(ui.messagebox, "askokcancel", autospec=True,
+                               return_value=True), \
+                mock.patch.object(ui.messagebox, "showerror", autospec=True) as error:
+            self.app.apply_level_to_selection()
+        self.assertTrue(error.called, "超上限的等级必须报错")
+        self.assertIn("180", error.call_args.args[1])
+        view = next(view for view in ui.list_accessories(self.app.decrypted)
+                    if view.slot_index == 3)
+        self.assertEqual(view.level, 150, "被拒绝的等级修改不得落到内存数据里")
+
+    def test_applying_a_level_updates_the_memory_only(self) -> None:
+        self._select()
+        self.app.level_var.set("180")
+        # The confirmation dialog is stubbed to False, so answer it explicitly.
+        with mock.patch.object(ui.messagebox, "askokcancel", autospec=True,
+                               return_value=True):
+            self.app.apply_level_to_selection()
+        view = next(view for view in ui.list_accessories(self.app.decrypted)
+                    if view.slot_index == 3)
+        self.assertEqual(view.level, 180)
+        self.assertEqual(self.app.level_var.get(), "180")
+
+    def test_a_fixed_slot_combo_is_disabled_and_labelled(self) -> None:
+        fixed = next(e for e in self.db.all() if e.is_fixed)
+        plan = support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=0x4001,
+                                    effects=((fixed.effect_id, 20, 0x5C000040),)),
+        })
+        self.app._populate_saves((SaveDescriptor(
+            self.root / "SAVEDATA.BIN", 1234, 0, len(plan)),))
+        self.app._populate_accessories(
+            (plan, ui.list_accessories(plan), True, records.locate_layout(plan)))
+        self.app.tree.selection_set("3")
+        self.app._on_accessory_selected()
+        self.assertIn("固定，不可修改", self.app.slot_combos[0].get())
+        self.assertIn("disabled", str(self.app.slot_combos[0].state()))
+        self.assertIn("禁止修改", self.app.slot_labels[0].get())
 
 
 class StaticMethodTests(unittest.TestCase):

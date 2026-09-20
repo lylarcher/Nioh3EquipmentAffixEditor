@@ -326,7 +326,7 @@ class EndToEndCliTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.db = AffixDb()
-        cls.affix = cls.db.all()[0]
+        cls.affix = next(entry for entry in cls.db.all() if not entry.is_fixed)
         cls.plain = support.build_plain_save(
             records_by_slot={
                 3: support.build_record(
@@ -425,6 +425,51 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertIn("400 槽", out)
         self.assertIn("对齐", out)
 
+    def test_edit_refuses_a_fixed_slot(self) -> None:
+        """同名固定词条不能被改：CLI 也必须拒绝。"""
+        fixed = next(entry for entry in self.db.all() if entry.is_fixed)
+        record = support.build_record(
+            record_type=0x4001,
+            effects=((fixed.effect_id, 20, 0x5C000040), (self.affix.effect_id, 15, 0x40)),
+        )
+        plain = support.build_plain_save(records_by_slot={3: record})
+        staged = self.root / "fixed-plain.bin"
+        staged.write_bytes(plain)
+        encrypted = self.root / "fixed-enc.bin"
+        self.crypto.encrypt(staged, encrypted)
+        self.save_path.write_bytes(encrypted.read_bytes())
+
+        code, out, err = run_cli([
+            "edit", "--record", "3",
+            "--edit", f"0:{self.affix.effect_id:#x}:20",
+        ])
+        combined = out + err
+        self.assertNotEqual(code, 0)
+        self.assertIn("同名固定词条不能修改", combined)
+
+    def test_level_edit_dry_run_reports_the_change(self) -> None:
+        code, out, err = run_cli([
+            "edit", "--record", "3", "--level", "180", "--dry-run",
+        ])
+        self.assertEqual(code, 0, err)
+        self.assertIn("等级 160 → 180", out)
+        self.assertIn("不会写入存档", out)
+
+    def test_level_edit_refuses_above_the_cap(self) -> None:
+        code, out, err = run_cli([
+            "edit", "--record", "3", "--level", "181", "--dry-run",
+        ])
+        self.assertNotEqual(code, 0)
+        self.assertIn("180", out + err)
+
+    def test_edit_requires_exactly_one_mode(self) -> None:
+        code, out, err = run_cli([
+            "edit", "--record", "3", "--level", "170", "--grace", "稻荷神",
+            "--dry-run",
+        ])
+        self.assertNotEqual(code, 0)
+        self.assertIn("四选一", out + err)
+
     def test_list_names_the_trailing_grace_slot(self) -> None:
         """An accessory's last affix is a 恩宠/套装 id from 词条总目录."""
         record = support.build_record(
@@ -515,11 +560,11 @@ class EndToEndCliTests(unittest.TestCase):
     def test_edit_needs_exactly_one_of_edit_or_grace(self) -> None:
         code, out, err = run_cli(["edit", "--record", "3"])
         self.assertNotEqual(code, 0)
-        self.assertIn("二选一", err + out)
+        self.assertIn("四选一", err + out)
         code, out, err = run_cli(["edit", "--record", "3", "--edit", "0:1",
                                   "--grace", "稻荷神"])
         self.assertNotEqual(code, 0)
-        self.assertIn("二选一", err + out)
+        self.assertIn("四选一", err + out)
 
     def test_edit_grace_refuses_a_set_target(self) -> None:
         self._stage(self.GRACE_A)

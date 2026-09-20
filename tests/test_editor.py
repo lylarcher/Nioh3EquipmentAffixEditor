@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import struct
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,8 +11,22 @@ from unittest import mock
 from nioh3_accessory_editor import editor as editor_module
 from nioh3_accessory_editor import records
 from nioh3_accessory_editor import savefile as savefile_module
-from nioh3_accessory_editor.affixdb import AffixDb, AffixError, GraceDb, ItemDb
+from nioh3_accessory_editor.affixdb import (
+    AffixDb,
+    AffixError,
+    GraceDb,
+    ItemDb,
+    ItemEntry,
+)
 from nioh3_accessory_editor.editor import (
+    KindSwapError,
+    LevelEditError,
+    apply_kind_swaps,
+    apply_level_edits,
+    collect_kind_samples,
+    plan_kind_swap,
+    plan_level_edit,
+    resolve_item_id,
     EditorError,
     GraceEditError,
     SaveDescriptor,
@@ -40,8 +55,13 @@ class EditorTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         cls.db = AffixDb()
-        cls.affix_a = cls.db.all()[0]
-        cls.affix_b = cls.db.all()[1]
+        # Editable slots must use affixes that are NOT (同名固定): a fixed affix is
+        # part of the item kind and the editor refuses to change it.
+        cls.free_affixes = [entry for entry in cls.db.all() if not entry.is_fixed]
+        cls.fixed_affixes = [entry for entry in cls.db.all() if entry.is_fixed]
+        cls.fixed_affix = cls.fixed_affixes[0]
+        cls.affix_a = cls.free_affixes[0]
+        cls.affix_b = cls.free_affixes[1]
         cls.record_3 = support.build_record(
             record_type=ITEM_TYPE, level=150, rarity=4,
             effects=((cls.affix_a.effect_id, 20, 0x40),),
@@ -140,8 +160,8 @@ class GraceSlotTests(EditorTestCase):
             record_type=ITEM_TYPE,
             effects=((self.affix_a.effect_id, 20, 0x40),
                      (self.affix_b.effect_id, 15, 0x40),
-                     (self.db.all()[2].effect_id, 30, 0x40),
-                     (self.db.all()[3].effect_id, 5, 0x40),
+                     (self.free_affixes[2].effect_id, 30, 0x40),
+                     (self.free_affixes[3].effect_id, 5, 0x40),
                      (0x004FA3, 0, 0x29014C00)),
         )
         save = support.build_plain_save(records_by_slot={3: record})
@@ -199,7 +219,7 @@ class GraceEditTests(EditorTestCase):
     def _save_with(self, last_id: int, *, byte9: int = 0x0C,
                    value: int = 0, extra_slots: int = 1) -> bytes:
         effects = [(self.affix_a.effect_id, 20, 0x40)]
-        effects += [(self.db.all()[index + 1].effect_id, 10, 0x40)
+        effects += [(self.free_affixes[index + 1].effect_id, 10, 0x40)
                     for index in range(extra_slots)]
         effects.append((last_id, value, 0x5C000000 | (byte9 << 8) | 0x020000))
         return support.build_plain_save(records_by_slot={
@@ -375,6 +395,321 @@ class ItemKindDisplayTests(EditorTestCase):
                        [{"record_index": 3, "slot_index": 0,
                          "effect_id": 0x3E3F, "value": 1}],
                        affix_db=self.db)
+
+
+class FixedSlotTests(EditorTestCase):
+    """A 同名固定 affix is part of the item kind: never editable manually.
+
+    Evidence: the catalog's ``(同名固定)`` flag and the slot's metadata byte 9 bit
+    0x40 agreed on all 795 catalogued slots of the reporting user's save.
+    """
+
+    def _save(self, *, fixed_first: bool, bit: bool = True) -> bytes:
+        first = (self.fixed_affix.effect_id if fixed_first
+                 else self.affix_a.effect_id)
+        meta0 = (0x5C000000 | 0x40 << 8) if bit else 0x5C000000
+        return support.build_plain_save(records_by_slot={
+            3: support.build_record(
+                record_type=ITEM_TYPE,
+                effects=((first, 20, meta0),
+                         (self.affix_b.effect_id, 15, 0x0040)),
+            ),
+        })
+
+    def test_a_fixed_slot_is_recognised(self) -> None:
+        view = list_accessories(self._save(fixed_first=True))[0]
+        self.assertTrue(view.slot_is_fixed(0, self.db))
+        self.assertFalse(view.slot_is_fixed(1, self.db))
+        self.assertEqual(view.fixed_slots(self.db), frozenset({0}))
+        self.assertEqual(view.slot_role(0, self.db), "固定词条")
+        self.assertEqual(view.slot_role(1, self.db), "饰品词条")
+
+    def test_the_marker_bit_alone_is_not_consulted_outside_the_catalog(self) -> None:
+        """恩宠 slots carry byte 9 = 0x4C too, so an uncatalogued id is not fixed."""
+        save = support.build_plain_save(records_by_slot={
+            3: support.build_record(
+                record_type=ITEM_TYPE,
+                effects=((self.affix_a.effect_id, 20, 0x0040),
+                         (0x004FA3, 0, 0x29014C00)),
+            ),
+        })
+        view = list_accessories(save)[0]
+        self.assertFalse(view.slot_is_fixed(0, self.db))
+        self.assertFalse(view.slot_is_fixed(1, self.db))
+
+    def test_editing_a_fixed_slot_is_refused(self) -> None:
+        save = self._save(fixed_first=True)
+        with self.assertRaises(EditorError) as caught:
+            plan_edits(save, [{"record_index": 3, "slot_index": 0,
+                               "effect_id": self.affix_b.effect_id, "value": 5}],
+                       affix_db=self.db)
+        self.assertIn("同名固定词条不能修改", str(caught.exception))
+
+    def test_clearing_a_fixed_slot_is_refused_too(self) -> None:
+        save = self._save(fixed_first=True)
+        with self.assertRaises(EditorError):
+            plan_edits(save, [{"record_index": 3, "slot_index": 0,
+                               "effect_id": EMPTY_EFFECT_ID}], affix_db=self.db)
+
+    def test_writing_a_fixed_affix_into_a_normal_slot_is_refused(self) -> None:
+        with self.assertRaises(EditorError) as caught:
+            plan_edits(self.plain,
+                       [{"record_index": 3, "slot_index": 1,
+                         "effect_id": self.fixed_affix.effect_id, "value": 20}],
+                       affix_db=self.db)
+        self.assertIn("同名固定词条", str(caught.exception))
+
+    def test_normal_slots_still_work(self) -> None:
+        save = self._save(fixed_first=True)
+        plans = plan_edits(save, [{"record_index": 3, "slot_index": 1,
+                                   "effect_id": self.affix_a.effect_id,
+                                   "value": 20}], affix_db=self.db)
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(plans[0].after[1].effect_id, self.affix_a.effect_id)
+
+    def test_describe_marks_the_fixed_slot(self) -> None:
+        view = list_accessories(self._save(fixed_first=True))[0]
+        lines = view.describe_effects(self.db)
+        self.assertIn("固定词条，不可修改", lines[1])
+        self.assertNotIn("不可修改", lines[2])
+
+
+class KindSwapTests(EditorTestCase):
+    """种类互换: same 中类 only, fixed affix copied from a real sample."""
+
+    # Two synthetic 饰品 kinds of the same 中类 plus one of another 中类.  The fixed
+    # affixes are real catalogued ids, because the fixed marker is only trusted
+    # for ids that are in the catalog.
+    SAMURAI_A = 0x1001
+    SAMURAI_B = 0x1002
+    NINJA_A = 0x2001
+    UNKNOWN = 0x3001
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.item_db = ItemDb([
+            ItemEntry(self.SAMURAI_A, "甲[武士]", "武士饰品"),
+            ItemEntry(self.SAMURAI_B, "乙[武士]", "武士饰品"),
+            ItemEntry(self.NINJA_A, "丙[忍者]", "忍者饰品"),
+        ])
+
+    def _record(self, item_id: int, fixed_id: int, *, value: int = 7,
+                meta9: int = 0x4C) -> bytes:
+        return support.build_record(
+            record_type=item_id,
+            effects=((fixed_id, value, 0x5C000000 | meta9 << 8),
+                     (self.affix_a.effect_id, 20, 0x0040)),
+        )
+
+    @property
+    def fixed_a(self) -> int:
+        """Two *real* catalogued 同名固定 affixes: a synthetic id would not be
+        recognised as fixed, because the marker is only trusted in-catalog."""
+        return self.fixed_affixes[0].effect_id
+
+    @property
+    def fixed_b(self) -> int:
+        return self.fixed_affixes[1].effect_id
+
+    def _save(self, **records: bytes) -> bytes:
+        """``_save(**{"3": record})`` — dict-unpacked keys are strings, so cast."""
+        return support.build_plain_save(
+            records_by_slot={int(slot): record for slot, record in records.items()})
+
+    def test_a_same_category_swap_copies_the_fixed_affix(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a),
+                             "11": self._record(self.SAMURAI_B, self.fixed_b,
+                                                value=9)})
+        plan = plan_kind_swap(save, 3, self.SAMURAI_B, affix_db=self.db,
+                              item_db=self.item_db)
+        self.assertEqual((plan.old_item_id, plan.new_item_id),
+                         (self.SAMURAI_A, self.SAMURAI_B))
+        self.assertEqual(plan.fixed_after, ((0, self.fixed_b, 9, 0x4C),))
+        patched = apply_kind_swaps(save, [plan])
+        view = next(view for view in list_accessories(patched, known_ids=None)
+                    if view.slot_index == 3)
+        self.assertEqual(view.record_type, self.SAMURAI_B)
+        self.assertEqual(view.effects[0].effect_id, self.fixed_b)
+        self.assertEqual(view.effects[0].value, 9)
+        # The per-instance fields of the slot are left alone: only id/value/byte9
+        # are kind properties (byte 10/11 vary per copy of a kind).
+        expected = support.build_record(record_type=self.SAMURAI_A,
+                                        effects=((self.fixed_a, 7, 0x5C000000 | 0x4C << 8),))
+        expected_prefix = records.read_effect_slots(expected)[0].prefix
+        self.assertEqual(view.effects[0].prefix, expected_prefix)
+        self.assertEqual(view.effects[0].metadata, 0x5C000000 | 0x4C << 8)
+        # Normal slots are untouched.
+        self.assertEqual(view.effects[1].effect_id, self.affix_a.effect_id)
+
+    def test_the_item_id_is_written_to_both_header_fields(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a),
+                             "11": self._record(self.SAMURAI_B, self.fixed_b)})
+        plan = plan_kind_swap(save, 3, self.SAMURAI_B, affix_db=self.db,
+                              item_db=self.item_db)
+        patched = apply_kind_swaps(save, [plan])
+        offset = plan.offset
+        self.assertEqual(patched[offset:offset + 2],
+                         patched[offset + 2:offset + 4])
+        self.assertEqual(int.from_bytes(patched[offset:offset + 2], "little"),
+                         self.SAMURAI_B)
+
+    def test_only_the_header_and_fixed_slot_change(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a),
+                             "11": self._record(self.SAMURAI_B, self.fixed_b,
+                                                value=9)})
+        plan = plan_kind_swap(save, 3, self.SAMURAI_B, affix_db=self.db,
+                              item_db=self.item_db)
+        patched = apply_kind_swaps(save, [plan])
+        differences = {index - plan.offset for index, (old, new)
+                       in enumerate(zip(save, patched)) if old != new}
+        allowed = {0x00, 0x01, 0x02, 0x03} | set(
+            range(0x34, 0x34 + 0x18))
+        self.assertTrue(differences <= allowed, sorted(differences))
+        self.assertIn(0x00, differences)
+
+    def test_a_cross_category_swap_is_refused(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a),
+                             "11": self._record(self.NINJA_A, self.fixed_b)})
+        with self.assertRaises(KindSwapError) as caught:
+            plan_kind_swap(save, 3, self.NINJA_A, affix_db=self.db,
+                           item_db=self.item_db)
+        self.assertIn("只能同分类互换", str(caught.exception))
+
+    def test_a_target_kind_absent_from_the_save_is_refused(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a)})
+        with self.assertRaises(KindSwapError) as caught:
+            plan_kind_swap(save, 3, self.SAMURAI_B, affix_db=self.db,
+                           item_db=self.item_db)
+        self.assertIn("没有种类", str(caught.exception))
+
+    def test_an_ambiguous_target_kind_is_refused(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a),
+                             "11": self._record(self.SAMURAI_B, self.fixed_b),
+                             "12": self._record(self.SAMURAI_B, self.fixed_affixes[2].effect_id)})
+        with self.assertRaises(KindSwapError) as caught:
+            plan_kind_swap(save, 3, self.SAMURAI_B, affix_db=self.db,
+                           item_db=self.item_db)
+        self.assertIn("不一致", str(caught.exception))
+
+    def test_a_kind_outside_the_item_table_cannot_be_swapped(self) -> None:
+        save = self._save(**{"3": self._record(self.UNKNOWN, self.fixed_a),
+                             "11": self._record(self.SAMURAI_B, self.fixed_b)})
+        with self.assertRaises(KindSwapError) as caught:
+            plan_kind_swap(save, 3, self.SAMURAI_B, affix_db=self.db,
+                           item_db=self.item_db)
+        self.assertIn("不在物品种类表内", str(caught.exception))
+
+    def test_a_kind_without_a_fixed_affix_swaps_without_touching_slots(self) -> None:
+        """A kind whose copies carry no 同名固定 affix: only the header changes."""
+        plain = support.build_record(record_type=self.SAMURAI_A,
+                                     effects=((self.affix_a.effect_id, 20, 0x40),))
+        target = support.build_record(record_type=self.SAMURAI_B,
+                                      effects=((self.affix_b.effect_id, 15, 0x40),))
+        save = self._save(**{"3": plain, "11": target})
+        plan = plan_kind_swap(save, 3, self.SAMURAI_B, affix_db=self.db,
+                              item_db=self.item_db)
+        self.assertEqual(plan.fixed_after, ())
+        patched = apply_kind_swaps(save, [plan])
+        offset = plan.offset
+        differences = {index - offset for index, (old, new)
+                       in enumerate(zip(save, patched)) if old != new}
+        # Only the two mirrored id fields may change (0x1001 → 0x1002 touches the
+        # low byte of each little-endian copy), and nothing else in the record.
+        self.assertTrue(differences <= {0x00, 0x01, 0x02, 0x03}, sorted(differences))
+        self.assertEqual(differences, {0x00, 0x02})
+    def test_same_kind_is_refused(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a)})
+        with self.assertRaises(KindSwapError):
+            plan_kind_swap(save, 3, self.SAMURAI_A, affix_db=self.db,
+                           item_db=self.item_db)
+
+    def test_samples_report_ambiguity_per_kind(self) -> None:
+        save = self._save(**{"3": self._record(self.SAMURAI_A, self.fixed_a),
+                             "11": self._record(self.SAMURAI_B, self.fixed_b),
+                             "12": self._record(self.SAMURAI_B, self.fixed_affixes[2].effect_id)})
+        samples = collect_kind_samples(save, affix_db=self.db)
+        self.assertFalse(samples[self.SAMURAI_A].ambiguous)
+        self.assertEqual(samples[self.SAMURAI_A].copies, 1)
+        self.assertTrue(samples[self.SAMURAI_B].ambiguous)
+        self.assertEqual(samples[self.SAMURAI_B].copies, 2)
+
+    def test_resolve_item_id_accepts_names_and_ids(self) -> None:
+        self.assertEqual(resolve_item_id(self.item_db, "甲[武士]"),
+                         self.SAMURAI_A)
+        self.assertEqual(resolve_item_id(self.item_db, "0x1002"),
+                         self.SAMURAI_B)
+        with self.assertRaises(KindSwapError):
+            resolve_item_id(self.item_db, "不存在的饰品")
+        with self.assertRaises(KindSwapError):
+            resolve_item_id(self.item_db, "0x9999")
+
+
+class LevelEditTests(EditorTestCase):
+    """等级 edits: ``+0x06`` and its mirror ``+0x08``, capped at 180."""
+
+    def test_plan_and_apply_write_both_level_fields(self) -> None:
+        plan = plan_level_edit(self.plain, 3, 180, affix_db=self.db)
+        self.assertEqual((plan.old_level, plan.new_level), (150, 180))
+        patched = apply_level_edits(self.plain, [plan])
+        offset = plan.offset
+        record = patched[offset:offset + records.SCROLL_RECORD_SIZE]
+        self.assertEqual(records.read_record_level(record), 180)
+        self.assertEqual(records.read_record_level_mirror(record), 180)
+
+    def test_only_the_level_bytes_change(self) -> None:
+        plan = plan_level_edit(self.plain, 3, 170, affix_db=self.db)
+        patched = apply_level_edits(self.plain, [plan])
+        differences = {index for index, (old, new)
+                       in enumerate(zip(self.plain, patched)) if old != new}
+        allowed = {plan.offset + 0x06, plan.offset + 0x07,
+                   plan.offset + 0x08, plan.offset + 0x09}
+        self.assertTrue(differences <= allowed, sorted(differences))
+        self.assertIn(plan.offset + 0x06, differences)
+        self.assertIn(plan.offset + 0x08, differences)
+
+    def test_above_the_game_cap_is_refused(self) -> None:
+        with self.assertRaises(LevelEditError) as caught:
+            plan_level_edit(self.plain, 3, 181, affix_db=self.db)
+        self.assertIn("180", str(caught.exception))
+
+    def test_zero_and_negative_levels_are_refused(self) -> None:
+        for level in (0, -1):
+            with self.assertRaises(LevelEditError):
+                plan_level_edit(self.plain, 3, level, affix_db=self.db)
+
+    def test_the_current_level_is_not_a_change(self) -> None:
+        with self.assertRaises(LevelEditError):
+            plan_level_edit(self.plain, 3, 150, affix_db=self.db)
+
+    def test_a_mismatched_mirror_is_refused(self) -> None:
+        """A record whose level fields disagree is not the shape we verified."""
+        record = bytearray(self.record_3)
+        struct.pack_into("<H", record, 0x08, 151)
+        save = support.build_plain_save(records_by_slot={3: bytes(record)})
+        # Locate the layout on the *intact* save: the damaged record no longer
+        # satisfies the record-header heuristic (type/level must equal their
+        # mirrors), so the reader refuses it — the same conclusion either way.
+        layout = records.locate_layout(self.plain)
+        with self.assertRaises(LevelEditError) as caught:
+            plan_level_edit(save, 3, 170, affix_db=self.db, layout=layout)
+        self.assertIn("不是物品记录", str(caught.exception))
+        # The record-layer gate reports the mismatch itself.
+        with self.assertRaises(RecordError) as caught:
+            records.patch_record_level(bytes(record), 170)
+        self.assertIn("不一致", str(caught.exception))
+
+    def test_a_missing_record_is_refused(self) -> None:
+        layout = records.locate_layout(self.plain)
+        with self.assertRaises(LevelEditError) as caught:
+            plan_level_edit(self.plain, 999, 170, affix_db=self.db,
+                            layout=layout)
+        self.assertIn("记录索引", str(caught.exception))
+
+    def test_the_view_reports_the_mirror(self) -> None:
+        view = list_accessories(self.plain)[0]
+        self.assertEqual(view.level, 150)
+        self.assertEqual(view.level_mirror, 150)
+        self.assertIsInstance(view.plus_candidate, int)
 
 
 class PlanTests(EditorTestCase):

@@ -49,6 +49,7 @@ __all__ = [
     "AccessoryRecord",
     "EFFECT_COUNT",
     "EFFECT_FIELD_OFFSETS",
+    "EFFECT_FIXED_MARKER_BIT",
     "EFFECT_START",
     "EFFECT_STRIDE",
     "EMPTY_EFFECT_ID",
@@ -56,7 +57,10 @@ __all__ = [
     "InventoryLayout",
     "LEGACY_GROUP_OFFSET",
     "MAX_GROUP_SLOTS",
+    "MAX_ITEM_LEVEL",
+    "MIN_ITEM_LEVEL",
     "RARITY_NAMES",
+    "RECORD_PLUS_OFFSET",
     "RecordError",
     "SCROLL_GROUP_END",
     "SCROLL_GROUP_OFFSET",
@@ -65,14 +69,21 @@ __all__ = [
     "SCROLL_TYPES",
     "account_id_from_record",
     "describe_diagnosis",
+    "effect_metadata_is_fixed",
     "header_candidates",
     "iter_item_records",
     "layout_diagnosis",
     "locate_layout",
     "looks_like_item_record",
     "patch_effect_slots",
+    "patch_record_item_id",
+    "patch_record_level",
     "read_effect_slots",
     "read_item_record",
+    "read_record_item_id",
+    "read_record_level",
+    "read_record_level_mirror",
+    "read_record_plus_candidate",
     "record_is_empty",
     "record_offset",
     "record_rarity",
@@ -131,6 +142,36 @@ RECORD_MIRROR_LEVEL_OFFSET = 0x08
 RECORD_RARITY_OFFSET = 0x30
 RECORD_RARITY_HIGH_OFFSET = 0x31
 RECORD_ACCOUNT_LOW_OFFSET = 0x14
+
+#: Highest item level the game serialises: the reference project reads
+#: ``min(record +0x06, 180)`` as the effective level, and the reporting user's
+#: save tops out at 0x00B4 = 180 as well.  Never write above it.
+MAX_ITEM_LEVEL = 180
+MIN_ITEM_LEVEL = 1
+#: Level mirror written alongside ``+0x06``.  Measured: equal to ``+0x06`` on all
+#: 213 accessories of the reporting user's save, so a level edit writes both and
+#: refuses when they disagree (that would mean the record is not an accessory).
+RECORD_LEVEL_MIRRORS = (RECORD_LEVEL_OFFSET, RECORD_MIRROR_LEVEL_OFFSET)
+
+#: Metadata byte 9 bit 6.  Evidence: the workbook's 说明 sheet lists the 同名固定
+#: marker values (0x1E/0x32/0x50/0x64/0x63, all carrying 0x40) and every category
+#: row's byte 9 low 6 bits match the sheet's 类别 enumeration; on the save this bit
+#: agreed with the catalog's (同名固定) flag on all 795 catalogued slots, zero
+#: exceptions.  It is **not** a fixed-only bit for uncatalogued ids: 恩宠 slots
+#: (byte 9 = 0x4C = 0x40|0x0C) and 套装 slots carry it as well, so callers must
+#: combine it with the catalog (see ``AccessoryView.slot_is_fixed``).
+EFFECT_FIXED_MARKER_SHIFT = 8
+EFFECT_FIXED_MARKER_BIT = 0x40
+
+#: ``+0x0A``: a per-instance field, 0..30 across the reporting user's 1535 item
+#: records (0..18 on 魂核), constant for a given piece and independent of level,
+#: of the item kind and of every effect value.  The user reports a "+值" with a cap
+#: around 15, which fits this field being twice the +值 — but that is **not yet
+#: confirmed in game**, so nothing writes it: ``RECORD_PLUS_OFFSET`` is here to
+#: document the candidate, and the writer refuses until the mapping is verified.
+RECORD_PLUS_OFFSET = 0x0A
+RECORD_PLUS_CANDIDATE_MAX = 30
+
 
 # Six known scroll record types (CATEGORY_TO_TYPE in the reference project).
 SCROLL_TYPES = frozenset((0x0000, 0x1E82, 0x516D, 0xE604, 0xDD82, 0xD523))
@@ -385,6 +426,99 @@ def record_rarity(record: bytes) -> int:
     if rarity == 0:
         rarity = record[RECORD_RARITY_HIGH_OFFSET] & 0x0F
     return rarity
+
+
+def effect_metadata_is_fixed(metadata: int) -> bool:
+    """Whether a slot's metadata marks a 同名固定 (item-fixed) affix.
+
+    Byte 9 bit 6.  See ``EFFECT_FIXED_MARKER_BIT`` for the evidence.
+    """
+    return bool(((metadata >> EFFECT_FIXED_MARKER_SHIFT) & 0xFF)
+                & EFFECT_FIXED_MARKER_BIT)
+
+
+def read_record_level(record: bytes) -> int:
+    """Read the item level (``+0x06``)."""
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    return struct.unpack_from("<H", record, RECORD_LEVEL_OFFSET)[0]
+
+
+def read_record_level_mirror(record: bytes) -> int:
+    """Read the level mirror (``+0x08``); equal to ``+0x06`` on accessories."""
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    return struct.unpack_from("<H", record, RECORD_MIRROR_LEVEL_OFFSET)[0]
+
+
+def read_record_plus_candidate(record: bytes) -> int:
+    """Read ``+0x0A`` — the *candidate* "+值" field, still unverified.
+
+    Returned for display only; nothing writes it (see ``RECORD_PLUS_OFFSET``).
+    """
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    return struct.unpack_from("<H", record, RECORD_PLUS_OFFSET)[0]
+
+
+def read_record_item_id(record: bytes) -> int:
+    """Read the per-item id (种类) from ``+0x00`` (mirrored at ``+0x02``)."""
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    return struct.unpack_from("<H", record, RECORD_TYPE_OFFSET)[0]
+
+
+def patch_record_level(record: bytes, level: int) -> bytes:
+    """Return ``record`` with ``+0x06``/``+0x08`` set to ``level``.
+
+    Refuses an out-of-range level and a record whose two level fields disagree
+    (measured equal on every accessory of the reporting user's save, so a
+    mismatch means this is not the record shape we verified).
+    """
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    if not isinstance(level, int) or isinstance(level, bool):
+        raise RecordError("等级必须是整数")
+    if not MIN_ITEM_LEVEL <= level <= MAX_ITEM_LEVEL:
+        raise RecordError(
+            f"等级必须在 {MIN_ITEM_LEVEL}..{MAX_ITEM_LEVEL} 之间"
+            f"（游戏可序列化的上限是 {MAX_ITEM_LEVEL}）"
+        )
+    current = read_record_level(record)
+    mirror = read_record_level_mirror(record)
+    if current != mirror:
+        raise RecordError(
+            f"记录的等级字段不一致（+0x06={current}，+0x08={mirror}），"
+            "无法确定该改哪个，已拒绝"
+        )
+    patched = bytearray(record)
+    for offset in RECORD_LEVEL_MIRRORS:
+        struct.pack_into("<H", patched, offset, level)
+    return bytes(patched)
+
+
+def patch_record_item_id(record: bytes, item_id: int, *,
+                         mirror_ok: bool = True) -> bytes:
+    """Return ``record`` with the 种类 id written to ``+0x00`` and ``+0x02``.
+
+    ``mirror_ok`` records whether the caller verified ``+0x00 == +0x02`` on the
+    original record (measured true on all 213 accessories); a record where the two
+    already disagree is not written.
+    """
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    if not isinstance(item_id, int) or isinstance(item_id, bool):
+        raise RecordError("物品种类 id 必须是整数")
+    if not 0 <= item_id <= 0xFFFF:
+        raise RecordError("物品种类 id 必须位于 0..0xFFFF")
+    if not mirror_ok:
+        raise RecordError(
+            "记录的种类字段与其镜像不一致（+0x00 != +0x02），已拒绝改写"
+        )
+    patched = bytearray(record)
+    struct.pack_into("<H", patched, RECORD_TYPE_OFFSET, item_id)
+    struct.pack_into("<H", patched, RECORD_MIRROR_TYPE_OFFSET, item_id)
+    return bytes(patched)
 
 
 # --------------------------------------------------------------------------

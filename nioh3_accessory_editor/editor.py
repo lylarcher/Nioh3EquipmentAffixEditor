@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import struct
 
 from . import records
 from .affixdb import GRACE_KINDS, AffixDb, GraceDb, ItemDb
@@ -43,14 +44,25 @@ __all__ = [
     "AccessoryView",
     "EditPlan",
     "EditorError",
+    "KindSample",
+    "KindSwapError",
+    "KindSwapPlan",
+    "LevelEditError",
+    "LevelPlan",
     "SaveDescriptor",
     "apply_edits",
+    "apply_kind_swaps",
+    "apply_level_edits",
+    "collect_kind_samples",
     "commit_save",
     "discover_saves",
     "list_accessories",
     "list_backups",
     "open_save",
     "plan_edits",
+    "plan_kind_swap",
+    "plan_level_edit",
+    "resolve_item_id",
     "restore_backup",
 ]
 
@@ -90,6 +102,8 @@ class AccessoryView:
     effects: tuple[records.EffectSlot, ...]
     kind_name: str = "装备/饰品"
     catalog_hits: int | None = None
+    level_mirror: int = 0
+    plus_candidate: int = 0
 
     @property
     def is_accessory(self) -> bool | None:
@@ -99,14 +113,61 @@ class AccessoryView:
         return self.catalog_hits > 0
 
     @property
+    def item_kind(self) -> str:
+        """大类 of the record: ``饰品``/``魂核``/其它 (evidence-based)."""
+        return self.kind_name
+
+    @property
     def occupied_effects(self) -> tuple[records.EffectSlot, ...]:
         return tuple(effect for effect in self.effects if not effect.is_empty)
 
     def slot_role(self, slot_index: int, affix_db: AffixDb) -> str:
-        """What an occupied slot holds: 饰品词条 or 恩宠/套装词条."""
+        """What an occupied slot holds: 固定词条 / 饰品词条 / 恩宠/套装词条."""
+        if self.slot_is_fixed(slot_index, affix_db):
+            return "固定词条"
         if slot_index not in self.grace_slots(affix_db):
             return "饰品词条"
         return "恩宠/套装词条"
+
+    def slot_is_fixed(self, slot_index: int, affix_db: AffixDb) -> bool:
+        """Whether this slot holds the item's 同名固定 affix (never editable).
+
+        Evidence, and why the metadata bit alone is *not* enough:
+
+        * the catalog marks the id ``(同名固定)`` (byte 9 bit 6 of the affix code
+          template, measured against the workbook's own 同名固定 rows), and
+        * the slot's metadata byte 9 has bit ``0x40`` set.
+
+        On the 795 catalogued slots of the reporting user's save the two agreed
+        with zero exceptions.  The bit is *not* consulted for ids outside the
+        catalog, because there it is set for other reasons too — 恩宠 slots
+        (byte 9 = 0x4C = 0x40|0x0C) and 套装 slots all carry it, and 恩宠 must stay
+        editable through the 恩宠 path.  So: catalog-fixed, or (in-catalog and bit
+        set), and nothing else.
+
+        An item's fixed affix is part of *what the item is*: changing it (or
+        changing a normal slot into one) would describe an accessory that cannot
+        drop.  The only code allowed to rewrite it is the 种类 swap, which copies
+        the target kind's own fixed affix from a real sample.
+        """
+        if not 0 <= slot_index < len(self.effects):
+            return False
+        effect = self.effects[slot_index]
+        if effect.is_empty:
+            return False
+        entry = affix_db.lookup(effect.effect_id)
+        if entry is None:
+            return False
+        if entry.is_fixed:
+            return True
+        return records.effect_metadata_is_fixed(effect.metadata)
+
+    def fixed_slots(self, affix_db: AffixDb) -> frozenset[int]:
+        """Indices of the record's occupied 同名固定 slots (usually just one)."""
+        return frozenset(
+            effect.slot_index for effect in self.occupied_effects
+            if self.slot_is_fixed(effect.slot_index, affix_db)
+        )
 
     def grace_slots(self, affix_db: AffixDb) -> frozenset[int]:
         """Indices of trailing occupied slots whose id is outside the catalog.
@@ -155,6 +216,13 @@ class AccessoryView:
             if effect.is_empty:
                 lines.append(f"  [{effect.slot_index}] (空)")
                 continue
+            if self.slot_is_fixed(effect.slot_index, affix_db):
+                lines.append(
+                    f"  [{effect.slot_index}] {affix_db.describe(effect.effect_id)}"
+                    f"（固定词条，不可修改，id={effect.effect_id:#06x}） "
+                    f"(数值={effect.value} 标识={effect.metadata:#010x})"
+                )
+                continue
             if effect.slot_index in grace:
                 named = grace_db.describe(effect.effect_id) if grace_db else None
                 if named:
@@ -184,6 +252,319 @@ class EditPlan:
     edits: tuple[dict[str, int], ...]
     before: tuple[records.EffectSlot, ...]
     after: tuple[records.EffectSlot, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class KindSample:
+    """A verified sample of one 饰品 kind taken from the user's own save.
+
+    The fixed affix is part of what an item kind *is*, so a 种类 swap may not
+    invent one: it copies the fixed affix of the target kind from a real record.
+
+    Only the kind-deterministic fields are copied — measured over the 60 kinds
+    with a fixed affix in the reporting user's save, ``id``, ``value`` and
+    metadata **byte 9** are identical on every copy of a kind (58/60; the two
+    exceptions are the 八咫镜 variants, which are refused as ambiguous), while
+    metadata bytes 10/11 vary per copy (only 25/60 kinds agree) and the slot
+    ``prefix`` varies for 4 kinds.  Bytes 10/11 and the prefix are therefore left
+    untouched: their meaning is unverified and they are not kind properties.
+    """
+
+    item_id: int
+    copies: int
+    fixed_slots: tuple[tuple[int, int, int, int], ...]
+    ambiguous: bool
+
+
+@dataclass(frozen=True, slots=True)
+class KindSwapPlan:
+    """A validated 种类 swap: the new item id plus the fixed slots it rewrites."""
+
+    record_index: int
+    offset: int
+    old_item_id: int
+    new_item_id: int
+    category: str
+    fixed_before: tuple[tuple[int, int, int, int], ...]
+    fixed_after: tuple[tuple[int, int, int, int], ...]
+
+    def describe(self) -> str:
+        return (f"记录 #{self.record_index}: 种类 {self.old_item_id:#06x} → "
+                f"{self.new_item_id:#06x}（{self.category}），"
+                f"固定词条随种类同步 {len(self.fixed_after)} 条")
+
+
+class KindSwapError(EditorError):
+    """Raised when a 种类 swap would be illegal or unverifiable."""
+
+
+def _fixed_slot_tuple(effect: records.EffectSlot) -> tuple[int, int, int, int]:
+    """(slot, id, value, metadata 第 9 字节) — the kind-deterministic fixed fields."""
+    return (effect.slot_index, effect.effect_id, effect.value,
+            (effect.metadata >> records.EFFECT_FIXED_MARKER_SHIFT) & 0xFF)
+
+
+def collect_kind_samples(
+    decrypted: bytes,
+    *,
+    affix_db: AffixDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> dict[int, KindSample]:
+    """Index the accessory kinds present in the save, with their fixed slots.
+
+    Read-only.  A kind is ``ambiguous`` when its copies disagree about *which*
+    slot holds the fixed affix, or about that slot's id/value/metadata — the
+    editor then refuses to swap *to* it rather than guess.
+    """
+    if known_ids is None and layout is None:
+        known_ids = accessory_catalog_ids(affix_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    patterns: dict[int, dict[tuple[tuple[int, int, int, int, int], ...], int]] = {}
+    for view in list_accessories(decrypted, layout=layout, known_ids=known_ids):
+        pattern = tuple(
+            _fixed_slot_tuple(view.effects[index])
+            for index in sorted(view.fixed_slots(affix_db))
+        )
+        seen = patterns.setdefault(view.record_type, {})
+        seen[pattern] = seen.get(pattern, 0) + 1
+    samples: dict[int, KindSample] = {}
+    for item_id, seen in patterns.items():
+        pattern, copies = max(seen.items(), key=lambda item: item[1])
+        samples[item_id] = KindSample(
+            item_id=item_id,
+            copies=sum(seen.values()),
+            fixed_slots=pattern,
+            ambiguous=len(seen) > 1,
+        )
+    return samples
+
+
+def plan_kind_swap(
+    decrypted: bytes,
+    record_index: int,
+    target_item_id: int,
+    *,
+    affix_db: AffixDb,
+    item_db: ItemDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> KindSwapPlan:
+    """Validate one 种类 swap inside the same 中类 (武士饰品/忍者饰品).
+
+    Legality, all fail-closed:
+
+    * the target must be a 饰品 row of 物品总目录 with a 中类, and the record's own
+      kind must resolve to the *same* 中类 — cross-category swaps (e.g.
+      武士饰品 → 忍者饰品) are refused;
+    * the target kind must already exist in this save with an unambiguous fixed
+      affix, because that fixed affix is copied from it — never invented;
+    * the record's fixed-slot *positions* must match the sample's, otherwise
+      slots would have to be converted (refused, with the reason reported);
+    * normal slots and the 恩宠/套装 slot are left exactly as they are.
+
+    Only ``+0x00``/``+0x02`` (种类) and the fixed slots change.
+    """
+    if not isinstance(target_item_id, int) or isinstance(target_item_id, bool):
+        raise KindSwapError("目标种类 id 必须是整数")
+    if known_ids is None and layout is None:
+        known_ids = accessory_catalog_ids(affix_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    if not 0 <= record_index < layout.slot_count:
+        raise KindSwapError(
+            f"记录索引必须位于 0..{layout.slot_count - 1}，实际 {record_index}"
+        )
+    record = records.read_item_record(decrypted, record_index, layout=layout)
+    if record is None:
+        raise KindSwapError(f"记录 #{record_index} 不存在或不是物品记录")
+    raw = record.record
+    old_id = records.read_record_item_id(raw)
+    mirror_ok = (old_id == struct.unpack_from("<H", raw,
+                                              records.RECORD_MIRROR_TYPE_OFFSET)[0])
+    target_category = item_db.category_of(target_item_id)
+    if target_category is None:
+        raise KindSwapError(
+            f"目标种类 {target_item_id:#06x} 不在物品种类表内（或没有中类），"
+            "无法证明与当前饰品同分类，已拒绝"
+        )
+    current_category = item_db.category_of(old_id)
+    if current_category is None:
+        raise KindSwapError(
+            f"当前记录的种类 {old_id:#06x} 不在物品种类表内（或没有中类），"
+            "无法证明同分类，已拒绝改种类"
+        )
+    if current_category != target_category:
+        raise KindSwapError(
+            f"只能同分类互换：当前 {old_id:#06x} 属于「{current_category}」，"
+            f"目标 {target_item_id:#06x} 属于「{target_category}」"
+        )
+    if target_item_id == old_id:
+        raise KindSwapError(f"记录 #{record_index} 的种类已经是 {old_id:#06x}")
+
+    views = {view.slot_index: view
+             for view in list_accessories(decrypted, layout=layout,
+                                          known_ids=known_ids)}
+    view = views.get(record_index)
+    if view is None:
+        raise KindSwapError(f"记录 #{record_index} 不在当前存档的饰品记录中")
+    samples = collect_kind_samples(decrypted, affix_db=affix_db,
+                                   known_ids=known_ids, layout=layout)
+    sample = samples.get(target_item_id)
+    if sample is None:
+        raise KindSwapError(
+            f"存档里没有种类 {target_item_id:#06x}"
+            f"（{item_db.describe(target_item_id) or '表内条目'}）的实例，"
+            "无法从真实样本同步该种类的固定词条，已拒绝"
+        )
+    if sample.ambiguous:
+        raise KindSwapError(
+            f"种类 {target_item_id:#06x} 在存档内的固定词条不一致"
+            "（不同副本的固定槽/数值不同），无法确定该复制哪一个，已拒绝"
+        )
+    before = tuple(_fixed_slot_tuple(view.effects[index])
+                   for index in sorted(view.fixed_slots(affix_db)))
+    if tuple(item[0] for item in before) != tuple(item[0]
+                                                  for item in sample.fixed_slots):
+        raise KindSwapError(
+            f"记录 #{record_index} 的固定槽位置 "
+            f"{tuple(item[0] for item in before)} 与种类 "
+            f"{target_item_id:#06x} 的样本 {tuple(item[0] for item in sample.fixed_slots)} "
+            "不一致：互换需要把普通槽变成固定槽（或反之），已拒绝"
+        )
+    records.patch_record_item_id(raw, target_item_id, mirror_ok=mirror_ok)
+    return KindSwapPlan(record_index=record_index, offset=record.offset,
+                        old_item_id=old_id, new_item_id=target_item_id,
+                        category=target_category, fixed_before=before,
+                        fixed_after=sample.fixed_slots)
+
+
+def apply_kind_swaps(
+    decrypted: bytes,
+    plans: tuple[KindSwapPlan, ...] | list[KindSwapPlan],
+) -> bytes:
+    """Return new save bytes with the planned 种类 swaps applied.
+
+    Each fixed slot gets the target kind's id, value and metadata byte 9; the
+    slot's own prefix and metadata bytes 10/11 are preserved (per-instance fields
+    — see :class:`KindSample`).
+    """
+    if not plans:
+        raise KindSwapError("没有种类互换计划")
+    output = bytearray(decrypted)
+    for plan in plans:
+        offset = plan.offset
+        record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        patched = records.patch_record_item_id(record, plan.new_item_id)
+        slots = {effect.slot_index: effect
+                 for effect in records.read_effect_slots(patched)}
+        edits = []
+        for slot_index, effect_id, value, byte9 in plan.fixed_after:
+            effect = slots[slot_index]
+            metadata = (effect.metadata
+                        & ~(0xFF << records.EFFECT_FIXED_MARKER_SHIFT))
+            metadata |= byte9 << records.EFFECT_FIXED_MARKER_SHIFT
+            edits.append({"slot_index": slot_index, "effect_id": effect_id,
+                          "value": value, "metadata": metadata})
+        if edits:
+            patched = records.patch_effect_slots(patched, edits)
+        output[offset:offset + records.SCROLL_RECORD_SIZE] = patched
+    return bytes(output)
+
+
+
+@dataclass(frozen=True, slots=True)
+class LevelPlan:
+    """A validated 等级 change for one record (``+0x06`` and its mirror ``+0x08``)."""
+
+    record_index: int
+    offset: int
+    old_level: int
+    new_level: int
+
+    def describe(self) -> str:
+        return (f"记录 #{self.record_index}: 等级 {self.old_level} → "
+                f"{self.new_level}")
+
+
+class LevelEditError(EditorError):
+    """Raised when a 等级 change would be illegal or unverifiable."""
+
+
+def plan_level_edit(
+    decrypted: bytes,
+    record_index: int,
+    level: int,
+    *,
+    affix_db: AffixDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> LevelPlan:
+    """Validate one 等级 change and return its plan (nothing is written here).
+
+    Legal range is ``1..180``: the reference project reads the effective level as
+    ``min(record +0x06, 180)`` and the reporting user's save tops out at exactly
+    180, so anything above it is not something the game would ever serialise.
+
+    Only the level fields change.  Measured on the reporting user's save: the
+    *stored* affix values of a kind are identical at every level (e.g. every
+    copy of 除雷护身符[武士] holds 雷属性伤害降低 +15 at levels 156..170), so this
+    edit does not - and must not - rewrite affix values to match the new level.
+    Whether the game recomputes displayed stats from the level on load is not
+    something a save file can prove, which is why the UI warns before writing.
+    """
+    if not isinstance(level, int) or isinstance(level, bool):
+        raise LevelEditError("等级必须是整数")
+    if not records.MIN_ITEM_LEVEL <= level <= records.MAX_ITEM_LEVEL:
+        raise LevelEditError(
+            f"等级必须在 {records.MIN_ITEM_LEVEL}..{records.MAX_ITEM_LEVEL} 之间"
+            f"（{records.MAX_ITEM_LEVEL} 是游戏可序列化的上限）"
+        )
+    if not isinstance(record_index, int) or isinstance(record_index, bool):
+        raise LevelEditError("记录索引必须是整数")
+    if known_ids is None and layout is None:
+        known_ids = accessory_catalog_ids(affix_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    if not 0 <= record_index < layout.slot_count:
+        raise LevelEditError(
+            f"记录索引必须位于 0..{layout.slot_count - 1}，实际 {record_index}"
+        )
+    record = records.read_item_record(decrypted, record_index, layout=layout)
+    if record is None:
+        raise LevelEditError(f"记录 #{record_index} 不存在或不是物品记录")
+    current = records.read_record_level(record.record)
+    mirror = records.read_record_level_mirror(record.record)
+    if current != mirror:
+        raise LevelEditError(
+            f"记录 #{record_index} 的等级字段不一致"
+            f"（+0x06={current}，+0x08={mirror}），已拒绝改写"
+        )
+    if current == level:
+        raise LevelEditError(f"记录 #{record_index} 的等级已经是 {level}")
+    # The patch function owns the range/mirror checks as well; call it so a
+    # changed rule cannot be bypassed here.
+    records.patch_record_level(record.record, level)
+    return LevelPlan(record_index=record_index, offset=record.offset,
+                     old_level=current, new_level=level)
+
+
+def apply_level_edits(
+    decrypted: bytes,
+    plans: tuple[LevelPlan, ...] | list[LevelPlan],
+) -> bytes:
+    """Return new save bytes with the planned 等级 changes applied."""
+    if not plans:
+        raise LevelEditError("没有等级修改计划")
+    output = bytearray(decrypted)
+    for plan in plans:
+        offset = plan.offset
+        record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        output[offset:offset + records.SCROLL_RECORD_SIZE] = (
+            records.patch_record_level(record, plan.new_level)
+        )
+    return bytes(output)
 
 
 # --------------------------------------------------------------------------
@@ -247,6 +628,8 @@ def list_accessories(
             effects=record.effects,
             kind_name=record.kind_name,
             catalog_hits=record.catalog_hits,
+            level_mirror=records.read_record_level_mirror(record.record),
+            plus_candidate=records.read_record_plus_candidate(record.record),
         )
         for record in records.iter_item_records(decrypted, layout=layout,
                                                known_ids=known_ids)
@@ -289,7 +672,16 @@ def _validate_edit(edit: dict[str, int], affix_db: AffixDb) -> dict[str, int]:
         if not isinstance(effect_id, int) or isinstance(effect_id, bool):
             raise EditorError("effect_id 必须是整数")
         if effect_id != records.EMPTY_EFFECT_ID:
-            affix_db.require(effect_id)
+            entry = affix_db.require(effect_id)
+            # A 同名固定 affix belongs to one item kind only: writing it into an
+            # arbitrary slot would describe an accessory that cannot exist.  The
+            # 种类 swap is the one code path allowed to place it, and it copies the
+            # target kind's own entry instead of going through this function.
+            if entry.is_fixed:
+                raise EditorError(
+                    f"词条 {effect_id:#010x}「{entry.name}」是饰品的同名固定词条，"
+                    "只能由「改种类」自动带入，不能手动写入其它饰品"
+                )
     # Reuse the record-layer validation for the remaining fields and ranges.
     stripped = {key: value for key, value in edit.items() if key != "record_index"}
     records.patch_effect_slots(bytes(records.SCROLL_RECORD_SIZE), [stripped])
@@ -307,7 +699,9 @@ def plan_edits(
     """Validate edits against the live save and return per-record plans.
 
     Raises if a referenced record does not exist, if a slot index is invalid,
-    or if the affix is outside the legal accessory table.
+    if the affix is outside the legal accessory table, or if the slot being
+    changed holds the item's 同名固定 affix (that affix is part of what the item
+    is — see :meth:`AccessoryView.slot_is_fixed`).
 
     ``known_ids``/``layout`` must be the ones the caller *listed* the records
     with: a record index only means something relative to one located array, so
@@ -329,6 +723,22 @@ def plan_edits(
         raise EditorError(
             "以下记录不在当前存档的饰品记录中："
             + "、".join(f"#{index}" for index in missing)
+        )
+
+    fixed_refusals = []
+    for edit in normalized:
+        view = known[edit["record_index"]]
+        if view.slot_is_fixed(edit["slot_index"], affix_db):
+            entry = affix_db.lookup(view.effects[edit["slot_index"]].effect_id)
+            fixed_refusals.append(
+                f"#{edit['record_index']} 槽{edit['slot_index']}"
+                f"（{entry.name if entry else '未收录'}）"
+            )
+    if fixed_refusals:
+        raise EditorError(
+            "同名固定词条不能修改：" + "、".join(fixed_refusals)
+            + "。它是该饰品固有的一部分（随种类决定），"
+            "只有「改种类」会按新种类的固定词条自动同步"
         )
 
     by_record: dict[int, list[dict[str, int]]] = {}
@@ -532,6 +942,41 @@ def resolve_grace_id(grace_db: GraceDb, text: str) -> int:
             + "、".join(f"{entry.name}({entry.effect_id:#06x})" for entry in matches)
         )
     return matches[0].effect_id
+
+
+def resolve_item_id(item_db: ItemDb, text: str) -> int:
+    """Accept ``0x4987``, ``4987`` or a unique 饰品 name such as ``八尺琼勾玉``.
+
+    Only 饰品 rows count: a 魂核/武器 name would resolve to an id that can never
+    be swapped in, and resolving it here would only produce a confusing error.
+    """
+    raw = (text or "").strip()
+    if not raw:
+        raise KindSwapError("请指定目标种类（名称或 id）")
+    try:
+        value = int(raw, 16)
+    except ValueError:
+        value = None
+    if value is not None:
+        entry = item_db.lookup(value)
+        if entry is None:
+            raise KindSwapError(f"物品种类 id {value:#06x} 不在物品种类表内")
+        return value
+
+    matches = [entry for entry in item_db.all() if raw == entry.name]
+    if not matches:
+        matches = [entry for entry in item_db.all() if raw in entry.name]
+    if not matches:
+        raise KindSwapError(
+            f"没有匹配「{raw}」的饰品种类；可用 list 查看存档里的种类，"
+            "或改用 id（如 --kind 0x4987）"
+        )
+    if len(matches) > 1:
+        raise KindSwapError(
+            f"「{raw}」匹配到多个种类："
+            + "、".join(f"{entry.name}({entry.item_id:#06x})" for entry in matches)
+        )
+    return matches[0].item_id
 
 
 def plan_grace_edit(

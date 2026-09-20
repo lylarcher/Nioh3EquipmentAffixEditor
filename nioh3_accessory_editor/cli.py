@@ -26,12 +26,17 @@ from .editor import (
     accessory_catalog_ids,
     apply_edits,
     apply_grace_edit,
+    apply_kind_swaps,
+    apply_level_edits,
     commit_save,
     discover_saves,
     grace_edit_availability,
     list_accessories,
     open_save,
+    plan_kind_swap,
+    plan_level_edit,
     resolve_grace_id,
+    resolve_item_id,
     restore_backup,
     save_checksum_is_valid,
 )
@@ -236,6 +241,7 @@ def _parse_edit_spec(spec: str) -> dict[str, int]:
 def cmd_edit(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
     grace_db = GraceDb.best_effort()
+    item_db = ItemDb.best_effort()
     crypto = _crypto(args)
     save = _select_save(args)
     if args.record < 0:
@@ -243,9 +249,13 @@ def cmd_edit(args: argparse.Namespace) -> int:
     grace_id = None
     if args.grace:
         grace_id = resolve_grace_id(grace_db, args.grace)
-    if bool(args.edit) == (grace_id is not None):
-        raise EditorError("请二选一：--edit 改饰品词条，--grace 改恩宠"
-                          "（两者不能同时使用，也不能都不给）")
+    chosen = sum(1 for flag in (bool(args.edit), grace_id is not None,
+                                args.level is not None,
+                                args.kind is not None) if flag)
+    if chosen != 1:
+        raise EditorError("请四选一：--edit 改饰品词条，--grace 改恩宠，"
+                          "--level 改等级，--kind 改种类"
+                          "（不能同时使用，也不能都不给）")
     edits = tuple(
         {"record_index": args.record, **_parse_edit_spec(spec)}
         for spec in (args.edit or ())
@@ -256,7 +266,30 @@ def cmd_edit(args: argparse.Namespace) -> int:
     data = open_save(save, crypto)
     known_ids = accessory_catalog_ids(affix_db)
     layout = records.locate_layout(data, known_ids=known_ids)
-    if grace_id is not None:
+    if args.level is not None:
+        plan = plan_level_edit(data, args.record, args.level,
+                                affix_db=affix_db, known_ids=known_ids,
+                                layout=layout)
+        print(f"等级: {plan.describe()}")
+        print("注意：只写入等级字段（+0x06/+0x08）与校验和；"
+              "存档里同种饰品的词条数值不随等级变化（已实测），"
+              "但游戏是否会在读取后按等级重算显示数值无法由存档证明，"
+              "请谨慎使用并进游戏确认。")
+        patched = apply_level_edits(data, [plan])
+    elif args.kind is not None:
+        target = resolve_item_id(item_db, args.kind)
+        plan = plan_kind_swap(data, args.record, target, affix_db=affix_db,
+                              item_db=item_db, known_ids=known_ids,
+                              layout=layout)
+        print(f"种类: {plan.describe()}")
+        for slot_index, effect_id, value, byte9 in plan.fixed_after:
+            print(f"  固定槽[{slot_index}] ← {affix_db.describe(effect_id)}"
+                  f" (id={effect_id:#06x} 数值={value} 标识第9字节={byte9:#04x})")
+        print("注意：普通词条与末位恩宠/套装槽保持原样，"
+              "只有种类与固定词条被改写；固定词条是从本存档里同种类"
+              "真实样本复制的，不是编造的。改完请进游戏确认。")
+        patched = apply_kind_swaps(data, [plan])
+    elif grace_id is not None:
         views = {view.slot_index: view
                  for view in list_accessories(data, layout=layout,
                                               known_ids=known_ids)}
@@ -281,7 +314,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
         if view.slot_index != args.record:
             continue
         print(f"修改后记录 #{view.slot_index}:")
-        for line in view.describe_effects(affix_db, grace_db):
+        for line in view.describe_effects(affix_db, grace_db, item_db):
             print(line)
 
     # State the requirement before touching the file, and say whether the gate
@@ -536,6 +569,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser_edit.add_argument("--grace", default=None,
                              help="把末位槽的恩宠改成另一个恩宠：id（0x4fa3）"
                                   "或名称（稻荷神）；套装/专属套装词条一律拒绝")
+    parser_edit.add_argument("--level", type=int, default=None,
+                             help=f"改等级（合法范围 "
+                                  f"{records.MIN_ITEM_LEVEL}..{records.MAX_ITEM_LEVEL}，"
+                                  f"{records.MAX_ITEM_LEVEL} 是游戏上限）；"
+                                  "只写等级字段，出厂词条数值不变")
+    parser_edit.add_argument("--kind", default=None,
+                             help="改种类：目标必须是同分类（武士饰品/忍者饰品）"
+                                  "且在存档里已有实例的饰品种类，"
+                                  "固定词条会按该种类的真实样本自动同步")
     parser_edit.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
     parser_edit.add_argument("--no-verify", action="store_true",
                              help="跳过写入前后的解密校验（更快，但风险更高）")

@@ -31,6 +31,9 @@ from .editor import (
     accessory_catalog_ids,
     apply_edits,
     apply_grace_edit,
+    apply_kind_swaps,
+    apply_level_edits,
+    collect_kind_samples,
     commit_save,
     discover_saves,
     grace_edit_availability,
@@ -38,6 +41,8 @@ from .editor import (
     list_accessories,
     list_backups,
     open_save,
+    plan_kind_swap,
+    plan_level_edit,
     resolve_grace_id,
     restore_backup,
     save_checksum_is_valid,
@@ -46,6 +51,7 @@ from .paths import resource_root
 from .records import (
     EFFECT_COUNT,
     EMPTY_EFFECT_ID,
+    MAX_ITEM_LEVEL,
     EffectSlot,
     InventoryLayout,
     RecordError,
@@ -328,14 +334,59 @@ class AccessoryEditorApp(tk.Tk):
             text=("说明：词条选择来自《仁王3词条装备库v2.21》饰品词条表，"
                   "非表内词条一律拒绝。选择词条会写入该词条的 ID 与标称数值；"
                   "标识(metadata) 位不会被改写，因为其在存档中的编码尚未核实。\n"
+                  "同名固定词条（表里标着「(同名固定)」、存档标识第 9 字节带 0x40 位）"
+                  "是该饰品固有的一部分，**禁止修改**——它随「种类」决定，"
+                  "改种类时会自动同步。\n"
                   "每件饰品的最后一个词条通常是「恩宠」或「套装/专属套装」词条："
                   "恩宠（xxx的恩宠）可以用下面的【恩宠】栏改成另一个恩宠；"
                   "套装/专属套装（如 怨恨盖世）按规则不允许改动。\n"
-                  "「种类」一栏由《仁王3词条装备库v2.21》物品总目录的饰品条目解析得到，"
-                  "**只用于显示**：工具目前不会修改饰品本身的种类/等级/品质。"),
+                  "「种类」一栏由《仁王3词条装备库v2.21》物品总目录的饰品条目解析得到。"
+                  "等级可以改（上限 180）；「+值」对应的字段尚未在游戏内核实，"
+                  "所以工具只显示、不修改。"),
             foreground="#666666", wraplength=520, justify=tk.LEFT,
         )
         note.pack(anchor=tk.W, pady=(6, 0))
+
+        self.level_frame = ttk.LabelFrame(right, text="等级（上限 180）", padding=(6, 4))
+        self.level_frame.pack(fill=tk.X, pady=(6, 0))
+        level_row = ttk.Frame(self.level_frame)
+        level_row.pack(fill=tk.X)
+        ttk.Label(level_row, text="改成:").pack(side=tk.LEFT)
+        self.level_var = tk.StringVar(value="")
+        self.level_entry = ttk.Entry(level_row, textvariable=self.level_var, width=8)
+        self.level_entry.pack(side=tk.LEFT, padx=4)
+        self.level_button = ttk.Button(level_row, text="应用等级",
+                                       command=self.apply_level_to_selection)
+        self.level_button.pack(side=tk.LEFT, padx=2)
+        self.level_status_var = tk.StringVar(
+            value="选择一条饰品记录后，这里会显示它的等级是否可以修改。")
+        self.level_status_label = ttk.Label(
+            self.level_frame, textvariable=self.level_status_var,
+            foreground="#666666", wraplength=520, justify=tk.LEFT,
+        )
+        self.level_status_label.pack(anchor=tk.W, pady=(4, 0))
+        self._set_level_enabled(False)
+
+        self.kind_frame = ttk.LabelFrame(right, text="种类（同分类互换）", padding=(6, 4))
+        self.kind_frame.pack(fill=tk.X, pady=(6, 0))
+        kind_row = ttk.Frame(self.kind_frame)
+        kind_row.pack(fill=tk.X)
+        ttk.Label(kind_row, text="改成:").pack(side=tk.LEFT)
+        self.kind_combo = ttk.Combobox(kind_row, state="readonly", width=40,
+                                       values=self.item_db.labels())
+        self.kind_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.kind_button = ttk.Button(kind_row, text="应用种类",
+                                      command=self.apply_kind_to_selection)
+        self.kind_button.pack(side=tk.LEFT, padx=2)
+        self.kind_status_var = tk.StringVar(
+            value="选择一条饰品记录后，这里会显示它能换成哪些同分类的种类。")
+        self.kind_status_label = ttk.Label(
+            self.kind_frame, textvariable=self.kind_status_var,
+            foreground="#666666", wraplength=520, justify=tk.LEFT,
+        )
+        self.kind_status_label.pack(anchor=tk.W, pady=(4, 0))
+        self.kind_choices: dict[str, object] = {}
+        self._set_kind_enabled(False)
 
         self.grace_frame = ttk.LabelFrame(right, text="恩宠（末位槽）", padding=(6, 4))
         self.grace_frame.pack(fill=tk.X, pady=(6, 0))
@@ -357,9 +408,10 @@ class AccessoryEditorApp(tk.Tk):
         self.grace_status_label.pack(anchor=tk.W, pady=(4, 0))
         self._set_grace_enabled(False)
 
-        # 种类 (the item itself) is read-only: the tool never writes that field.
+        # 种类 (the item itself): same-category swaps only, with the target kind's
+        # fixed affix copied from a real sample in this save.
         self.item_var = tk.StringVar(
-            value="选择一条饰品记录后，这里会显示它是什么饰品（只读）。")
+            value="选择一条饰品记录后，这里会显示它是什么饰品。")
         self.item_label = ttk.Label(right, textvariable=self.item_var,
                                     foreground="#1a4f8f", wraplength=520,
                                     justify=tk.LEFT)
@@ -511,6 +563,7 @@ class AccessoryEditorApp(tk.Tk):
         self.accessory_views = []
         self.other_views = []
         self.layout = None
+        self.known_ids = frozenset()
         self.selected_accessory = None
         self.checksum_ok = False
         self.tree.delete(*self.tree.get_children())
@@ -581,6 +634,10 @@ class AccessoryEditorApp(tk.Tk):
         self.decrypted = data
         self.checksum_ok = bool(checksum_ok)
         self.layout = layout
+        # The catalog evidence and the located array the records were *listed* with:
+        # every later edit reuses these two, so a record index can never resolve to
+        # a different item than the one the user selected.
+        self.known_ids = accessory_catalog_ids(self.affix_db)
         # Only records whose affixes really are 饰品词条 are editable accessories;
         # weapons/armour/绘卷 share the same array and are reported separately.
         # ``is_accessory is None`` means no catalog evidence was supplied, so the
@@ -642,6 +699,7 @@ class AccessoryEditorApp(tk.Tk):
         self.accessory_views = []
         self.other_views = []
         self.layout = None
+        self.known_ids = frozenset()
         self.selected_accessory = None
         self.tree.delete(*self.tree.get_children())
         for index in range(EFFECT_COUNT):
@@ -678,8 +736,20 @@ class AccessoryEditorApp(tk.Tk):
             if effect.is_empty:
                 self.slot_combos[index].set(EMPTY_LABEL)
                 self.slot_labels[index].set("")
+                self.slot_combos[index].state(["!disabled", "readonly"])
                 continue
             entry = self.affix_db.lookup(effect.effect_id)
+            if view.slot_is_fixed(index, self.affix_db):
+                # 同名固定词条: shown, but not editable — it is part of what the
+                # item is (and follows 种类 automatically when 种类 changes).
+                label = (entry.label if entry
+                         else f"{effect.effect_id:#06x} (非表内词条)")
+                self.slot_combos[index].set(f"{label}（固定，不可修改）")
+                self.slot_labels[index].set(
+                    f"数值={effect.value} 标识={effect.metadata:#010x}"
+                    " ← 固定词条，禁止修改")
+                self.slot_combos[index].state(["disabled"])
+                continue
             if index in grace:
                 # 恩宠 / 套装组合 effect: named from the workbook's 词条总目录 when
                 # the table is present, otherwise reported honestly as out-of-table.
@@ -691,13 +761,17 @@ class AccessoryEditorApp(tk.Tk):
             else:
                 label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
                 detail = f"数值={effect.value} 标识={effect.metadata:#010x}"
+                self.slot_combos[index].state(["!disabled", "readonly"])
             self.slot_combos[index].set(label)
             self.slot_labels[index].set(detail)
         self.item_var.set(
             f"记录 #{view.slot_index}：{view.describe_item(self.item_db)}"
             f"  Lv{view.level} {view.rarity_name}"
         )
+        self.level_var.set(str(view.level))
         self._refresh_grace_state(view)
+        self._refresh_level_state(view)
+        self._refresh_kind_state(view)
 
     def _set_grace_enabled(self, enabled: bool) -> None:
         state = ["!disabled"] if enabled else ["disabled"]
@@ -858,6 +932,162 @@ class AccessoryEditorApp(tk.Tk):
         self.selected_accessory = target
         self._on_accessory_selected()
         self._status(f"记录 #{target} 的修改已应用到内存数据（尚未写入存档）")
+
+    # -- 等级 ---------------------------------------------------------------
+    def _set_level_enabled(self, enabled: bool) -> None:
+        self.level_entry.state(["!disabled"] if enabled else ["disabled"])
+        self.level_button.state(["!disabled"] if enabled else ["disabled"])
+
+    def _refresh_level_state(self, view: AccessoryView) -> None:
+        """Enable the 等级 row only for a record whose level fields agree."""
+        if view.level_mirror != view.level:
+            self.level_status_var.set(
+                f"不可改：记录 #{view.slot_index} 的等级字段不一致"
+                f"（+0x06={view.level}，+0x08={view.level_mirror}），已拒绝改写"
+            )
+            self.level_status_label.configure(foreground="#b03030")
+            self._set_level_enabled(False)
+            return
+        self.level_status_var.set(
+            f"当前 Lv{view.level}（合法范围 1..{MAX_ITEM_LEVEL}；"
+            f"游戏可序列化的上限就是 {MAX_ITEM_LEVEL}）。"
+            "只改等级本身：存档里同种饰品的词条数值不随等级变化（已实测），"
+            "但游戏是否会在读取后按等级重算显示数值无法由存档证明，"
+            "所以请谨慎修改，改完进游戏确认。"
+        )
+        self.level_status_label.configure(foreground="#1a7f37")
+        self._set_level_enabled(True)
+
+    # -- 种类 ---------------------------------------------------------------
+    def _set_kind_enabled(self, enabled: bool) -> None:
+        self.kind_combo.state(["!disabled", "readonly"] if enabled
+                              else ["disabled"])
+        self.kind_button.state(["!disabled"] if enabled else ["disabled"])
+
+    def _refresh_kind_state(self, view: AccessoryView) -> None:
+        """List only the same-中类 kinds this save can actually supply a sample of."""
+        if not self.item_db.is_loaded:
+            self.kind_status_var.set(
+                "不可改：未加载物品种类表（data/accessory_items.json），"
+                "无法证明同分类。")
+            self.kind_status_label.configure(foreground="#b03030")
+            self.kind_combo.set("")
+            self._set_kind_enabled(False)
+            return
+        current = self.item_db.category_of(view.record_type)
+        if current is None:
+            self.kind_status_var.set(
+                f"不可改：当前种类 {view.record_type:#06x} 不在物品种类表内，"
+                "无法证明与目标同分类。")
+            self.kind_status_label.configure(foreground="#b03030")
+            self.kind_combo.set("")
+            self._set_kind_enabled(False)
+            return
+        samples = collect_kind_samples(self.decrypted, affix_db=self.affix_db,
+                                        known_ids=self.known_ids,
+                                        layout=self.layout)
+        choices = []
+        for entry in self.item_db.all():
+            if entry.category != current or entry.item_id == view.record_type:
+                continue
+            sample = samples.get(entry.item_id)
+            if sample is None or sample.ambiguous:
+                continue
+            choices.append(entry)
+        self.kind_choices = {entry.label: entry for entry in choices}
+        self.kind_combo.configure(values=tuple(self.kind_choices))
+        self.kind_combo.set("")
+        self.kind_status_var.set(
+            f"当前 {view.describe_item(self.item_db)}（{current}）；"
+            f"存档里可换的同类种类 {len(choices)} 个（只列出本存档已有实例、"
+            "且固定词条唯一可复制的种类）。互换会改写种类字段，"
+            "并把固定词条按新种类的真实样本同步；普通词条与末位恩宠槽保持不变。"
+        )
+        self.kind_status_label.configure(foreground="#1a7f37")
+        self._set_kind_enabled(bool(choices))
+
+    def apply_kind_to_selection(self) -> None:
+        """Swap the selected record's 种类 (memory only; 写入存档 commits)."""
+        if self.decrypted is None or self.selected_accessory is None:
+            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            return
+        chosen = self.kind_choices.get(self.kind_combo.get())
+        if chosen is None:
+            messagebox.showwarning("提示", "请先选择要换成的种类")
+            return
+        target = self.selected_accessory
+        if not messagebox.askokcancel(
+            "确认改种类",
+            f"把记录 #{target} 换成 {chosen.label}？\n\n"
+            "· 只允许同分类（武士饰品↔武士饰品、忍者饰品↔忍者饰品）互换；\n"
+            "· 该种类的固定词条会从本存档里同种类的真实样本复制，不是编造的；\n"
+            "· 普通词条与末位恩宠/套装槽保持原样；\n"
+            "· 改完请进游戏确认；存档写入前会自动备份。",
+            icon="warning",
+        ):
+            return
+        try:
+            plan = plan_kind_swap(self.decrypted, target, chosen.item_id,
+                                  affix_db=self.affix_db, item_db=self.item_db,
+                                  known_ids=self.known_ids, layout=self.layout)
+            self.decrypted = apply_kind_swaps(self.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        layout = inspect_layout(self.decrypted, known_ids=self.known_ids)
+        self._populate_accessories(
+            (self.decrypted,
+             list_accessories(self.decrypted, layout=layout,
+                              known_ids=self.known_ids),
+             self.checksum_ok, layout),
+            keep_selection=True,
+        )
+        self.tree.selection_set(str(target))
+        self.selected_accessory = target
+        self._on_accessory_selected()
+        self._status(f"记录 #{target} 的种类已换成 {chosen.name}（尚未写入存档）")
+
+    def apply_level_to_selection(self) -> None:
+        """Change the selected record's 等级 (memory only; 写入存档 commits)."""
+        if self.decrypted is None or self.selected_accessory is None:
+            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            return
+        text = self.level_var.get().strip()
+        try:
+            level = int(text, 10)
+        except ValueError:
+            messagebox.showwarning("提示", f"等级必须是整数：{text!r}")
+            return
+        target = self.selected_accessory
+        if not messagebox.askokcancel(
+            "确认修改等级",
+            f"把记录 #{target} 的等级改成 {level}？\n\n"
+            "· 只写入等级字段（+0x06/+0x08），词条数值不会被改写；\n"
+            "· 请谨慎修改：改完请进游戏确认显示与属性是否正常；\n"
+            "· 存档写入前会自动备份，出问题可以用「回滚」恢复。",
+            icon="warning",
+        ):
+            return
+        known_ids = accessory_catalog_ids(self.affix_db)
+        try:
+            plan = plan_level_edit(self.decrypted, target, level,
+                                   affix_db=self.affix_db, known_ids=known_ids,
+                                   layout=self.layout)
+            self.decrypted = apply_level_edits(self.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        layout = inspect_layout(self.decrypted, known_ids=known_ids)
+        self._populate_accessories(
+            (self.decrypted,
+             list_accessories(self.decrypted, layout=layout, known_ids=known_ids),
+             self.checksum_ok, layout),
+            keep_selection=True,
+        )
+        self.tree.selection_set(str(target))
+        self.selected_accessory = target
+        self._on_accessory_selected()
+        self._status(f"记录 #{target} 的等级已改为 {level}（尚未写入存档）")
 
     def backup_save(self) -> None:
         if self.selected_save is None:

@@ -38,15 +38,32 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   trailing slot of an accessory holds its 恩宠/套装组合 effect (confirmed in game),
   which the table does not list, so that one slot is labelled accordingly instead
   of as an unknown affix.
-* **Shows which accessory each record is — read only** — that same per-item id is
-  resolved against the 饰品 rows of the workbook's 物品总目录 (89 rows → 88 ids,
-  shipped as `data/accessory_items.json`), so `list` and the GUI name every record
-  (`种类 0x3e3f 龙笛[武士]`, `0x4987 八尺琼勾玉[武士]`, `0xf5bb 凶王耳饰[忍者]`).
-  Measured on the reporting user's save: 212 of 213 accessories resolve, and the
-  one that does not (`0x5c5f`) is reported as unlisted instead of guessed.
-  **The tool never writes this field**: changing 饰品种类 (turning 龙笛 into
-  凶王耳饰) is *not* supported — the column has no editor; see the boundary note
-  below for what would have to be verified first.
+* **Shows which accessory each record is — and can swap it (同分类 only)** — that
+  same per-item id is resolved against the 饰品 rows of the workbook's 物品总目录
+  (89 rows → 88 ids, shipped as `data/accessory_items.json`), so `list` and the
+  GUI name every record (`种类 0x3e3f 龙笛[武士]`, `0x4987 八尺琼勾玉[武士]`,
+  `0xf5bb 凶王耳饰[忍者]`). Measured on the reporting user's save: 212 of 213
+  accessories resolve, and the one that does not (`0x5c5f`) is reported as unlisted
+  instead of guessed. Changing 饰品种类 is supported **inside the same 中类**
+  (武士饰品 ↔ 武士饰品, 忍者饰品 ↔ 忍者饰品) from the GUI's 种类 row or
+  `edit --kind`, and the target kind's 同名固定 affix is copied **from a real
+  sample of that kind already in your save** — never invented. See
+  [Changing 种类](#changing-种类-同分类互换).
+* **Fixed affixes cannot be edited (fail closed)** — every kind has its own
+  同名固定 affix (some have none). A slot counts as fixed when the catalog marks
+  the id `(同名固定)` and/or the slot's metadata byte 9 has bit `0x40`; measured on
+  the reporting user's save the two agreed on all 795 catalogued slots with zero
+  exceptions. Fixed slots are shown as `（固定词条，不可修改）`, refused by
+  `plan_edits`, and refused as a *target* too (a normal slot may not be turned into
+  a fixed affix). The only code that rewrites them is the 种类 swap, which copies
+  the target kind's own entry.
+* **等级 editing, capped at 180** — `edit --level 180` or the GUI's 等级 row writes
+  only `+0x06`/`+0x08` and refuses anything above 180 (the reference project reads
+  the effective level as `min(record +0x06, 180)` and the reporting user's save tops
+  out at exactly 180). Measured: a whole 9.4 MB save changes in 5 bytes (2 level
+  bytes + 3 checksum bytes). Stored affix values do **not** scale with level (see
+  the verified note on 数值 and 等级/`+值`), so this is a caution-flagged edit:
+  the GUI asks for confirmation and says to check the result in game.
 * **Live write-condition display** — the GUI footer shows whether a Nioh 3
   process is running (green = writable, red = the write would be refused), so the
   game-closed requirement is visible before you click 写入存档.
@@ -117,6 +134,15 @@ python launch_editor.py edit --record 3 --grace 0x4fa3
 python launch_editor.py edit --record 3 --grace 稻荷神 --dry-run
 #   only 恩宠 → 恩宠 is allowed; 套装/专属套装 (e.g. 怨恨盖世) and plain 词条 are
 #   refused with the reason, and nothing is written.
+
+# CLI: change 等级 (1..180; only +0x06/+0x08 and the checksum change)
+python launch_editor.py edit --record 3 --level 180 --dry-run
+
+# CLI: swap 种类 inside the same 中类 (武士饰品 ↔ 武士饰品)
+python launch_editor.py edit --record 3 --kind 八尺琼勾玉[武士] --dry-run
+python launch_editor.py edit --record 3 --kind 0x4987 --dry-run
+#   the target kind's 同名固定 affix is copied from a real sample in this save;
+#   cross-category swaps, kinds with no sample, and ambiguous kinds are refused.
 
 # CLI: plaintext backup only
 python launch_editor.py backup
@@ -594,20 +620,65 @@ nothing.
 > in-game item list refreshes cleanly after such a swap (only load the save and
 > look). If the swapper shows something odd, restore the automatic backup.
 >
-> **饰品种类 (which accessory it is) is read only.** The field is known — the
-> record header's per-item id at `+0x00`, with a mirror at `+0x02` (equal on all
-> 213 records), resolving to `data/accessory_items.json` for 212 of them — and
-> writing it would be two bytes, but the tool deliberately does not, because
-> nothing below has been verified yet: (1) whether the game reads `+0x00`, the
-> mirror `+0x02`, or both; (2) what happens to the *existing* effect slots, which a
-> kind swap would leave untouched, so an 八尺琼勾玉 could keep affixes that only a
-> 龙笛 may carry (the game shows them, repairs them, or rejects them — unknown);
-> (3) whether an item-specific 专属套装 effect (e.g. 怨恨盖世 on 凶王耳饰) must match
-> the new kind — the same risk class the "套装 must not be edited" rule exists for;
-> (4) whether 等级/品质 (`+0x06`/`0x30`) have to be rewritten consistently, and
-> (5) that `0x1521` maps to two different items (八咫镜[武士] and [忍者]), so the id
-> alone does not even determine the item. Verifying those needs a copy-write plus an
-> in-game check, which is why the feature is display-only for now.
+> **饰品种类 (which accessory it is) and 等级 are writable, with the limits
+> below.** The field is known — the record header's per-item id at `+0x00`, with a
+> mirror at `+0x02` (equal on all 213 records), resolving to
+> `data/accessory_items.json` for 212 of them. Both fields are written only through
+> the rules in [Changing 种类](#changing-种类-同分类互换) and
+> [Changing 等级](#changing-等级), and both are measured on a copy of a real save
+> first. What is **not** verified, and what the tool therefore refuses or flags:
+> (1) what happens to the *existing* normal effect slots of a swapped record — a
+> kind swap leaves them untouched, so an 八尺琼勾玉 can keep affixes that only a
+> 龙笛 may carry (the game shows them, repairs them or rejects them — unknown), so
+> the edit is caution-flagged in the CLI and confirmed in the GUI; (2) whether an
+> item-specific 专属套装 effect (e.g. 怨恨盖世 on 凶王耳饰) must match the new kind —
+> the 套装 slot is *not* rewritten by a swap, so the same kind of mismatch is
+> possible there; (3) whether the game recomputes displayed values from 等级 —
+> stored affix values are level-independent (measured), so any change must be the
+> game's own derivation; (4) `0x1521` maps to two different items (八咫镜[武士] and
+> [忍者]) and is reported as unlisted rather than guessed. Verify in game after a
+> swap/level edit; the automatic backup restores the previous state.
+
+### Changing 种类 (同分类互换)
+
+`edit --kind <名称|id>` (CLI) or the GUI's 种类 row swaps which accessory a record
+is, under three fail-closed rules:
+
+1. **Same 中类 only** — the record's own id and the target id must both be 饰品 rows
+   of 物品总目录 with the same 中类 (`武士饰品` ↔ `武士饰品`, `忍者饰品` ↔
+   `忍者饰品`). A cross-category swap, or an id with no table row (including
+   `0x5c5f`), is refused with the reason.
+2. **The fixed affix is copied, never invented** — the target kind's 同名固定 affix
+   is read from a real copy of that kind already in *your* save: its slot index,
+   effect id, value and metadata byte 9. Measured over the 60 kinds with a fixed
+   affix in the reporting user's save, those fields are identical on every copy of a
+   kind (58/60; the two exceptions are the 八咫镜 variants, which are refused as
+   ambiguous). Metadata bytes 10/11 (only 25/60 kinds agree) and the slot `prefix`
+   (4 kinds disagree) are **per-instance**, so they are left byte-for-byte as they
+   were. If the target kind has no copy in this save, the swap is refused — the tool
+   will not guess a fixed affix.
+3. **Normal slots and the 恩宠/套装 slot are untouched** — only the header id (both
+   mirrored copies) and the fixed slot(s) change. Measured on a copy of the real
+   save: swapping record #3 (龙笛[武士] → 八尺琼勾玉[武士]) changes 7 bytes
+   (4 header bytes + the fixed slot's id/value) plus the 3 checksum bytes, and the
+   record reads back as `0x4987 八尺琼勾玉[武士]` with
+   `(同名固定)组合效果的所需装备数 -1 id=0x53d4 数值=1`.
+
+### Changing 等级
+
+`edit --level <1..180>` (CLI) or the GUI's 等级 row writes `+0x06` **and** its mirror
+`+0x08` and nothing else. 180 is the game's serialisable maximum: the reference
+project derives the effective level as `min(record +0x06, 180)`, and the reporting
+user's save tops out at exactly 180. The edit refuses 0/negative/>180, refuses a
+no-op, and refuses a record whose two level fields disagree (measured equal on all
+213 accessories, so a mismatch means a shape this tool never verified). It is
+flagged **谨慎修改** because the stored affix values do not scale with level:
+measured across levels 135–180, every copy of a kind holds the same values (e.g.
+除雷护身符[武士] `雷属性伤害降低 +15` at levels 156–170), so any in-game increase
+must be computed by the game on load — which a save file cannot prove. The `+值`
+field is **not** written: the only per-instance counter in the header (`+0x0A`,
+0..30 on accessories) is an unconfirmed candidate for it, so the tool displays it
+(`+值候选`) and waits for an in-game check.
 
 ## Safety model
 

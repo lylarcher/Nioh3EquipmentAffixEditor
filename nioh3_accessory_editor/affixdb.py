@@ -364,6 +364,18 @@ class ItemDb:
         entry = self.lookup(item_id)
         return None if entry is None else entry.name
 
+    def category_of(self, item_id: int) -> str | None:
+        """中类 of an item (``武士饰品``/``忍者饰品``), or ``None`` if unknown.
+
+        Evidence for the 改种类 rule: only items of the same 中类 may be swapped,
+        and an id that is not in the table (or whose row has no 中类) cannot be
+        shown to be in the same 中类, so it can never take part in a swap.
+        """
+        entry = self.lookup(item_id)
+        if entry is None or not entry.category:
+            return None
+        return entry.category
+
     def all(self) -> tuple[ItemEntry, ...]:
         return self._entries
 
@@ -373,6 +385,10 @@ class ItemDb:
             if entry.category not in seen:
                 seen.append(entry.category)
         return tuple(seen)
+
+    def labels(self) -> tuple[str, ...]:
+        """``0x4987 八尺琼勾玉[武士]`` for every row, for comboboxes."""
+        return tuple(entry.label for entry in self._entries)
 
 
 def load_item_catalog(path: Path = DEFAULT_ITEM_CATALOG) -> list[ItemEntry]:
