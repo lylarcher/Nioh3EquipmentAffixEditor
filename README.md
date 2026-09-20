@@ -21,7 +21,8 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 
 * **Two tabs: 饰品 and 魂核** — the 魂核 (soul core) tab edits cores through their
   *own* tables, because a 魂核 has no 恩宠/套装 affix and its own affix pool:
-  287 ids from the workbook's `绘卷-魂核词条` sheet (`种类 = 魂核`) plus 83 core ids
+287 ids from the workbook's `绘卷-魂核词条` sheet plus 51 ★ ids from
+  绿色星号词条
   from `物品总目录` (`大类 = 魂核`), shipped as `data/soul_affixes.json` and
   `data/soul_items.json`. A record is identified as a core only when **both**
   facts hold — its header id is a 魂核 row *and* a slot names a 魂核 affix — since
@@ -89,7 +90,8 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   process is running (green = writable, red = needs the title-screen
   acknowledgement), so the condition is visible before you click 写入存档.
 * **Legal-affix-only editing** — the affix catalog is built from the
-  `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet (→ 276 unique effect ids); any affix
+`仁王3词条装备库v2.21.xlsx` 饰品词条 sheet plus the 饰品 rows of the
+  绿色星号词条 sheet (→ 308 unique effect ids: 276 + 32 ★); any affix
   outside the table is rejected (fail closed).
 * **Legal 恩宠 editing (恩宠 → 恩宠 only)** — an accessory's last slot can be
   changed to another `xxx的恩宠` (the 21 rows the workbook marks 恩宠 or 上位恩宠),
@@ -531,7 +533,8 @@ silently picking one.
 
 Two tables come out of one workbook, deliberately kept apart:
 
-* **`data/accessory_affixes.json`** — the 饰品词条 sheet (276 ids). This is what
+* **`data/accessory_affixes.json`** — the 饰品词条 sheet (276 ids) **plus the 32 ★ ids
+  of the 绿色星号词条 sheet that may roll on 饰品** (308 ids in total)
   the editor accepts as an edit; anything else fails closed.
 * **`data/grace_affixes.json`** — the 恩宠/套装组合 rows of 词条总目录 (77 ids:
   恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22). It names the last effect slot of
@@ -728,7 +731,9 @@ Notes that matter in practice:
   `全词条数值(3稀有度…)`'s 取值集合 column, keyed by the **low 16 bits** of the affix
   id (its 代码 column is little-endian, e.g. `BC 53` → `0x53BC`). 魂核 spans come from
   `绘卷-魂核词条`'s 数值区间/数值集合. Coverage after regenerating:
-  **276/276** 饰品 and **287/287** 魂核 affixes carry a span.
+**308/308** 饰品 and **338/338** 魂核 affixes carry a span, and the 33 rows whose
+数值集合 is not the whole span are enforced as a *set* (e.g. 0x248c allows
+470, 472, 475, …, 520 — never 471).
   Most 饰品词条 are **single-valued** (`火抗性 +10` → 固定值 10: the value *is* the
   affix's identity), so the value box only really opens up for the rows the workbook
   gives a real range — e.g. `0xfb24 获得魂核时恢复体力` 158..230 (the only ranged 饰品
@@ -829,6 +834,30 @@ python tools/set_plus.py --record 28 --value 13 --write    # 真正写入（自�
 The script verifies that only the bytes of `+0x0A` changed and aborts otherwise. The
 safest check needs no write at all: compare two same-kind items that already differ
 (e.g. three 龙笛[武士] at 13 / 18 / 19).
+
+### 绿色星号词条 (★ affixes)
+
+The `绿色星号词条` sheet lists the ★ affixes — 257 rows — and its **column A is the
+equipment each one may roll on** (`[饰品]`, `[魂核]`, `[近战/手臂]`, …). None of the
+257 ids appears in 饰品词条 or 绘卷-魂核词条 (measured: 0 overlap), so until this sheet
+was wired in the editor could not offer a single ★ affix. Now:
+
+* **32 rows apply to 饰品** (`[饰品]`, `[腿部/饰品]`, `[远程/饰品]`, `[身体/饰品/魂核]`)
+  and **51 apply to 魂核** (`[魂核]`, `[近战/魂核]`, `[近战/手臂/魂核]`,
+  `[身体/饰品/魂核]`); 3 ids are legal on both, and a row that only lists 近战/远程/防具
+  parts is **never** added to an accessory catalog (there is a test for exactly that).
+* **数值区间** (columns E/F) becomes the entry's span, so a value outside it is
+  refused before the write.
+* **数值集合** (column G onward) is kept as a *set* when it is not the whole span:
+  33 rows step by 2.5 in 0.1% units (e.g. `0x248c` allows 470, 472, 475, …, 520), and
+  `AffixEntry.values` + `allows_value()` enforce that set, so 471 is refused even
+  though it is inside 470..520. Every other row's set is exactly its span.
+* 3 of the 257 rows encode a value their own span excludes (`0xdfae`: 188 vs
+  127..140, `0x248c`: 250 vs 470..520); the builder snaps the catalog's default into
+  the span instead of shipping a default the editor would then refuse to write.
+
+★ affixes are shown with their `(星)` name and are ordinary, editable slots — the star
+bit is metadata byte 10 bit 2, which `AffixEntry.is_star` reports.
 
 ### Changing 等级
 

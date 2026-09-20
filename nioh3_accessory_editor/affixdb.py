@@ -121,6 +121,10 @@ class AffixEntry:
     #: save: all 807 catalogued accessory slots hold a value inside their span.
     value_min: int | None = None
     value_max: int | None = None
+    #: The workbook's own 数值集合 when it is **not** every integer of the span (e.g.
+    #: 绿色星号词条 0x248c allows 470,472,475,…,520).  ``None`` means "the whole span",
+    #: which is what every other catalog row is (measured).
+    values: tuple[int, ...] | None = None
 
     @property
     def is_fixed(self) -> bool:
@@ -135,12 +139,25 @@ class AffixEntry:
         return self.value_min is not None and self.value_max is not None
 
     def allows_value(self, value: int) -> bool:
-        """Whether ``value`` is inside the workbook's span for this affix."""
+        """Whether ``value`` is one the workbook lists for this affix.
+
+        An explicit 数值集合 wins over the span: the green sheet has rows whose legal
+        values step by 2.5 (470, 472, 475, …), and writing 471 or 473 would be a
+        value the game never rolls.
+        """
+        if self.values:
+            return value in self.values
         if not self.has_value_range:
             return False
         return bool(self.value_min <= value <= self.value_max)  # type: ignore[operator]
 
     def describe_value_range(self) -> str:
+        if self.values:
+            listed = "、".join(str(value) for value in self.values)
+            if len(self.values) <= 8:
+                return f"取值 {listed}"
+            return (f"{self.value_min}..{self.value_max} 共 {len(self.values)} 个取值"
+                    f"（{self.values[0]}、{self.values[1]}…{self.values[-1]}）")
         if not self.has_value_range:
             return "数值区间未知（原始表未给出）"
         if self.value_min == self.value_max:
@@ -364,11 +381,28 @@ def _entries_from_payload(payload: dict, path: Path) -> list[AffixEntry]:
                 flags=_require_uint32(item, "flags", where),
                 name=name.strip(),
                 category=category.strip(),
-                value_min=_optional_uint32(item, "value_min", where),
+                values=_optional_value_set(item, where),
+        value_min=_optional_uint32(item, "value_min", where),
                 value_max=_optional_uint32(item, "value_max", where),
             )
         )
     return entries
+
+
+def _optional_value_set(item: dict, where: str) -> tuple[int, ...] | None:
+    """Read an explicit 数值集合, rejecting anything that is not ascending ints."""
+    raw = item.get("values")
+    if raw is None:
+        return None
+    if not isinstance(raw, list) or not raw:
+        raise AffixError(f"{where}: values 必须是非空数组")
+    numbers = []
+    for value in raw:
+        number = _require_uint32({"v": value}, "v", where)
+        numbers.append(number)
+    if numbers != sorted(set(numbers)):
+        raise AffixError(f"{where}: values 必须去重且升序")
+    return tuple(numbers)
 
 
 def _optional_uint32(item: dict, key: str, where: str) -> int | None:
@@ -405,7 +439,8 @@ def save_catalog(
                 "flags": entry.flags,
                 "name": entry.name,
                 "category": entry.category,
-                **({"value_min": entry.value_min, "value_max": entry.value_max}
+                **({"values": list(entry.values)} if entry.values else {}),
+            **({"value_min": entry.value_min, "value_max": entry.value_max}
                    if entry.has_value_range else {}),
             }
             for entry in entries

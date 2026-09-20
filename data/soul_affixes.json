@@ -1,7 +1,7 @@
 {
   "schema": "nioh3-soul-affixes/v1",
-  "count": 287,
-  "source": "仁王3词条装备库v2.21.xlsx / 绘卷-魂核词条（魂核）",
+  "count": 338,
+  "source": "仁王3词条装备库v2.21.xlsx / 绘卷-魂核词条（魂核） + 绿色星号词条（魂核行）",
   "conflicts": [],
   "affixes": [
     {
@@ -2586,6 +2586,465 @@
       "category": "造成异常状态",
       "value_min": 0,
       "value_max": 0
+    },
+    {
+      "effect_id": 65445,
+      "value": 4,
+      "flags": 4,
+      "name": "(星)对伤害的反映(体) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 47460,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)对伤害的反映(体) C+",
+      "category": "造成伤害",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 21565,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)对伤害的反映(体) B-",
+      "category": "造成伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 32590,
+      "value": 4,
+      "flags": 4,
+      "name": "(星)对伤害的反映(心) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 41257,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)对伤害的反映(心) C+",
+      "category": "造成伤害",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 57377,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)对伤害的反映(心) B-",
+      "category": "造成伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 55250,
+      "value": 4,
+      "flags": 4,
+      "name": "(星)对伤害的反映(刚) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 64411,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)对伤害的反映(刚) C+",
+      "category": "造成伤害",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 37850,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)对伤害的反映(刚) B-",
+      "category": "造成伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 11363,
+      "value": 4,
+      "flags": 4,
+      "name": "(星)对伤害的反映(武) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 18480,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)对伤害的反映(武) C+",
+      "category": "造成伤害",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 20421,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)对伤害的反映(武) B-",
+      "category": "造成伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 4540,
+      "value": 4,
+      "flags": 4,
+      "name": "(星)对伤害的反映(技) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 46858,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)对伤害的反映(技) C+",
+      "category": "造成伤害",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 15793,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)对伤害的反映(技) B-",
+      "category": "造成伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 34698,
+      "value": 4,
+      "flags": 4,
+      "name": "(星)对伤害的反映(智) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 37642,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)对伤害的反映(智) C+",
+      "category": "造成伤害",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 1014,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)对伤害的反映(智) B-",
+      "category": "造成伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 48824,
+      "value": 4,
+      "flags": 4,
+      "name": "(星)对伤害的反映(咒) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 15227,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)对伤害的反映(咒) C+",
+      "category": "造成伤害",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 46144,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)对伤害的反映(咒) B-",
+      "category": "造成伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 2685,
+      "value": 103,
+      "flags": 4,
+      "name": "(星)守护灵技的伤害 +9.2% ~ +10.3%",
+      "category": "造成伤害",
+      "value_min": 92,
+      "value_max": 103
+    },
+    {
+      "effect_id": 17716,
+      "value": 113,
+      "flags": 4,
+      "name": "(星)守护灵技的伤害 +10.2% ~ +11.3%",
+      "category": "造成伤害",
+      "value_min": 102,
+      "value_max": 113
+    },
+    {
+      "effect_id": 11841,
+      "value": 124,
+      "flags": 4,
+      "name": "(星)守护灵技的伤害 +11.3% ~ +12.4%",
+      "category": "造成伤害",
+      "value_min": 113,
+      "value_max": 124
+    },
+    {
+      "effect_id": 34065,
+      "value": 70,
+      "flags": 4,
+      "name": "(星)阴阳术伤害 +6.0% ~ +7.0%",
+      "category": "造成伤害",
+      "value_min": 60,
+      "value_max": 70
+    },
+    {
+      "effect_id": 44582,
+      "value": 80,
+      "flags": 4,
+      "name": "(星)阴阳术伤害 +7.0% ~ +8.0%",
+      "category": "造成伤害",
+      "value_min": 70,
+      "value_max": 80
+    },
+    {
+      "effect_id": 42966,
+      "value": 90,
+      "flags": 4,
+      "name": "(星)阴阳术伤害 +8.0% ~ +9.0%",
+      "category": "造成伤害",
+      "value_min": 80,
+      "value_max": 90
+    },
+    {
+      "effect_id": 41977,
+      "value": 59,
+      "flags": 4,
+      "name": "(星)近距离攻击精力伤害 +5.0% ~ +5.9%",
+      "category": "造成精力伤害",
+      "value_min": 50,
+      "value_max": 59
+    },
+    {
+      "effect_id": 47187,
+      "value": 68,
+      "flags": 4,
+      "name": "(星)近距离攻击精力伤害 +5.9% ~ +6.8%",
+      "category": "造成精力伤害",
+      "value_min": 59,
+      "value_max": 68
+    },
+    {
+      "effect_id": 8979,
+      "value": 75,
+      "flags": 4,
+      "name": "(星)近距离攻击精力伤害 +6.6% ~ +7.5%",
+      "category": "造成精力伤害",
+      "value_min": 66,
+      "value_max": 75
+    },
+    {
+      "effect_id": 11759,
+      "value": 47,
+      "flags": 4,
+      "name": "(星)守护灵技的精力伤害 +4.0% ~ +4.7%",
+      "category": "造成精力伤害",
+      "value_min": 40,
+      "value_max": 47
+    },
+    {
+      "effect_id": 325,
+      "value": 54,
+      "flags": 4,
+      "name": "(星)守护灵技的精力伤害 +4.7% ~ +5.4%",
+      "category": "造成精力伤害",
+      "value_min": 47,
+      "value_max": 54
+    },
+    {
+      "effect_id": 28391,
+      "value": 60,
+      "flags": 4,
+      "name": "(星)守护灵技的精力伤害 +5.3% ~ +6.0%",
+      "category": "造成精力伤害",
+      "value_min": 53,
+      "value_max": 60
+    },
+    {
+      "effect_id": 39011,
+      "value": 87,
+      "flags": 4,
+      "name": "(星)强攻击精力伤害 +7.8% ~ +8.7%",
+      "category": "造成精力伤害",
+      "value_min": 78,
+      "value_max": 87
+    },
+    {
+      "effect_id": 58190,
+      "value": 96,
+      "flags": 4,
+      "name": "(星)强攻击精力伤害 +8.7% ~ +9.6%",
+      "category": "造成精力伤害",
+      "value_min": 87,
+      "value_max": 96
+    },
+    {
+      "effect_id": 49218,
+      "value": 104,
+      "flags": 4,
+      "name": "(星)强攻击精力伤害 +7.8% ~ +10.4%",
+      "category": "造成精力伤害",
+      "value_min": 95,
+      "value_max": 104
+    },
+    {
+      "effect_id": 30008,
+      "value": 8,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 B+",
+      "category": "恢复体力",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 57818,
+      "value": 9,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 A-",
+      "category": "恢复体力",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 14130,
+      "value": 10,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 A",
+      "category": "恢复体力",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 16764,
+      "value": 140,
+      "flags": 4,
+      "name": "(星)火属性伤害 +12.0% ~ +14.0%",
+      "category": "造成异常状态",
+      "value_min": 120,
+      "value_max": 140
+    },
+    {
+      "effect_id": 7163,
+      "value": 160,
+      "flags": 4,
+      "name": "(星)火属性伤害 +14.0% ~ +16.0%",
+      "category": "造成异常状态",
+      "value_min": 140,
+      "value_max": 160
+    },
+    {
+      "effect_id": 37992,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)火属性伤害 +16.0% ~ +18.0%",
+      "category": "造成异常状态",
+      "value_min": 160,
+      "value_max": 180
+    },
+    {
+      "effect_id": 1486,
+      "value": 140,
+      "flags": 4,
+      "name": "(星)水属性伤害 +12.0% ~ +14.0%",
+      "category": "造成异常状态",
+      "value_min": 120,
+      "value_max": 140
+    },
+    {
+      "effect_id": 41797,
+      "value": 160,
+      "flags": 4,
+      "name": "(星)水属性伤害 +14.0% ~ +16.0%",
+      "category": "造成异常状态",
+      "value_min": 140,
+      "value_max": 160
+    },
+    {
+      "effect_id": 19171,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)水属性伤害 +16.0% ~ +18.0%",
+      "category": "造成异常状态",
+      "value_min": 160,
+      "value_max": 180
+    },
+    {
+      "effect_id": 30791,
+      "value": 140,
+      "flags": 4,
+      "name": "(星)雷属性伤害 +12.0% ~ +14.0%",
+      "category": "造成异常状态",
+      "value_min": 120,
+      "value_max": 140
+    },
+    {
+      "effect_id": 15344,
+      "value": 160,
+      "flags": 4,
+      "name": "(星)雷属性伤害 +14.0% ~ +16.0%",
+      "category": "造成异常状态",
+      "value_min": 140,
+      "value_max": 160
+    },
+    {
+      "effect_id": 29245,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)雷属性伤害 +16.0% ~ +18.0%",
+      "category": "造成异常状态",
+      "value_min": 160,
+      "value_max": 180
+    },
+    {
+      "effect_id": 46318,
+      "value": 140,
+      "flags": 4,
+      "name": "(星)风属性伤害 +12.0% ~ +14.0%",
+      "category": "造成异常状态",
+      "value_min": 120,
+      "value_max": 140
+    },
+    {
+      "effect_id": 3416,
+      "value": 160,
+      "flags": 4,
+      "name": "(星)风属性伤害 +14.0% ~ +16.0%",
+      "category": "造成异常状态",
+      "value_min": 140,
+      "value_max": 160
+    },
+    {
+      "effect_id": 39406,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)风属性伤害 +16.0% ~ +18.0%",
+      "category": "造成异常状态",
+      "value_min": 160,
+      "value_max": 180
     }
   ]
 }

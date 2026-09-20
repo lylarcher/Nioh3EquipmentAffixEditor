@@ -99,6 +99,17 @@ ITEM_CODE_PATTERN = re.compile(r"^(?:0x)?([0-9A-Fa-f]{2})\s*([0-9A-Fa-f]{2})$")
 #: 134 records that look like 魂核 carry exactly the 魂核 sheet's 固定词条代码
 #: (0 mismatches), which is why that sheet — not 饰品词条 — gates 魂核 edits.
 SOUL_AFFIX_SHEET = "绘卷-魂核词条"
+
+#: The 绿色星号词条 sheet holds the ★ ("绿色星号") affixes: 12-byte codes whose byte 10
+#: carries the star bit, with the *equipment kinds* each one can roll on in column A
+#: ("[饰品]", "[魂核]", "[近战/手臂]", …).  None of its 257 ids appears in 饰品词条 or
+#: 绘卷-魂核词条, so without this sheet the editor could never offer them.  Column E/F
+#: is the value span and column G.. the value set; measured 257/257 rows contiguous,
+#: so the span is exactly the set.
+GREEN_SHEET = "绿色星号词条"
+
+#: Equipment tokens in that sheet's column A that this tool can write.
+GREEN_KINDS = ("饰品", "魂核")
 SOUL_AFFIX_KIND = "魂核"
 #: The workbook's value table (sheet name is truncated by Excel's 31-char limit).
 #: Its 取值集合 column gives each affix's legal value span; a prefix match is used
@@ -400,6 +411,76 @@ def collect_soul_item_entries(source: Path) -> tuple[list[ItemEntry], list[str],
     return entries, conflicts, skipped
 
 
+def parse_value_set(cells: list[str], low: int, high: int) -> tuple[int, ...] | None:
+    """The sheet's 数值集合 (one pipe-separated cell, or several numeric cells).
+
+    Returns ``None`` when the sheet lists every value of the span (the common case),
+    so only the genuinely stepped sets are stored.
+    """
+    numbers: list[int] = []
+    for cell in cells:
+        for piece in str(cell).replace("|", " ").replace("，", " ").split():
+            if piece.lstrip("-").isdigit():
+                numbers.append(int(piece))
+    if not numbers:
+        return None
+    listed = tuple(sorted(set(numbers)))
+    if listed == tuple(range(low, high + 1)):
+        return None
+    return listed
+
+
+def collect_green_entries(source: Path) -> tuple[dict[str, list[AffixEntry]], int]:
+    """Parse 绿色星号词条 into {装备种类: [AffixEntry]} for 饰品 / 魂核.
+
+    Columns: A=装备种类 B=类别 C=词条代码 D=词条名称 E=数值区间下限 F=上限 G..=数值集合.
+    A row is kept only for the equipment kinds this tool edits and only when its span
+    is present, so a missing span can never turn into an invented one.
+    """
+    rows = _rows_from_xlsx(source, GREEN_SHEET)
+    collected: dict[str, list[AffixEntry]] = {kind: [] for kind in GREEN_KINDS}
+    skipped = 0
+    seen: set[int] = set()
+    for row in rows[1:]:
+        if len(row) < 6:
+            skipped += 1
+            continue
+        kinds = [part.strip() for part in row[0].strip().strip("[]").split("/")]
+        relevant = [kind for kind in GREEN_KINDS if kind in kinds]
+        category, code, name = row[1].strip(), row[2].strip(), row[3].strip()
+        low, high = row[4].strip(), row[5].strip()
+        if not relevant or not code or not name or not low.isdigit() or not high.isdigit():
+            skipped += 1
+            continue
+        try:
+            effect_id, value, flags = parse_code(code)
+        except ValueError:
+            skipped += 1
+            continue
+        if effect_id == 0xFFFFFFFF or effect_id in seen:
+            skipped += 1
+            continue
+        seen.add(effect_id)
+        low_i, high_i = int(low), int(high)
+        span = parse_value_set(row[6:], low_i, high_i)
+        # 3 of 257 rows encode a value outside their own span (0xdfae: 188 vs 127..140,
+        # 0x248c: 250 vs 470..520), which would make the catalog's own default
+        # unwritable, so snap it into the span.
+        if span and value not in span:
+            snapped = min(span, key=lambda item: abs(item - value))
+            value = snapped
+        elif not span and not low_i <= value <= high_i:
+            value = min(max(value, low_i), high_i)
+        entry = AffixEntry(
+            effect_id=effect_id, value=value, flags=flags, name=name,
+            category=category, value_min=low_i, value_max=high_i,
+            values=span,
+        )
+        for kind in relevant:
+            collected[kind].append(entry)
+    return collected, skipped
+
+
 def collect_value_ranges(source: Path) -> tuple[dict[int, tuple[int, int]], int]:
     """Read the legal value span of every affix from 全词条数值(3稀有度…).
 
@@ -553,12 +634,33 @@ def main() -> int:
             updated.append(replace(entry, value_min=span[0], value_max=span[1]))
         entries = updated
 
+    # ★ affixes that can roll on 饰品 (绿色星号词条 column A).  They are a different
+    # id space from 饰品词条 (measured: 0 of 257 ids overlap), and their span comes
+    # from this sheet itself, so they are merged in only after the span pass above.
+    green: dict[str, list[AffixEntry]] = {kind: [] for kind in GREEN_KINDS}
+    green_skipped = 0
+    if source.suffix.lower() != ".tsv":
+        try:
+            green, green_skipped = collect_green_entries(source)
+        except (FileNotFoundError, KeyError, zipfile.BadZipFile) as error:
+            print(f"    警告：未能读取 {GREEN_SHEET}（{error}）；绿色星号词条未加入")
+    known = {entry.effect_id for entry in entries}
+    green_acc = [entry for entry in green.get("饰品", [])
+                 if entry.effect_id not in known]
+    collisions = [entry for entry in green.get("饰品", [])
+                  if entry.effect_id in known]
+    entries = entries + green_acc
+
     if dry_run:
         print(f"演练：将生成 {len(entries)} 条词条（未写入）")
     else:
-        save_catalog(entries, source=f"{source.name} / {TARGET_SHEET}",
+        save_catalog(entries, source=f"{source.name} / {TARGET_SHEET} + {GREEN_SHEET}（饰品行）",
                      conflicts=conflicts)
         print(f"OK: 已生成词条库，共 {len(entries)} 条饰品合法词条")
+    if green_acc or collisions:
+        print(f"    绿色星号词条（饰品）: 加入 {len(green_acc)} 条"
+              f"（表内适用饰品行，跳过 {green_skipped} 行，与 饰品词条 同 id "
+              f"{len(collisions)} 条已忽略）")
     print("    来源:", source)
     print(f"    跳过行: {skipped_rows}")
     if spans:
@@ -642,12 +744,21 @@ def main() -> int:
                 updated_souls.append(
                     replace(entry, value_min=span[0], value_max=span[1]))
             souls = updated_souls
+        soul_known = {entry.effect_id for entry in souls}
+        green_souls = [entry for entry in green.get("魂核", [])
+                       if entry.effect_id not in soul_known]
+        if green_souls:
+            souls = souls + green_souls
         if dry_run:
             print(f"演练：将生成 {len(souls)} 条魂核词条（未写入）")
         else:
             save_soul_catalog(
-                souls, source=f"{source.name} / {SOUL_AFFIX_SHEET}（{SOUL_AFFIX_KIND}）")
+                souls,
+                source=f"{source.name} / {SOUL_AFFIX_SHEET}（{SOUL_AFFIX_KIND}）"
+                       f" + {GREEN_SHEET}（魂核行）")
             print(f"OK: 已生成魂核词条库，共 {len(souls)} 条")
+        if green_souls:
+            print(f"    绿色星号词条（魂核）: 加入 {len(green_souls)} 条")
         print(f"    跳过行: {souls_skipped}")
         print(f"    数值区间: 覆盖 {soul_ranged}/{len(souls)} 条")
 

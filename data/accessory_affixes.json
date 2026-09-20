@@ -1,7 +1,7 @@
 {
   "schema": "nioh3-accessory-affixes/v1",
-  "count": 276,
-  "source": "仁王3词条装备库v2.21.xlsx / 饰品词条",
+  "count": 308,
+  "source": "仁王3词条装备库v2.21.xlsx / 饰品词条 + 绿色星号词条（饰品行）",
   "conflicts": [],
   "affixes": [
     {
@@ -2487,6 +2487,363 @@
       "category": "造成异常状态",
       "value_min": 25,
       "value_max": 25
+    },
+    {
+      "effect_id": 18798,
+      "value": 100,
+      "flags": 4,
+      "name": "(星)阴阳术 术力 +80 ~ +100",
+      "category": "其他",
+      "value_min": 80,
+      "value_max": 100
+    },
+    {
+      "effect_id": 44449,
+      "value": 110,
+      "flags": 4,
+      "name": "(星)阴阳术 术力 +100 ~ +110",
+      "category": "其他",
+      "value_min": 100,
+      "value_max": 110
+    },
+    {
+      "effect_id": 50799,
+      "value": 120,
+      "flags": 4,
+      "name": "(星)阴阳术 术力 +110 ~ +120",
+      "category": "其他",
+      "value_min": 110,
+      "value_max": 120
+    },
+    {
+      "effect_id": 33421,
+      "value": 52,
+      "flags": 4,
+      "name": "(星)不消耗使役符以外的阴阳术 +4.5% ~ +5.2%",
+      "category": "其他",
+      "value_min": 45,
+      "value_max": 52
+    },
+    {
+      "effect_id": 30034,
+      "value": 59,
+      "flags": 4,
+      "name": "(星)不消耗使役符以外的阴阳术 +5.2% ~ +5.9%",
+      "category": "其他",
+      "value_min": 52,
+      "value_max": 59
+    },
+    {
+      "effect_id": 60250,
+      "value": 66,
+      "flags": 4,
+      "name": "(星)不消耗使役符以外的阴阳术 +5.9% ~ +6.6%",
+      "category": "其他",
+      "value_min": 59,
+      "value_max": 66
+    },
+    {
+      "effect_id": 40836,
+      "value": 167,
+      "flags": 4,
+      "name": "(星)一难的解除时间延长 +15.0% ~ +16.7%",
+      "category": "其他",
+      "value_min": 150,
+      "value_max": 167
+    },
+    {
+      "effect_id": 9748,
+      "value": 184,
+      "flags": 4,
+      "name": "(星)一难的解除时间延长 +16.7% ~ +18.4%",
+      "category": "其他",
+      "value_min": 167,
+      "value_max": 184
+    },
+    {
+      "effect_id": 54103,
+      "value": 200,
+      "flags": 4,
+      "name": "(星)一难的解除时间延长 +18.3% ~ +20.0%",
+      "category": "其他",
+      "value_min": 183,
+      "value_max": 200
+    },
+    {
+      "effect_id": 30008,
+      "value": 8,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 B+",
+      "category": "恢复体力",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 57818,
+      "value": 9,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 A-",
+      "category": "恢复体力",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 14130,
+      "value": 10,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 A",
+      "category": "恢复体力",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 38097,
+      "value": 82,
+      "flags": 4,
+      "name": "(星)残心精力恢复量 +7.5% ~ +8.2%",
+      "category": "恢复精力",
+      "value_min": 75,
+      "value_max": 82
+    },
+    {
+      "effect_id": 26765,
+      "value": 89,
+      "flags": 4,
+      "name": "(星)残心精力恢复量 +8.2% ~ +8.9%",
+      "category": "恢复精力",
+      "value_min": 82,
+      "value_max": 89
+    },
+    {
+      "effect_id": 32045,
+      "value": 95,
+      "flags": 4,
+      "name": "(星)残心精力恢复量 +8.8% ~ +9.5%",
+      "category": "恢复精力",
+      "value_min": 88,
+      "value_max": 95
+    },
+    {
+      "effect_id": 27275,
+      "value": 85,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +7.4% ~ +8.5%",
+      "category": "恢复精力",
+      "value_min": 74,
+      "value_max": 85
+    },
+    {
+      "effect_id": 58569,
+      "value": 96,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +8.5% ~ +9.6%",
+      "category": "恢复精力",
+      "value_min": 85,
+      "value_max": 96
+    },
+    {
+      "effect_id": 40908,
+      "value": 108,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +9.7% ~ +10.8%",
+      "category": "恢复精力",
+      "value_min": 97,
+      "value_max": 108
+    },
+    {
+      "effect_id": 61579,
+      "value": 113,
+      "flags": 4,
+      "name": "(星)远距离伤害 +10.0% ~ +11.3%",
+      "category": "远距离",
+      "value_min": 100,
+      "value_max": 113
+    },
+    {
+      "effect_id": 14560,
+      "value": 126,
+      "flags": 4,
+      "name": "(星)远距离伤害 +11.3% ~ +12.6%",
+      "category": "远距离",
+      "value_min": 113,
+      "value_max": 126
+    },
+    {
+      "effect_id": 57262,
+      "value": 140,
+      "flags": 4,
+      "name": "(星)远距离伤害 +12.7% ~ +14.0%",
+      "category": "远距离",
+      "value_min": 127,
+      "value_max": 140
+    },
+    {
+      "effect_id": 65273,
+      "value": 8,
+      "flags": 4,
+      "name": "(星)炮弹持有数量上限 +8",
+      "category": "远距离",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 65354,
+      "value": 175,
+      "flags": 4,
+      "name": "(星)不消耗箭弹 +16.9% ~ +17.5%",
+      "category": "远距离",
+      "value_min": 169,
+      "value_max": 175
+    },
+    {
+      "effect_id": 4842,
+      "value": 115,
+      "flags": 4,
+      "name": "(星)敌人的持续伤害 +10.0% ~ +11.5%",
+      "category": "造成异常状态",
+      "value_min": 100,
+      "value_max": 115
+    },
+    {
+      "effect_id": 4984,
+      "value": 130,
+      "flags": 4,
+      "name": "(星)敌人的持续伤害 +11.5% ~ +13.0%",
+      "category": "造成异常状态",
+      "value_min": 115,
+      "value_max": 130
+    },
+    {
+      "effect_id": 57822,
+      "value": 145,
+      "flags": 4,
+      "name": "(星)敌人的持续伤害 +13.0% ~ +14.5%",
+      "category": "造成异常状态",
+      "value_min": 130,
+      "value_max": 145
+    },
+    {
+      "effect_id": 54512,
+      "value": 140,
+      "flags": 4,
+      "name": "(星)效果持续力 +12 ~ +14",
+      "category": "造成异常状态",
+      "value_min": 120,
+      "value_max": 140
+    },
+    {
+      "effect_id": 16627,
+      "value": 160,
+      "flags": 4,
+      "name": "(星)效果持续力 +14 ~ +16",
+      "category": "造成异常状态",
+      "value_min": 140,
+      "value_max": 160
+    },
+    {
+      "effect_id": 24213,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)效果持续力 +16 ~ +18",
+      "category": "造成异常状态",
+      "value_min": 160,
+      "value_max": 180
+    },
+    {
+      "effect_id": 6374,
+      "value": 430,
+      "flags": 4,
+      "name": "(星)赋予属性的持续时间延长 +38.0% ~ +43.0%",
+      "category": "造成异常状态",
+      "values": [
+        380,
+        382,
+        385,
+        387,
+        390,
+        392,
+        395,
+        397,
+        400,
+        402,
+        405,
+        407,
+        410,
+        412,
+        415,
+        417,
+        420,
+        422,
+        425,
+        427,
+        430
+      ],
+      "value_min": 380,
+      "value_max": 430
+    },
+    {
+      "effect_id": 56427,
+      "value": 470,
+      "flags": 4,
+      "name": "(星)赋予属性的持续时间延长 +42.0% ~ +47.0%",
+      "category": "造成异常状态",
+      "values": [
+        420,
+        422,
+        425,
+        427,
+        430,
+        432,
+        435,
+        437,
+        440,
+        442,
+        445,
+        447,
+        450,
+        452,
+        455,
+        457,
+        460,
+        462,
+        465,
+        467,
+        470
+      ],
+      "value_min": 420,
+      "value_max": 470
+    },
+    {
+      "effect_id": 9356,
+      "value": 470,
+      "flags": 4,
+      "name": "(星)赋予属性的持续时间延长 +47.0% ~ +52.0%",
+      "category": "造成异常状态",
+      "values": [
+        470,
+        472,
+        475,
+        477,
+        480,
+        482,
+        485,
+        487,
+        490,
+        492,
+        495,
+        497,
+        500,
+        502,
+        505,
+        507,
+        510,
+        512,
+        515,
+        517,
+        520
+      ],
+      "value_min": 470,
+      "value_max": 520
     }
   ]
 }

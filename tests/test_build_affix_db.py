@@ -20,11 +20,14 @@ from nioh3_accessory_editor.affixdb import (
     DEFAULT_CATALOG,
     DEFAULT_GRACE_CATALOG,
     DEFAULT_ITEM_CATALOG,
+    DEFAULT_SOUL_CATALOG,
     GRACE_CATALOG_SCHEMA,
     ITEM_CATALOG_SCHEMA,
+    AffixDb,
     load_catalog,
     load_grace_catalog,
     load_item_catalog,
+    load_soul_catalog,
 )
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -147,6 +150,149 @@ class ItemCollectionTests(unittest.TestCase):
 
 
 @unittest.skipUnless(XLSX.is_file(), "缺少原始数据表")
+class GreenSheetTests(unittest.TestCase):
+    """绿色星号词条: the ★ affixes that may roll on 饰品 / 魂核.
+
+    They live in their own sheet with the equipment kinds in column A, their value
+    span in E/F and the value set in G.., and none of their ids appears in 饰品词条
+    or 绘卷-魂核词条 — so skipping the sheet silently removed legal affixes from the
+    editor's catalog.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.source = build_affix_db.resolve_source()
+        cls.entries, cls.skipped = build_affix_db.collect_green_entries(cls.source)
+        cls.rows = workbook_rows(build_affix_db.GREEN_SHEET)[1:]
+
+    def test_both_catalogs_got_their_rows(self) -> None:
+        self.assertEqual(len(self.entries["饰品"]), 32)
+        self.assertEqual(len(self.entries["魂核"]), 51)
+
+    def test_the_committed_catalogs_contain_them(self) -> None:
+        accessory = {entry.effect_id for entry in load_catalog(DEFAULT_CATALOG)}
+        soul = {entry.effect_id for entry in load_soul_catalog(DEFAULT_SOUL_CATALOG)}
+        for entry in self.entries["饰品"]:
+            self.assertIn(entry.effect_id, accessory)
+        for entry in self.entries["魂核"]:
+            self.assertIn(entry.effect_id, soul)
+        # 276 + 32 and 287 + 51, i.e. the sheet's rows are additive.
+        self.assertEqual(len(accessory), 308)
+        self.assertEqual(len(soul), 338)
+
+    def test_an_id_shared_by_both_kinds_is_in_both(self) -> None:
+        accessory = {entry.effect_id for entry in self.entries["饰品"]}
+        soul = {entry.effect_id for entry in self.entries["魂核"]}
+        shared = accessory & soul
+        self.assertEqual(len(shared), 3)
+        catalog = {entry.effect_id for entry in load_catalog(DEFAULT_CATALOG)}
+        for effect_id in shared:
+            self.assertIn(effect_id, catalog)
+
+    def test_every_entry_carries_the_sheets_own_span(self) -> None:
+        for kind, entries in self.entries.items():
+            for entry in entries:
+                with self.subTest(kind=kind, effect_id=entry.effect_id):
+                    self.assertTrue(entry.has_value_range, entry.name)
+                    self.assertLessEqual(entry.value_min, entry.value_max)
+                    self.assertLessEqual(entry.value_min, entry.value)
+                    self.assertLessEqual(entry.value, entry.value_max)
+
+    def test_the_sheets_value_sets_are_kept(self) -> None:
+        """数值集合 is a *set*: 3 rows step by 2.5, so min/max alone is not enough."""
+        stepped, listed = [], 0
+        for row in self.rows:
+            low, high = row[4].strip(), row[5].strip()
+            if not low.isdigit() or not high.isdigit():
+                continue
+            span = build_affix_db.parse_value_set(row[6:], int(low), int(high))
+            values = sorted({int(piece) for cell in row[6:]
+                             for piece in str(cell).replace("|", " ").split()
+                             if piece.isdigit()})
+            self.assertTrue(values, f"每一行都应给出数值集合：{row[3]}")
+            listed += 1
+            if span is None:
+                self.assertEqual(values, list(range(int(low), int(high) + 1)), row[3])
+            else:
+                stepped.append((row[3], span))
+                self.assertEqual(list(span), values)
+        self.assertEqual(listed, 257)
+        # 33 of the 257 rows are stepped sets (a 2.5 step in 0.1% units); 3 of
+        # them belong to 饰品, which is why the accessory catalog carries 3.
+        self.assertEqual(len(stepped), 33, [item[0] for item in stepped])
+
+    def test_a_stepped_set_refuses_the_values_between_its_steps(self) -> None:
+        db = AffixDb()
+        entry = next(item for item in db.all() if item.values)
+        self.assertEqual(entry.values[:3], (380, 382, 385))
+        self.assertTrue(entry.allows_value(380))
+        self.assertFalse(entry.allows_value(381))
+        self.assertIn("共 21 个取值", entry.describe_value_range())
+
+    def test_an_encoded_value_outside_its_span_is_snapped_into_it(self) -> None:
+        """3 of 257 rows encode a value their own span excludes; the catalog must not
+        ship a default the editor would then refuse to write."""
+        published = {entry.effect_id: entry
+                     for entry in load_catalog(DEFAULT_CATALOG)}
+        entry = published.get(0x248C)
+        self.assertIsNotNone(entry, "0x248c 应在饰品目录里（[饰品] 行）")
+        self.assertTrue(entry.has_value_range)
+        self.assertTrue(entry.value_min <= entry.value <= entry.value_max
+                        or (entry.values and entry.value in entry.values))
+
+    def test_a_row_is_tagged_with_the_star_bit(self) -> None:
+        from nioh3_accessory_editor.affixdb import FLAG_STAR
+
+        for entries in self.entries.values():
+            for entry in entries:
+                self.assertTrue(entry.flags & FLAG_STAR, entry.name)
+                self.assertTrue(entry.is_star and not entry.is_fixed, entry.name)
+                self.assertIn("(星)", entry.name)
+
+    def test_melee_only_rows_stay_out_of_the_accessory_catalog(self) -> None:
+        """[近战/手臂] and friends must never become a legal 饰品 affix."""
+        accessory = {entry.effect_id for entry in load_catalog(DEFAULT_CATALOG)}
+        offenders = []
+        for row in self.rows:
+            if len(row) < 4:
+                continue
+            kinds = [part.strip() for part in row[0].strip().strip("[]").split("/")]
+            if "饰品" in kinds:
+                continue
+            try:
+                effect_id = build_affix_db.parse_code(row[2].strip())[0]
+            except ValueError:
+                continue
+            if effect_id in accessory:
+                offenders.append((row[0], row[3]))
+        self.assertEqual(offenders, [])
+
+    def test_the_two_original_sheets_do_not_contain_these_ids(self) -> None:
+        """Measured: the green ids are a separate space, so nothing was overwritten."""
+        plain = set()
+        for row in workbook_rows(build_affix_db.TARGET_SHEET)[1:]:
+            if len(row) >= 2 and row[1].strip():
+                try:
+                    plain.add(build_affix_db.parse_code(row[1].strip())[0])
+                except ValueError:
+                    continue
+        soul = {entry.effect_id
+                for entry in build_affix_db.collect_soul_entries(self.source)[0]}
+        for entries in self.entries.values():
+            for entry in entries:
+                self.assertNotIn(entry.effect_id, plain)
+                self.assertNotIn(entry.effect_id, soul)
+
+    def test_a_real_green_affix_gets_a_working_value_range(self) -> None:
+        db = AffixDb()
+        entry = next(item for item in db.all()
+                     if item.is_star and item.effect_id == 0x496E)
+        self.assertEqual((entry.value_min, entry.value_max), (80, 100))
+        self.assertTrue(entry.allows_value(90))
+        self.assertFalse(entry.allows_value(101))
+        self.assertEqual(entry.describe_value_range(), "80..100")
+
+
 class CommittedCatalogTests(unittest.TestCase):
     """The committed JSON must be what the committed workbook produces."""
 
@@ -170,6 +316,13 @@ class CommittedCatalogTests(unittest.TestCase):
         committed = {entry.effect_id: (entry.value, entry.flags, entry.name,
                                        entry.category)
                      for entry in load_catalog(DEFAULT_CATALOG)}
+        # The committed catalog is 饰品词条 **plus** the 绿色星号词条 rows that may roll
+        # on 饰品 (column A carries the equipment kinds); see GreenSheetTests.
+        green, _skipped = build_affix_db.collect_green_entries(
+            build_affix_db.resolve_source())
+        for entry in green["饰品"]:
+            produced.setdefault(entry.effect_id, (entry.value, entry.flags,
+                                                  entry.name, entry.category))
         self.assertEqual(committed, produced,
                          "data/accessory_affixes.json 与原始表不一致；"
                          "请重新运行 tools/build_affix_db.py")
