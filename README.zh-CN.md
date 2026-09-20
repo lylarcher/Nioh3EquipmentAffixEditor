@@ -181,7 +181,7 @@ python launch_editor.py --version
 python launch_editor.py version --json
 ```
 
-### 如果 读取饰品（或 `list`）找不到记录
+### 如果 读取数据（或 `list`）找不到记录
 
 游戏**不**需要在运行——读取只接触存档文件。
 结果为空或近乎为空，意味着本工具无法识别该存档的

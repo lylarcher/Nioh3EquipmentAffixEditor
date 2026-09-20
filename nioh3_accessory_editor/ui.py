@@ -303,7 +303,7 @@ class AccessoryEditorApp(tk.Tk):
         self.save_combo.pack(side=tk.LEFT, padx=4)
         self.save_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_save_selected())
         ttk.Button(top, text="刷新", command=self.refresh_saves).pack(side=tk.LEFT, padx=2)
-        ttk.Button(top, text="读取饰品", command=self.load_accessories).pack(side=tk.LEFT, padx=2)
+        ttk.Button(top, text="读取数据", command=self.load_accessories).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="备份存档", command=self.backup_save).pack(side=tk.LEFT, padx=2)
         ttk.Button(top, text="恢复备份", command=self.restore_save).pack(side=tk.LEFT, padx=2)
 
@@ -1546,6 +1546,11 @@ class AccessoryEditorApp(tk.Tk):
             self._status(f"已选择 {self.saves[index].display}")
 
     def load_accessories(self) -> None:
+        """Read the save once for **both** tabs (饰品 + 魂核).
+
+        The button is labelled 读取数据 for exactly that reason: one read fills the
+        饰品 page and the 魂核（魂之核） page from the same decrypted bytes.
+        """
         if self.selected_save is None:
             messagebox.showwarning("提示", "请先选择存档")
             return
@@ -1736,7 +1741,7 @@ class AccessoryEditorApp(tk.Tk):
     def apply_grace_to_selection(self) -> None:
         """Replace the selected accessory's 恩宠 (memory only; 写入存档 commits)."""
         if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
             return
         text = self.grace_combo.get()
         if not text:
@@ -1856,7 +1861,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def apply_edits_to_selection(self) -> None:
         if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
             return
         target = self.selected_accessory
         edits = self._current_edits()
@@ -1984,7 +1989,7 @@ class AccessoryEditorApp(tk.Tk):
     def apply_kind_to_selection(self) -> None:
         """Swap the selected record's 种类 (memory only; 写入存档 commits)."""
         if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
             return
         chosen = self.kind_choices.get(self.kind_combo.get())
         if chosen is None:
@@ -2025,7 +2030,7 @@ class AccessoryEditorApp(tk.Tk):
     def apply_level_to_selection(self) -> None:
         """Change the selected record's 等级 (memory only; 写入存档 commits)."""
         if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
             return
         text = self.level_var.get().strip()
         try:
@@ -2067,7 +2072,7 @@ class AccessoryEditorApp(tk.Tk):
     def apply_plus_to_selection(self) -> None:
         """Change the selected record's +值 (memory only; 写入存档 commits)."""
         if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取饰品并选择一条记录")
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
             return
         text = self.plus_var.get().strip()
         try:
@@ -2285,7 +2290,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def write_save(self) -> None:
         if self.decrypted is None or self.selected_save is None:
-            messagebox.showwarning("提示", "请先读取饰品")
+            messagebox.showwarning("提示", "请先读取数据")
             return
         if self._refuse_running_game("写入存档"):
             return

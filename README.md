@@ -182,7 +182,7 @@ python launch_editor.py --version
 python launch_editor.py version --json
 ```
 
-### If 读取饰品 (or `list`) finds no records
+### If 读取数据 (or `list`) finds no records
 
 The game does **not** need to be running — reading only touches the save file.
 An empty or near-empty result means the tool could not recognise the save's
