@@ -17,6 +17,7 @@ properties are load-bearing:
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 import unittest
@@ -172,6 +173,50 @@ class SpecAndPayloadWiringTests(unittest.TestCase):
         source = BUILD_SCRIPT.read_text(encoding="utf-8-sig")
         for relative in ("assets\\app.ico", "assets\\logo-32.png"):
             self.assertIn(relative, source, relative)
+
+    def test_smoke_test_checks_both_readmes(self) -> None:
+        """The package ships the English and the Chinese README, so both are asserted."""
+        source = BUILD_SCRIPT.read_text(encoding="utf-8-sig")
+        self.assertIn("'README.md'", source)
+        self.assertIn("'README.zh-CN.md'", source)
+
+
+class BilingualDocsTests(unittest.TestCase):
+    """The two READMEs are one document in two languages: keep them in step."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.english = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
+        cls.chinese = (PROJECT_ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+
+    def test_the_payload_ships_both_readmes(self) -> None:
+        source = (PROJECT_ROOT / "tools" / "make_payload.py").read_text(encoding="utf-8")
+        self.assertIn('PAYLOAD_FILES = ("README.md", "README.zh-CN.md", '
+                      '"CHANGELOG.md")', source)
+
+    def test_the_two_readmes_cross_link_on_the_first_line(self) -> None:
+        self.assertIn("[简体中文](README.zh-CN.md)", self.english.splitlines()[0])
+        self.assertIn("[English](README.md)", self.chinese.splitlines()[0])
+
+    def test_the_chinese_readme_mirrors_every_heading_level(self) -> None:
+        def levels(text: str) -> list[int]:
+            return [len(line) - len(line.lstrip("#"))
+                    for line in text.splitlines() if line.startswith("#")]
+
+        self.assertEqual(levels(self.english), levels(self.chinese))
+
+    def test_the_chinese_readme_carries_the_same_numbers(self) -> None:
+        numbers = re.compile(r"\d+")
+        self.assertEqual(sorted(numbers.findall(self.english)),
+                         sorted(numbers.findall(self.chinese)))
+
+    def test_neither_readme_names_a_reporter(self) -> None:
+        for text in (self.english, self.chinese):
+            for banned in ("reporting user", "报告用户", "报告使用者"):
+                self.assertNotIn(banned, text)
+
+    def test_the_chinese_readme_keeps_the_disclaimer(self) -> None:
+        self.assertIn("仅供测试学习用，不要用于联机影响游戏平衡", self.chinese)
 
 
 if __name__ == "__main__":

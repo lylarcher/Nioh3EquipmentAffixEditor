@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Build Nioh3AccessoryEditor and stamp it with its build/version identity.
 
