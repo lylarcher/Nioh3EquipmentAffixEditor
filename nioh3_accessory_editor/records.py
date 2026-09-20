@@ -78,6 +78,7 @@ __all__ = [
     "patch_effect_slots",
     "patch_record_item_id",
     "patch_record_level",
+    "patch_record_plus",
     "read_effect_slots",
     "read_item_record",
     "read_record_item_id",
@@ -170,6 +171,11 @@ EFFECT_FIXED_MARKER_BIT = 0x40
 #: confirmed in game**, so nothing writes it: ``RECORD_PLUS_OFFSET`` is here to
 #: document the candidate, and the writer refuses until the mapping is verified.
 RECORD_PLUS_OFFSET = 0x0A
+
+#: Highest ``+0x0A`` value the reporting save uses (0..30 across its 213
+#: accessories).  The field's meaning is unverified, so writes stay inside the
+#: span that is actually observed instead of guessing a wider one.
+MAX_RECORD_PLUS = 30
 RECORD_PLUS_CANDIDATE_MAX = 30
 
 
@@ -474,7 +480,28 @@ def read_record_item_id(record: bytes) -> int:
     return struct.unpack_from("<H", record, RECORD_TYPE_OFFSET)[0]
 
 
-def patch_record_level(record: bytes, level: int) -> bytes:
+def patch_record_plus(record: bytes, value: int) -> bytes:
+    """Return ``record`` with ``+0x0A`` set to ``value`` (the "+值" *candidate*).
+
+    ``+0x0A`` is the one header word whose meaning is still unverified, so this
+    writer exists **for the in-game A/B test** and stays inside the span the
+    reporting save actually uses (0..30, 213/213 accessories).  Everything else in
+    the record is left byte-identical: no affix, no level, no mirror is touched,
+    because no other field is known to be a copy of this one.
+    """
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise RecordError("+0x0A 的值必须是整数")
+    if not 0 <= value <= MAX_RECORD_PLUS:
+        raise RecordError(
+            f"+0x0A 必须在 0..{MAX_RECORD_PLUS} 之间（这是你存档里实测的取值范围；"
+            "该字段含义尚未核实，不接受范围外的值）"
+        )
+    patched = bytearray(record)
+    struct.pack_into("<H", patched, RECORD_PLUS_OFFSET, value)
+    return bytes(patched)
+
     """Return ``record`` with ``+0x06``/``+0x08`` set to ``level``.
 
     Refuses an out-of-range level and a record whose two level fields disagree

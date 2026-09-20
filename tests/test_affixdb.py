@@ -245,8 +245,9 @@ class ItemCatalogTests(unittest.TestCase):
     """What an accessory *is* (种类), from 物品总目录's 饰品 rows.
 
     In v2.21 a record header carries the per-item id (mirrored at +0x02) rather
-    than the captured category type; measured on the reporting user's save, 212 of
-    213 accessories resolve here.  Display only: the tool never writes that field.
+    than the captured category type; measured on the reporting user's save, all 213
+    accessories resolve here (0x5c5f was the last one, added from save evidence).
+    Display only: the tool never writes that field.
     """
 
     @classmethod
@@ -257,7 +258,28 @@ class ItemCatalogTests(unittest.TestCase):
         self.assertTrue(DEFAULT_ITEM_CATALOG.is_file())
         self.assertTrue(self.db.is_loaded, self.db.error)
         self.assertEqual(self.db.error, "")
-        self.assertEqual(len(self.db), 88)
+        self.assertEqual(len(self.db), 89)
+
+    def test_the_two_yatagami_ids_are_split_by_save_evidence(self) -> None:
+        """物品总目录 writes 八咫镜[武士] and [忍者] with the same code `21 15`.
+
+        The reporting save settles it (0x5c5f carries 格挡可增加灵力, 0x1521 carries
+        识破可增加灵力), so both ids must be named here and in *different* 中类 —
+        which is also what stops a cross-class 改种类 between them.
+        """
+        self.assertEqual(self.db.describe(0x5C5F), "八咫镜[武士]")
+        self.assertEqual(self.db.describe(0x1521), "八咫镜[忍者]")
+        self.assertEqual(self.db.category_of(0x5C5F), "武士饰品")
+        self.assertEqual(self.db.category_of(0x1521), "忍者饰品")
+        for item_id in (0x5C5F, 0x1521):
+            entry = next(entry for entry in self.db.all() if entry.item_id == item_id)
+            self.assertTrue(entry.source, "实测来源必须写进表里")
+            self.assertIn("存档实测", entry.source)
+
+    def test_every_real_save_id_has_a_name(self) -> None:
+        """All 213 catalogued accessories of the reporting save resolve to a row."""
+        for item_id in (0x3E3F, 0xF5BB, 0x4987, 0x2B98, 0xA05E, 0x5C5F, 0x1521):
+            self.assertIsNotNone(self.db.describe(item_id), f"{item_id:#06x} 无名字")
 
     def test_names_the_items_a_real_save_carried(self) -> None:
         self.assertEqual(self.db.describe(0x3E3F), "龙笛[武士]")

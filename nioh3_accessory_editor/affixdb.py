@@ -438,6 +438,10 @@ class ItemEntry:
     item_id: int
     name: str
     category: str
+    #: Where this row came from, when it is not simply "the workbook says so" —
+    #: e.g. an id the workbook cannot express (0x5c5f 八咫镜[武士], see
+    #: ``tools/build_affix_db.py``).  Empty for plain 物品总目录 rows.
+    source: str = ""
 
     @property
     def label(self) -> str:
@@ -584,11 +588,15 @@ def load_item_catalog(path: Path = DEFAULT_ITEM_CATALOG) -> list[ItemEntry]:
             raise AffixError(f"{where}: 缺少物品名称")
         if not isinstance(category, str):
             raise AffixError(f"{where}: 缺少物品分类")
+        source = item.get("source", "")
+        if not isinstance(source, str):
+            raise AffixError(f"{where}: source 必须是字符串")
         entries.append(
             ItemEntry(
                 item_id=_require_uint32(item, "item_id", where),
                 name=name.strip(),
                 category=category.strip(),
+                source=source.strip(),
             )
         )
     return entries
@@ -616,7 +624,8 @@ def save_item_catalog(
         "conflicts": conflicts or [],
         "items": [
             {"item_id": entry.item_id, "name": entry.name,
-             "category": entry.category}
+             "category": entry.category,
+             **({"source": entry.source} if entry.source else {})}
             for entry in entries
         ],
     }

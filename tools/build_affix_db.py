@@ -74,6 +74,23 @@ GRACE_OWNERS = ("恩宠", "上位恩宠", "武士套装", "忍者套装")
 #: to one of these 88 ids — measured, not assumed.  Display only.
 ITEMS_SHEET = "物品总目录"
 ITEM_BIG_CLASS = "饰品"
+
+#: Ids the workbook cannot express, with the evidence that fixes them.  Keyed by
+#: the item id the *save* carries; the value is (名称, 中类, 证据).  Only the two
+#: 八咫镜 rows live here: both are listed as 代码 ``21 15`` (→ 0x1521), so without
+#: this the second id would have no name at all and 0x1521 would take the wrong one.
+ITEM_ID_OVERRIDES: dict[int, tuple[str, str, str]] = {
+    0x5C5F: (
+        "八咫镜[武士]", "武士饰品",
+        "存档实测（2026-09）：item 0x5c5f 的固定词条是 0xd45b 格挡可增加灵力 +10；"
+        "原表把 八咫镜[武士] 与 八咫镜[忍者] 都写成代码 21 15，故该 id 由实测确定",
+    ),
+    0x1521: (
+        "八咫镜[忍者]", "忍者饰品",
+        "存档实测（2026-09）：item 0x1521 的固定词条是 0xb3fd 识破可增加灵力 +10；"
+        "原表把两行 八咫镜 都写成代码 21 15，按实测改为忍者版",
+    ),
+}
 #: 物品代码 in the sheet lists the low byte first ("BB F5" == 0xF5BB).
 ITEM_CODE_PATTERN = re.compile(r"^(?:0x)?([0-9A-Fa-f]{2})\s*([0-9A-Fa-f]{2})$")
 
@@ -254,6 +271,11 @@ def collect_item_entries(source: Path) -> tuple[list[ItemEntry], list[str], int]
     Returns ``(entries, conflicts, skipped)``; a conflict records an id that the
     workbook gives two names (e.g. ``0x1521`` is both 八咫镜[武士] and
     [忍者]), which is kept visible instead of silently picking one.
+
+    The workbook cannot express every id the save actually uses, so
+    :data:`ITEM_ID_OVERRIDES` fixes up the rows whose 代码 column collides.  Those
+    overrides carry their own evidence string into the shipped JSON, so a reader
+    can always tell a plain workbook row from an inspected one.
     """
     rows = _rows_from_xlsx(source, ITEMS_SHEET)
     entries: list[ItemEntry] = []
@@ -275,15 +297,36 @@ def collect_item_entries(source: Path) -> tuple[list[ItemEntry], list[str], int]
         if item_id in by_id:
             existing = by_id[item_id]
             if existing.name != name:
+                if item_id in ITEM_ID_OVERRIDES:
+                    fix = "；该 id 在输出里按存档实测改名（原表两行八咫镜同码）"
+                else:
+                    fix = f"；表中保留「{existing.name}」"
                 conflicts.append(
-                    f"{item_id:#06x} 同时是「{existing.name}」与「{name}」；"
-                    f"表中保留「{existing.name}」"
+                    f"{item_id:#06x} 同时是「{existing.name}」与「{name}」{fix}"
                 )
             skipped += 1
             continue
         entry = ItemEntry(item_id=item_id, name=name, category=mid)
         by_id[item_id] = entry
         entries.append(entry)
+
+    # ---- 八咫镜 fix-up -------------------------------------------------------
+    # 物品总目录 lists BOTH 八咫镜[武士] and 八咫镜[忍者] with the same 代码
+    # ``21 15`` (→ 0x1521), so the table alone cannot name the second id and the
+    # first row wins by accident.  The reporting save resolves it: its two 八咫镜
+    # records are
+    #   item 0x5c5f -> 固定词条 0xd45b 格挡可增加灵力 +10   (武士)
+    #   item 0x1521 -> 固定词条 0xb3fd 识破可增加灵力 +10   (忍者)
+    # which is what ITEM_ID_OVERRIDES writes down, with the evidence inline.
+    for item_id, (name, category, evidence) in ITEM_ID_OVERRIDES.items():
+        fixed = ItemEntry(item_id=item_id, name=name, category=category,
+                          source=evidence)
+        if item_id in by_id:
+            entries[entries.index(by_id[item_id])] = fixed
+        else:
+            entries.append(fixed)
+        by_id[item_id] = fixed
+    entries.sort(key=lambda item: item.item_id)
     return entries, conflicts, skipped
 
 
@@ -342,9 +385,12 @@ def collect_soul_item_entries(source: Path) -> tuple[list[ItemEntry], list[str],
         if item_id in by_id:
             existing = by_id[item_id]
             if existing.name != name:
+                if item_id in ITEM_ID_OVERRIDES:
+                    fix = "；该 id 在输出里按存档实测改名（原表两行八咫镜同码）"
+                else:
+                    fix = f"；表中保留「{existing.name}」"
                 conflicts.append(
-                    f"{item_id:#06x} 同时是「{existing.name}」与「{name}」；"
-                    f"表中保留「{existing.name}」"
+                    f"{item_id:#06x} 同时是「{existing.name}」与「{name}」{fix}"
                 )
             skipped += 1
             continue

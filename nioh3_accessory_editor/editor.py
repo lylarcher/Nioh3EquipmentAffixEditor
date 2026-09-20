@@ -580,6 +580,80 @@ def apply_level_edits(
 
 
 @dataclass(frozen=True, slots=True)
+class PlusPlan:
+    """A ``+0x0A`` change for one record — the in-game A/B test writer.
+
+    The field's meaning is unverified.  This plan exists so the *user* can change
+    exactly one word, load the game, and see what the item card does; nothing else
+    in the record is touched.
+    """
+
+    record_index: int
+    offset: int
+    old_value: int
+    new_value: int
+
+    def describe(self) -> str:
+        return (f"记录 #{self.record_index}: +0x0A {self.old_value} → "
+                f"{self.new_value}（该字段含义未核实，仅供进游戏对照试验）")
+
+
+def plan_plus_edit(
+    decrypted: bytes,
+    record_index: int,
+    value: int,
+    *,
+    affix_db: AffixDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> PlusPlan:
+    """Validate one ``+0x0A`` change (0..30, the span the save actually uses)."""
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise EditorError("+0x0A 的值必须是整数")
+    if not 0 <= value <= records.MAX_RECORD_PLUS:
+        raise EditorError(
+            f"+0x0A 必须在 0..{records.MAX_RECORD_PLUS} 之间"
+            "（这是你存档里实测的取值范围；含义未核实，不接受范围外的值）"
+        )
+    if not isinstance(record_index, int) or isinstance(record_index, bool):
+        raise EditorError("记录索引必须是整数")
+    if known_ids is None and layout is None:
+        known_ids = accessory_catalog_ids(affix_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    if not 0 <= record_index < layout.slot_count:
+        raise EditorError(
+            f"记录索引必须位于 0..{layout.slot_count - 1}，实际 {record_index}"
+        )
+    record = records.read_item_record(decrypted, record_index, layout=layout)
+    if record is None:
+        raise EditorError(f"记录 #{record_index} 不存在或不是物品记录")
+    current = records.read_record_plus_candidate(record.record)
+    if current == value:
+        raise EditorError(f"记录 #{record_index} 的 +0x0A 已经是 {value}")
+    records.patch_record_plus(record.record, value)
+    return PlusPlan(record_index=record_index, offset=record.offset,
+                    old_value=current, new_value=value)
+
+
+def apply_plus_edits(
+    decrypted: bytes,
+    plans: tuple[PlusPlan, ...] | list[PlusPlan],
+) -> bytes:
+    """Return new save bytes with the planned ``+0x0A`` changes applied."""
+    if not plans:
+        raise EditorError("没有 +0x0A 修改计划")
+    output = bytearray(decrypted)
+    for plan in plans:
+        offset = plan.offset
+        record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        output[offset:offset + records.SCROLL_RECORD_SIZE] = (
+            records.patch_record_plus(record, plan.new_value)
+        )
+    return bytes(output)
+
+
+@dataclass(frozen=True, slots=True)
 class SoulCoreView:
     """User-facing view of one 魂核 (soul core) record.
 
