@@ -773,7 +773,7 @@ defined failure mode on a save that does not match:
 | measured fact | if another save disagrees |
 | --- | --- |
 | `type == 0` is the empty-slot marker (465 of 2000 slots) | no `type == 0` slot means "背包已满" and creation is refused |
-| 同名固定 = catalog flag **and** metadata byte-9 bit `0x40` (795/795) | the slot is simply not treated as fixed, so it stays editable; nothing is guessed |
+| 同名固定 = catalog flag **and** metadata byte-9 bit `0x40` (795/795) | a catalog-flagged slot is still refused; but where a save encoded 固定 differently, the byte evidence is unverified — check on a copy before trusting a slot the catalog calls editable |
 | `+0x1c`/`+0x20`/`+0x28` are unique per record (213/213) | create/改种类 copy them from a same-kind sample **in the same save**; no sample of that kind → refused with 「存档里没有 … 的样本」 |
 | level `+0x06` mirrors `+0x08`, cap 180 | mismatched mirrors or a higher cap → the edit is refused |
 | 0x5c5f = 八咫镜[武士] (from that save's fixed affix) | ids are game-global, so this holds for every save; it is the *only* item row derived from save evidence |
