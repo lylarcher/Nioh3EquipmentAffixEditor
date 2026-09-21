@@ -438,23 +438,14 @@ class AccessoryEditorApp(tk.Tk):
 
         right_scroll = ttk.Frame(mid)
         right = self._scrollable(right_scroll, width=540)
-        ttk.Label(right, text="词条槽（选择词条后点 应用修改）").pack(anchor=tk.W)
-        # 需求(4): 输入关键词 -> 列出全部匹配 -> 从匹配里选。
-        search_row = ttk.Frame(right)
-        search_row.pack(fill=tk.X, pady=(2, 2))
-        ttk.Label(search_row, text="关键词:").pack(side=tk.LEFT)
-        self.search_var = tk.StringVar(value="")
-        self.search_entry = ttk.Entry(search_row, textvariable=self.search_var,
-                                      width=28)
-        self.search_entry.pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_row, text="搜索词条",
-                   command=self.search_affixes).pack(side=tk.LEFT, padx=2)
-        ttk.Button(search_row, text="显示全部",
-                   command=self.show_all_affixes).pack(side=tk.LEFT, padx=2)
-        self.search_status_var = tk.StringVar(
-            value=f"共 {len(self.affix_db)} 条合法词条（可输入关键词缩小范围）")
-        ttk.Label(right, textvariable=self.search_status_var, foreground="#1a4f8f",
-                  wraplength=560, justify=tk.LEFT).pack(anchor=tk.W)
+        ttk.Label(right, text="词条槽（下拉选择；也可在某一槽里输入关键词，"
+                              "只缩小该槽的下拉列表）").pack(anchor=tk.W)
+        # 需求(4), 每槽独立：关键词过滤发生在**该槽自己的**下拉列表上。
+        self.search_status_var = tk.StringVar(value=self._affix_search_hint())
+        self.search_status_label = ttk.Label(
+            right, textvariable=self.search_status_var, foreground="#1a4f8f",
+            wraplength=520, justify=tk.LEFT)
+        self.search_status_label.pack(anchor=tk.W)
         slot_frame = ttk.Frame(right)
         slot_frame.pack(fill=tk.BOTH, expand=True)
         self.slot_combos: list[ttk.Combobox] = []
@@ -462,24 +453,34 @@ class AccessoryEditorApp(tk.Tk):
         self.value_vars: list[tk.StringVar] = []
         self.value_entries: list[ttk.Entry] = []
         for index in range(EFFECT_COUNT):
-            row = ttk.Frame(slot_frame)
-            row.pack(fill=tk.X, pady=1)
-            ttk.Label(row, text=f"槽{index + 1}:", width=5).pack(side=tk.LEFT)
-            combo = ttk.Combobox(row, state="readonly", width=54,
-                                 values=self.affix_db.labels())
+            # Two lines per slot: 槽N + the combo on top, 数值 + the hint below it.
+            # A single packed row used to push the 数值 box out of the visible area.
+            box = ttk.Frame(slot_frame)
+            box.pack(fill=tk.X, pady=(2, 4))
+            top = ttk.Frame(box)
+            top.pack(fill=tk.X)
+            ttk.Label(top, text=f"槽{index + 1}:", width=5).pack(side=tk.LEFT)
+            combo = ttk.Combobox(top, width=46, values=self.affix_db.labels())
             combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
             combo.bind("<<ComboboxSelected>>",
                        lambda _event, slot=index: self._on_slot_picked(slot))
+            combo.bind("<KeyRelease>",
+                       lambda _event, slot=index: self._on_slot_typed(slot))
+            combo.bind("<Return>",
+                       lambda _event, slot=index: self._on_slot_return(slot))
             self.slot_combos.append(combo)
             self.slot_labels.append(tk.StringVar(value=""))
-            ttk.Label(row, textvariable=self.slot_labels[index],
-                      foreground="#666666").pack(side=tk.LEFT)
-            ttk.Label(row, text="数值:").pack(side=tk.LEFT)
+            bottom = ttk.Frame(box)
+            bottom.pack(fill=tk.X)
+            ttk.Label(bottom, text="数值:", width=5).pack(side=tk.LEFT)
             value_var = tk.StringVar(value="")
-            entry = ttk.Entry(row, textvariable=value_var, width=7)
+            entry = ttk.Entry(bottom, textvariable=value_var, width=7)
             entry.pack(side=tk.LEFT)
             self.value_vars.append(value_var)
             self.value_entries.append(entry)
+            ttk.Label(bottom, textvariable=self.slot_labels[index],
+                      foreground="#666666", wraplength=360,
+                      justify=tk.LEFT).pack(side=tk.LEFT, padx=6)
 
         note = ttk.Label(
             right,
@@ -680,7 +681,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def _slot_choice(self, index: int):
         """The catalog entry behind one slot combo (``None`` for 空/未选)."""
-        text = self.slot_combos[index].get()
+        text = self._resolve_slot_text(index)
         if not text or text == EMPTY_LABEL:
             return None
         entry = self.affix_by_label.get(text)
@@ -716,37 +717,103 @@ class AccessoryEditorApp(tk.Tk):
         return next((view for view in self.accessory_views
                      if view.slot_index == self.selected_accessory), None)
 
-    def search_affixes(self) -> None:
-        """需求(4): list **every** match of the keyword, then let the user pick."""
-        keyword = self.search_var.get().strip()
-        matches = self.affix_db.search(keyword)
+    def _affix_search_hint(self) -> str:
+        return (f"共 {len(self.affix_db)} 条合法词条；在某一槽里输入关键词只缩小"
+                "该槽的下拉列表，别的槽不受影响")
+
+    def _filter_slot(self, index: int, keyword: str) -> int:
+        """Point **one** slot's dropdown at the matches; return how many there are.
+
+        This is deliberately per slot: the old 搜索词条 rewrote every slot's
+        ``values`` in one go, and a ``readonly`` ttk.Combobox silently blanks its
+        display when the current value leaves ``values`` — which is exactly how an
+        already-chosen affix (or a 固定 slot's suffixed label) vanished from the
+        boxes until the record was re-selected.
+        """
+        combo = self.slot_combos[index]
+        keyword = keyword.strip()
         if not keyword:
-            self.search_status_var.set("请输入关键词（例如 伤害、火抗性、灵力）")
-            return
-        if not matches:
+            combo.configure(values=self.affix_db.labels())
+            return len(self.affix_db)
+        matches = self.affix_db.search(keyword)
+        combo.configure(values=(EMPTY_LABEL,)
+                        + tuple(entry.label for entry in matches))
+        return len(matches)
+
+    def _on_slot_typed(self, index: int) -> None:
+        """Live, slot-local keyword filter: 需求(4) without touching other slots."""
+        typed = self.slot_combos[index].get()
+        if typed in self.affix_by_label or typed == EMPTY_LABEL:
+            return  # an exact pick from the list: leave the list alone
+        count = self._filter_slot(index, typed)
+        if not typed.strip():
+            self.search_status_var.set(self._affix_search_hint())
+        elif count:
             self.search_status_var.set(
-                f"「{keyword}」没有匹配到任何词条 —— 请换一个更短的关键词，"
-                "或直接写词条 id（如 0x0b32）")
+                f"槽{index + 1}: 「{typed.strip()}」匹配 {count} 条，"
+                "展开该槽的下拉列表选择（其它槽不受影响）")
+        else:
+            self.search_status_var.set(
+                f"槽{index + 1}: 「{typed.strip()}」没有匹配到任何词条 —— "
+                "换个更短的关键词，或直接写词条 id（如 0x0b32）")
+
+    def _on_slot_return(self, index: int) -> None:
+        """Enter takes the match when the typed keyword is unambiguous."""
+        typed = self.slot_combos[index].get().strip()
+        if not typed or typed == EMPTY_LABEL or typed in self.affix_by_label:
             return
-        self._show_affix_choices(matches)
-        self.search_status_var.set(
-            f"「{keyword}」匹配到 {len(matches)} 条，已全部列在下面 7 个词条框里，"
-            "请从框里选择要用的那一条")
+        matches = self.affix_db.search(typed)
+        if len(matches) == 1:
+            self.slot_combos[index].set(matches[0].label)
+            self._on_slot_picked(index)
+            self.slot_combos[index].configure(values=self.affix_db.labels())
+            self.search_status_var.set(
+                f"槽{index + 1}: 已选中 {matches[0].label}")
+        elif matches:
+            self._filter_slot(index, typed)
+            self.search_status_var.set(
+                f"槽{index + 1}: 「{typed}」匹配 {len(matches)} 条，"
+                "请从该槽的下拉列表里选一条")
+        else:
+            self._filter_slot(index, typed)
+            self.search_status_var.set(
+                f"槽{index + 1}: 「{typed}」没有匹配到任何词条")
 
-    def show_all_affixes(self) -> None:
-        self.search_var.set("")
-        self._show_affix_choices(None)
-        self.search_status_var.set(f"显示全部 {len(self.affix_db)} 条合法词条")
-
-    def _show_affix_choices(self, matches) -> None:
-        """Point every 词条 combo at ``matches`` (``None`` = the whole catalog)."""
-        labels = self.affix_db.labels() if matches is None else \
-            (EMPTY_LABEL,) + tuple(entry.label for entry in matches)
+    def _reset_affix_lists(self) -> None:
+        """Every slot gets the full catalog back (called when a record is picked)."""
         for combo in self.slot_combos:
-            current = combo.get()
-            combo.configure(values=labels)
-            if current and current not in labels and current not in self.affix_db.labels():
-                combo.set("")
+            combo.configure(values=self.affix_db.labels())
+        self.search_status_var.set(self._affix_search_hint())
+
+    @staticmethod
+    def _entry_from_id_text(text: str, db):
+        """Resolve a typed id like the CLI does: ``0x646b``, ``646b`` or ``25707``."""
+        for base in (16, 10):
+            try:
+                value = int(text, base)
+            except ValueError:
+                continue
+            entry = db.lookup(value)
+            if entry is not None:
+                return entry
+        return None
+
+    def _resolve_slot_text(self, index: int) -> str:
+        """The slot's text, resolved to a shipped label when it is unambiguous."""
+        typed = self.slot_combos[index].get().strip()
+        if not typed or typed == EMPTY_LABEL or typed in self.affix_by_label:
+            return typed
+        matches = self.affix_db.search(typed)
+        if len(matches) == 1:
+            self.slot_combos[index].set(matches[0].label)
+            return matches[0].label
+        by_id = self._entry_from_id_text(typed, self.affix_db)
+        if by_id is not None:
+            self.slot_combos[index].set(by_id.label)
+            return by_id.label
+        raise EditorError(
+            f"槽{index + 1} 的文本不是词条表里的词条：{typed!r}"
+            f"（关键词匹配 {len(matches)} 条，请从该槽下拉列表里选一条）")
 
     def _slot_value(self, index: int):
         """The 数值 the user typed for one slot, or ``None`` to use the catalog's."""
@@ -876,22 +943,13 @@ class AccessoryEditorApp(tk.Tk):
 
         right_scroll = ttk.Frame(mid)
         right = self._scrollable(right_scroll, width=540)
-        ttk.Label(right, text="魂核词条槽（选择词条后点 应用修改）").pack(anchor=tk.W)
-        soul_search = ttk.Frame(right)
-        soul_search.pack(fill=tk.X, pady=(2, 2))
-        ttk.Label(soul_search, text="关键词:").pack(side=tk.LEFT)
-        self.soul_search_var = tk.StringVar(value="")
-        ttk.Entry(soul_search, textvariable=self.soul_search_var,
-                  width=24).pack(side=tk.LEFT, padx=2)
-        ttk.Button(soul_search, text="搜索魂核词条",
-                   command=self.search_soul_affixes).pack(side=tk.LEFT, padx=2)
-        ttk.Button(soul_search, text="显示全部",
-                   command=self.show_all_soul_affixes).pack(side=tk.LEFT, padx=2)
-        self.soul_search_status_var = tk.StringVar(
-            value=f"共 {len(self.soul_db)} 条合法魂核词条（可输入关键词缩小范围）")
-        ttk.Label(right, textvariable=self.soul_search_status_var,
-                  foreground="#1a4f8f", wraplength=560,
-                  justify=tk.LEFT).pack(anchor=tk.W)
+        ttk.Label(right, text="魂核词条槽（下拉选择；也可在某一槽里输入关键词，"
+                              "只缩小该槽的下拉列表）").pack(anchor=tk.W)
+        self.soul_search_status_var = tk.StringVar(value=self._soul_search_hint())
+        self.soul_search_status_label = ttk.Label(
+            right, textvariable=self.soul_search_status_var, foreground="#1a4f8f",
+            wraplength=520, justify=tk.LEFT)
+        self.soul_search_status_label.pack(anchor=tk.W)
         slot_frame = ttk.Frame(right)
         slot_frame.pack(fill=tk.BOTH, expand=True)
         self.soul_slot_combos: list[ttk.Combobox] = []
@@ -904,22 +962,30 @@ class AccessoryEditorApp(tk.Tk):
         self.soul_item_choices = {entry.label: entry
                                   for entry in self.soul_item_db.all()}
         for index in range(EFFECT_COUNT):
-            row = ttk.Frame(slot_frame)
-            row.pack(fill=tk.X, pady=1)
-            ttk.Label(row, text=f"槽{index + 1}:", width=5).pack(side=tk.LEFT)
-            combo = ttk.Combobox(row, state="readonly", width=46,
-                                 values=self.soul_db.labels())
+            box = ttk.Frame(slot_frame)
+            box.pack(fill=tk.X, pady=(2, 4))
+            top = ttk.Frame(box)
+            top.pack(fill=tk.X)
+            ttk.Label(top, text=f"槽{index + 1}:", width=5).pack(side=tk.LEFT)
+            combo = ttk.Combobox(top, width=40, values=self.soul_db.labels())
             combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
             combo.bind("<<ComboboxSelected>>",
                        lambda _event, slot=index: self._on_soul_slot_picked(slot))
+            combo.bind("<KeyRelease>",
+                       lambda _event, slot=index: self._on_soul_slot_typed(slot))
+            combo.bind("<Return>",
+                       lambda _event, slot=index: self._on_soul_slot_return(slot))
             self.soul_slot_combos.append(combo)
             self.soul_slot_labels.append(tk.StringVar(value=""))
-            ttk.Label(row, textvariable=self.soul_slot_labels[index],
-                      foreground="#666666").pack(side=tk.LEFT)
-            ttk.Label(row, text="数值:").pack(side=tk.LEFT)
+            bottom = ttk.Frame(box)
+            bottom.pack(fill=tk.X)
+            ttk.Label(bottom, text="数值:", width=5).pack(side=tk.LEFT)
             value_var = tk.StringVar(value="")
-            ttk.Entry(row, textvariable=value_var, width=7).pack(side=tk.LEFT)
+            ttk.Entry(bottom, textvariable=value_var, width=7).pack(side=tk.LEFT)
             self.soul_value_vars.append(value_var)
+            ttk.Label(bottom, textvariable=self.soul_slot_labels[index],
+                      foreground="#666666", wraplength=360,
+                      justify=tk.LEFT).pack(side=tk.LEFT, padx=6)
         ttk.Button(right, text="应用魂核词条",
                    command=self.apply_soul_edits_to_selection).pack(anchor=tk.W,
                                                                    pady=(4, 0))
@@ -1048,33 +1114,82 @@ class AccessoryEditorApp(tk.Tk):
         self.soul_kind_filter_var.set(ALL_FILTER)
         self._refresh_soul_tree()
 
-    def search_soul_affixes(self) -> None:
-        """需求(4) for 魂核: list every match, then let the user pick."""
-        keyword = self.soul_search_var.get().strip()
-        matches = self.soul_db.search(keyword)
-        if not keyword:
-            self.soul_search_status_var.set("请输入关键词（例如 伤害、灵力）")
-            return
-        if not matches:
-            self.soul_search_status_var.set(
-                f"「{keyword}」没有匹配到任何魂核词条 —— 请换更短的关键词，"
-                "或直接写词条 id")
-            return
-        labels = (EMPTY_LABEL,) + tuple(entry.label for entry in matches)
-        for combo in self.soul_slot_combos:
-            combo.configure(values=labels)
-        self.soul_search_status_var.set(
-            f"「{keyword}」匹配到 {len(matches)} 条，已全部列在下面 7 个词条框里，"
-            "请从框里选择")
+    def _soul_search_hint(self) -> str:
+        return (f"共 {len(self.soul_db)} 条合法魂核词条；在某一槽里输入关键词只缩小"
+                "该槽的下拉列表，别的槽不受影响")
 
-    def show_all_soul_affixes(self) -> None:
-        self.soul_search_var.set("")
+    def _filter_soul_slot(self, index: int, keyword: str) -> int:
+        """Per-slot filter for 魂核 (same reasoning as :meth:`_filter_slot`)."""
+        combo = self.soul_slot_combos[index]
+        keyword = keyword.strip()
+        if not keyword:
+            combo.configure(values=self.soul_db.labels())
+            return len(self.soul_db)
+        matches = self.soul_db.search(keyword)
+        combo.configure(values=(EMPTY_LABEL,)
+                        + tuple(entry.label for entry in matches))
+        return len(matches)
+
+    def _on_soul_slot_typed(self, index: int) -> None:
+        typed = self.soul_slot_combos[index].get()
+        if typed in self.soul_by_label or typed == EMPTY_LABEL:
+            return
+        count = self._filter_soul_slot(index, typed)
+        if not typed.strip():
+            self.soul_search_status_var.set(self._soul_search_hint())
+        elif count:
+            self.soul_search_status_var.set(
+                f"槽{index + 1}: 「{typed.strip()}」匹配 {count} 条魂核词条，"
+                "展开该槽的下拉列表选择（其它槽不受影响）")
+        else:
+            self.soul_search_status_var.set(
+                f"槽{index + 1}: 「{typed.strip()}」没有匹配到任何魂核词条 —— "
+                "换个更短的关键词，或直接写词条 id")
+
+    def _on_soul_slot_return(self, index: int) -> None:
+        typed = self.soul_slot_combos[index].get().strip()
+        if not typed or typed == EMPTY_LABEL or typed in self.soul_by_label:
+            return
+        matches = self.soul_db.search(typed)
+        if len(matches) == 1:
+            self.soul_slot_combos[index].set(matches[0].label)
+            self._on_soul_slot_picked(index)
+            self.soul_slot_combos[index].configure(values=self.soul_db.labels())
+            self.soul_search_status_var.set(
+                f"槽{index + 1}: 已选中 {matches[0].label}")
+        elif matches:
+            self._filter_soul_slot(index, typed)
+            self.soul_search_status_var.set(
+                f"槽{index + 1}: 「{typed}」匹配 {len(matches)} 条，"
+                "请从该槽的下拉列表里选一条")
+        else:
+            self._filter_soul_slot(index, typed)
+            self.soul_search_status_var.set(
+                f"槽{index + 1}: 「{typed}」没有匹配到任何魂核词条")
+
+    def _reset_soul_lists(self) -> None:
         for combo in self.soul_slot_combos:
             combo.configure(values=self.soul_db.labels())
-        self.soul_search_status_var.set(f"显示全部 {len(self.soul_db)} 条魂核词条")
+        self.soul_search_status_var.set(self._soul_search_hint())
+
+    def _resolve_soul_slot_text(self, index: int) -> str:
+        typed = self.soul_slot_combos[index].get().strip()
+        if not typed or typed == EMPTY_LABEL or typed in self.soul_by_label:
+            return typed
+        matches = self.soul_db.search(typed)
+        if len(matches) == 1:
+            self.soul_slot_combos[index].set(matches[0].label)
+            return matches[0].label
+        by_id = self._entry_from_id_text(typed, self.soul_db)
+        if by_id is not None:
+            self.soul_slot_combos[index].set(by_id.label)
+            return by_id.label
+        raise EditorError(
+            f"槽{index + 1} 的文本不是魂核词条库里的词条：{typed!r}"
+            f"（关键词匹配 {len(matches)} 条，请从该槽下拉列表里选一条）")
 
     def _soul_slot_choice(self, index: int):
-        text = self.soul_slot_combos[index].get()
+        text = self._resolve_soul_slot_text(index)
         if not text or text == EMPTY_LABEL:
             return None
         entry = self.soul_by_label.get(text)
@@ -1161,12 +1276,13 @@ class AccessoryEditorApp(tk.Tk):
         view = self._selected_soul()
         if view is None:
             return
+        self._reset_soul_lists()
         self._fill_value_boxes(view, self.soul_db, self.soul_value_vars)
         for index, effect in enumerate(view.effects):
             if effect.is_empty:
                 self.soul_slot_combos[index].set(EMPTY_LABEL)
                 self.soul_slot_labels[index].set("")
-                self.soul_slot_combos[index].state(["!disabled", "readonly"])
+                self.soul_slot_combos[index].state(["!disabled"])
                 continue
             entry = self.soul_db.lookup(effect.effect_id)
             label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
@@ -1180,7 +1296,7 @@ class AccessoryEditorApp(tk.Tk):
             self.soul_slot_combos[index].set(label)
             self.soul_slot_labels[index].set(
                 f"数值={effect.value} 标识={effect.metadata:#010x}")
-            self.soul_slot_combos[index].state(["!disabled", "readonly"])
+            self.soul_slot_combos[index].state(["!disabled"])
         self.soul_level_var.set(str(view.level))
         self.soul_level_status_var.set(
             f"当前 Lv{view.level}（范围 1..{MAX_ITEM_LEVEL}）。"
@@ -1214,7 +1330,10 @@ class AccessoryEditorApp(tk.Tk):
 
     def _soul_edit_for(self, index: int, view: SoulCoreView) -> dict[str, int] | None:
         """Build the pending 魂核 edit for one slot (``None`` when unchanged)."""
-        text = self.soul_slot_combos[index].get()
+        try:
+            text = self._resolve_soul_slot_text(index)
+        except EditorError as error:
+            raise UiEditError(str(error)) from error
         current = view.effects[index]
         if text == EMPTY_LABEL:
             if current.is_empty:
@@ -1666,13 +1785,14 @@ class AccessoryEditorApp(tk.Tk):
         view = self._selected_view()
         if view is None:
             return
+        self._reset_affix_lists()
         grace = view.grace_slots(self.affix_db)
         self._fill_value_boxes(view, self.affix_db, self.value_vars)
         for index, effect in enumerate(view.effects):
             if effect.is_empty:
                 self.slot_combos[index].set(EMPTY_LABEL)
                 self.slot_labels[index].set("")
-                self.slot_combos[index].state(["!disabled", "readonly"])
+                self.slot_combos[index].state(["!disabled"])
                 continue
             entry = self.affix_db.lookup(effect.effect_id)
             if view.slot_is_fixed(index, self.affix_db):
@@ -1697,7 +1817,7 @@ class AccessoryEditorApp(tk.Tk):
             else:
                 label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
                 detail = f"数值={effect.value} 标识={effect.metadata:#010x}"
-                self.slot_combos[index].state(["!disabled", "readonly"])
+                self.slot_combos[index].state(["!disabled"])
             self.slot_combos[index].set(label)
             self.slot_labels[index].set(detail)
         self.item_var.set(
@@ -1781,19 +1901,28 @@ class AccessoryEditorApp(tk.Tk):
 
     def _on_slot_picked(self, index: int) -> None:
         text = self.slot_combos[index].get()
-        self.slot_labels[index].set("" if text == EMPTY_LABEL else text)
         # Picking another affix refreshes the 数值 box to *that* affix's own value:
         # the previous affix's number is meaningless for the new one (and would be
         # refused by the span gate anyway).  The user can then adjust it in range.
         entry = self.affix_by_label.get(text)
         if entry is None:
             self.value_vars[index].set("")
+            self.slot_labels[index].set(
+                "" if text == EMPTY_LABEL else f"{text} —— 不是表内词条，不会被写入")
         else:
             self.value_vars[index].set(str(entry.value))
+            self.slot_labels[index].set(
+                f"词条 {entry.effect_id:#06x}，合法数值 "
+                f"{entry.describe_value_range()}")
 
     def _on_soul_slot_picked(self, index: int) -> None:
-        entry = self.soul_by_label.get(self.soul_slot_combos[index].get())
+        text = self.soul_slot_combos[index].get()
+        entry = self.soul_by_label.get(text)
         self.soul_value_vars[index].set("" if entry is None else str(entry.value))
+        self.soul_slot_labels[index].set(
+            "" if entry is None and text == EMPTY_LABEL else
+            (f"词条 {entry.effect_id:#06x}，合法数值 {entry.describe_value_range()}"
+             if entry else f"{text} —— 不是表内词条，不会被写入"))
 
     def _pending_edit(self, index: int, current: EffectSlot) -> dict[str, int] | None:
         """Turn one slot widget into an edit, or ``None`` when nothing changed.
@@ -1805,7 +1934,10 @@ class AccessoryEditorApp(tk.Tk):
         is not confirmed against a real save, so the GUI never guesses at it
         (the CLI can still set it explicitly with ``--edit slot:id:value:meta``).
         """
-        text = self.slot_combos[index].get()
+        try:
+            text = self._resolve_slot_text(index)
+        except EditorError as error:
+            raise UiEditError(str(error)) from error
         if not text:
             return None
         if text == EMPTY_LABEL:

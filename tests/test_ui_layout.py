@@ -34,9 +34,21 @@ class LayoutTests(UiTestCase):
 
     def test_every_soul_editor_widget_exists(self) -> None:
         for attr in ("soul_slot_combos", "soul_level_entry", "soul_kind_combo",
-                     "create_soul_combo", "soul_search_var"):
+                     "create_soul_combo", "soul_search_status_var"):
             self.assertTrue(hasattr(self.app, attr), attr)
         self.assertEqual(len(self.app.soul_slot_combos), ui.EFFECT_COUNT)
+
+    def test_each_slot_row_can_be_searched_on_its_own(self) -> None:
+        """Per-slot combos + the 数值 box on the second line, so nothing is clipped."""
+        for attr in ("search_status_var", "search_status_label"):
+            self.assertTrue(hasattr(self.app, attr), attr)
+        self.assertFalse(hasattr(self.app, "search_var"),
+                         "全局关键词框已被每槽独立搜索取代")
+        for combo in self.app.slot_combos:
+            self.assertEqual(combo.winfo_manager(), "pack")
+            self.assertTrue(combo.cget("values"), "每槽都应有自己的下拉候选")
+        for entry in self.app.value_entries:
+            self.assertEqual(entry.winfo_manager(), "pack")
 
     def test_the_plus_row_sits_below_the_level_row(self) -> None:
         """The row that used to be clipped must be a real widget with a button."""
