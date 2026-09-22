@@ -968,6 +968,30 @@ def _validate_edit(edit: dict[str, int], affix_db: AffixDb) -> dict[str, int]:
     return edit
 
 
+def assert_single_grace(plans: tuple[EditPlan, ...], grace_db: GraceDb) -> None:
+    """Refuse a plan that would leave **two** 恩宠/套装 affixes in one record.
+
+    The game's own rule (confirmed in game): any item — 饰品, 魂核, … — carries at
+    most one 恩宠/套装 affix, so it must never be possible to end up with two.  Only
+    *newly introduced* pairs are refused, so a record that already looks unusual is
+    never blocked from an unrelated edit.
+    """
+    for plan in plans:
+        after = [slot for slot in plan.after if grace_db.describe(slot.effect_id)]
+        if len(after) <= 1:
+            continue
+        before = [slot for slot in plan.before if grace_db.describe(slot.effect_id)]
+        if len(after) <= len(before):
+            continue
+        names = "、".join(f"槽{slot.slot_index + 1} {grace_db.describe(slot.effect_id)}"
+                          for slot in after)
+        raise EditorError(
+            f"记录 #{plan.record_index} 会有 {len(after)} 个恩宠/套装词条（{names}）："
+            "一件物品只能有一个恩宠/套装词条。请先用【恩宠】栏替换，或先把其中一个"
+            "改成普通词条。"
+        )
+
+
 def plan_edits(
     decrypted: bytes,
     edits: tuple[dict[str, int], ...] | list[dict[str, int]],
@@ -975,6 +999,7 @@ def plan_edits(
     affix_db: AffixDb,
     known_ids: frozenset[int] | None = None,
     layout: records.InventoryLayout | None = None,
+    grace_db: GraceDb | None = None,
 ) -> tuple[EditPlan, ...]:
     """Validate edits against the live save and return per-record plans.
 
@@ -982,6 +1007,9 @@ def plan_edits(
     if the affix is outside the legal accessory table, or if the slot being
     changed holds the item's 同名固定 affix (that affix is part of what the item
     is — see :meth:`AccessoryView.slot_is_fixed`).
+
+    ``grace_db`` turns on the game's 恩宠/套装 rule: an edit that would leave two
+    恩宠/套装 affixes in one record is refused (:func:`assert_single_grace`).
 
     ``known_ids``/``layout`` must be the ones the caller *listed* the records
     with: a record index only means something relative to one located array, so
@@ -1059,6 +1087,8 @@ def plan_edits(
                 after=records.read_effect_slots(patched),
             )
         )
+    if grace_db is not None:
+        assert_single_grace(tuple(plans), grace_db)
     return tuple(plans)
 
 
@@ -1177,6 +1207,7 @@ def apply_edits(
     decrypted: bytes,
     edits: tuple[dict[str, int], ...] | list[dict[str, int]],
     *,
+    grace_db: GraceDb | None = None,
     affix_db: AffixDb,
     known_ids: frozenset[int] | None = None,
     layout: records.InventoryLayout | None = None,
@@ -1187,6 +1218,7 @@ def apply_edits(
     record index cannot resolve to a different item here than it did in the UI.
     """
     plans = plan_edits(decrypted, edits, affix_db=affix_db, known_ids=known_ids,
+                       grace_db=grace_db,
                        layout=layout)
     output = bytearray(decrypted)
     for plan in plans:

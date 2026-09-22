@@ -607,7 +607,7 @@ def cmd_edit(args: argparse.Namespace) -> int:
                                        soul_item_db=item_db,
                                        known_ids=known_ids, layout=layout)
         else:
-            patched = apply_edits(data, edits, affix_db=affix_db,
+            patched = apply_edits(data, edits, affix_db=affix_db, grace_db=grace_db,
                                   known_ids=known_ids, layout=layout)
 
     if args.soul:

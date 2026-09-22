@@ -650,6 +650,20 @@ class AccessoryEditorApp(tk.Tk):
         return any(effect.effect_id == entry.effect_id
                    for effect in view.occupied_effects)
 
+    def _grace_slot_indexes(self, view) -> frozenset[int]:
+        """Slots that really hold an 恩宠/套装 affix (id known to 词条总目录).
+
+        :meth:`AccessoryView.grace_slots` can only say "a trailing slot outside the
+        affix table", which also covers an unknown-but-ordinary affix such as 0x30fe.
+        Those must stay editable in their own slot — the 恩宠/套装 table is what makes
+        a slot a grace slot, so it is what decides here.
+        """
+        return frozenset(
+            index for index in view.grace_slots(self.affix_db)
+            if index < len(view.effects)
+            and self.grace_db.describe(view.effects[index].effect_id)
+        )
+
     def _cascade_filter_values(self) -> None:
         """需求(3): each filter offers only what the *other* one still allows.
 
@@ -1837,7 +1851,7 @@ class AccessoryEditorApp(tk.Tk):
         if view is None:
             return
         self._reset_affix_lists()
-        grace = view.grace_slots(self.affix_db)
+        grace = self._grace_slot_indexes(view)
         self._fill_value_boxes(view, self.affix_db, self.value_vars)
         for index, effect in enumerate(view.effects):
             self.value_entries[index].state(["!disabled"])
@@ -2049,7 +2063,7 @@ class AccessoryEditorApp(tk.Tk):
         if view is None:
             return ()
         edits: list[dict[str, int]] = []
-        grace_slots = view.grace_slots(self.affix_db)
+        grace_slots = self._grace_slot_indexes(view)
         for index in range(EFFECT_COUNT):
             if view.slot_is_fixed(index, self.affix_db) or index in grace_slots:
                 # 固定词条 is part of what the item is, and an 恩宠/套装 slot is named
@@ -2078,7 +2092,7 @@ class AccessoryEditorApp(tk.Tk):
         try:
             # Same catalog evidence and same located array as the listing, so a
             # record index cannot resolve to a different item while editing.
-            self.decrypted = apply_edits(self.decrypted, edits,
+            self.decrypted = apply_edits(self.decrypted, edits, grace_db=self.grace_db,
                                          affix_db=self.affix_db,
                                          known_ids=known_ids,
                                          layout=self.layout)

@@ -260,3 +260,17 @@ def forget_build_info_module() -> None:
     package = sys.modules.get("nioh3_accessory_editor")
     if package is not None and hasattr(package, "_buildinfo"):
         delattr(package, "_buildinfo")
+
+
+def load_catalog_affixes():
+    """The shipped 饰品 affix catalog (for tests that need the real table)."""
+    from nioh3_accessory_editor.affixdb import AffixDb
+
+    return AffixDb()
+
+
+def load_grace_table():
+    """The shipped 恩宠/套装 table, built exactly like the app builds it."""
+    from nioh3_accessory_editor.affixdb import GraceDb
+
+    return GraceDb.best_effort()
