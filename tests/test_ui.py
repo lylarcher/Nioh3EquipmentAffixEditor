@@ -897,7 +897,11 @@ class LevelAndKindWidgetTests(UiTestCase):
         self.app._on_accessory_selected()
         self.assertIn("固定，不可修改", self.app.slot_combos[0].get())
         self.assertIn("disabled", str(self.app.slot_combos[0].state()))
-        self.assertIn("禁止修改", self.app.slot_labels[0].get())
+        self.assertIn("都不能改", self.app.slot_labels[0].get())
+        # 固定词条's 数值 is not editable either: the box is disabled and shows the
+        # save's own value, so 应用修改 has nothing to complain about.
+        self.assertIn("disabled", str(self.app.value_entries[0].state()))
+        self.assertEqual(self.app.value_vars[0].get(), "20")
 
 
 class StaticMethodTests(unittest.TestCase):

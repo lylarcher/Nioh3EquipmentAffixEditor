@@ -800,6 +800,8 @@ class AccessoryEditorApp(tk.Tk):
 
     def _resolve_slot_text(self, index: int) -> str:
         """The slot's text, resolved to a shipped label when it is unambiguous."""
+        if "disabled" in self.slot_combos[index].state():
+            return ""  # a disabled box only ever shows a 固定 slot: nothing to edit
         typed = self.slot_combos[index].get().strip()
         if not typed or typed == EMPTY_LABEL or typed in self.affix_by_label:
             return typed
@@ -955,6 +957,7 @@ class AccessoryEditorApp(tk.Tk):
         self.soul_slot_combos: list[ttk.Combobox] = []
         self.soul_slot_labels: list[tk.StringVar] = []
         self.soul_value_vars: list[tk.StringVar] = []
+        self.soul_value_entries: list[ttk.Entry] = []
         # Label -> entry, exactly like the 饰品 rows: a combo only ever holds a
         # shipped label, so an unknown label means "not a legal affix" and is
         # skipped instead of being written.
@@ -981,7 +984,9 @@ class AccessoryEditorApp(tk.Tk):
             bottom.pack(fill=tk.X)
             ttk.Label(bottom, text="数值:", width=5).pack(side=tk.LEFT)
             value_var = tk.StringVar(value="")
-            ttk.Entry(bottom, textvariable=value_var, width=7).pack(side=tk.LEFT)
+            soul_entry = ttk.Entry(bottom, textvariable=value_var, width=7)
+            soul_entry.pack(side=tk.LEFT)
+            self.soul_value_entries.append(soul_entry)
             self.soul_value_vars.append(value_var)
             ttk.Label(bottom, textvariable=self.soul_slot_labels[index],
                       foreground="#666666", wraplength=360,
@@ -1058,6 +1063,8 @@ class AccessoryEditorApp(tk.Tk):
 
     def _set_soul_controls(self, enabled: bool) -> None:
         state = ["!disabled"] if enabled else ["disabled"]
+        for entry in self.soul_value_entries:
+            entry.state(state)
         self.soul_level_entry.state(state)
         self.soul_level_button.state(state)
         self.soul_kind_combo.state(["!disabled", "readonly"] if enabled
@@ -1076,6 +1083,8 @@ class AccessoryEditorApp(tk.Tk):
             for index in range(EFFECT_COUNT):
                 self.soul_slot_combos[index].set("")
                 self.soul_slot_labels[index].set("")
+                self.soul_value_vars[index].set("")
+                self.soul_value_entries[index].state(["disabled"])
             return
         known_ids = soul_catalog_ids(self.soul_db)
         try:
@@ -1173,6 +1182,8 @@ class AccessoryEditorApp(tk.Tk):
         self.soul_search_status_var.set(self._soul_search_hint())
 
     def _resolve_soul_slot_text(self, index: int) -> str:
+        if "disabled" in self.soul_slot_combos[index].state():
+            return ""
         typed = self.soul_slot_combos[index].get().strip()
         if not typed or typed == EMPTY_LABEL or typed in self.soul_by_label:
             return typed
@@ -1279,6 +1290,7 @@ class AccessoryEditorApp(tk.Tk):
         self._reset_soul_lists()
         self._fill_value_boxes(view, self.soul_db, self.soul_value_vars)
         for index, effect in enumerate(view.effects):
+            self.soul_value_entries[index].state(["!disabled"])
             if effect.is_empty:
                 self.soul_slot_combos[index].set(EMPTY_LABEL)
                 self.soul_slot_labels[index].set("")
@@ -1288,10 +1300,12 @@ class AccessoryEditorApp(tk.Tk):
             label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
             if view.slot_is_fixed(index, self.soul_db):
                 self.soul_slot_combos[index].set(f"{label}（固定，不可修改）")
+                self.soul_slot_combos[index].state(["disabled"])
+                self.soul_value_vars[index].set(str(effect.value))
+                self.soul_value_entries[index].state(["disabled"])
                 self.soul_slot_labels[index].set(
                     f"数值={effect.value} 标识={effect.metadata:#010x}"
-                    " ← 固定词条，禁止修改")
-                self.soul_slot_combos[index].state(["disabled"])
+                    " ← 固定词条，词条与数值都不能改")
                 continue
             self.soul_slot_combos[index].set(label)
             self.soul_slot_labels[index].set(
@@ -1363,6 +1377,8 @@ class AccessoryEditorApp(tk.Tk):
             return
         edits = []
         for index in range(EFFECT_COUNT):
+            if view.slot_is_fixed(index, self.soul_db):
+                continue  # 固定词条: see _current_edits
             try:
                 edit = self._soul_edit_for(index, view)
             except Exception as error:  # noqa: BLE001 - surfaced through the GUI
@@ -1789,6 +1805,7 @@ class AccessoryEditorApp(tk.Tk):
         grace = view.grace_slots(self.affix_db)
         self._fill_value_boxes(view, self.affix_db, self.value_vars)
         for index, effect in enumerate(view.effects):
+            self.value_entries[index].state(["!disabled"])
             if effect.is_empty:
                 self.slot_combos[index].set(EMPTY_LABEL)
                 self.slot_labels[index].set("")
@@ -1796,15 +1813,20 @@ class AccessoryEditorApp(tk.Tk):
                 continue
             entry = self.affix_db.lookup(effect.effect_id)
             if view.slot_is_fixed(index, self.affix_db):
-                # 同名固定词条: shown, but not editable — it is part of what the
-                # item is (and follows 种类 automatically when 种类 changes).
+                # 同名固定词条: shown, but neither the affix nor its 数值 is
+                # editable — it is part of what the item is (and follows 种类
+                # automatically when 种类 changes).  The 数值 box keeps showing the
+                # save's own value, greyed out and disabled, so it is obvious that
+                # there is nothing to type here.
                 label = (entry.label if entry
                          else f"{effect.effect_id:#06x} (非表内词条)")
                 self.slot_combos[index].set(f"{label}（固定，不可修改）")
+                self.slot_combos[index].state(["disabled"])
+                self.value_vars[index].set(str(effect.value))
+                self.value_entries[index].state(["disabled"])
                 self.slot_labels[index].set(
                     f"数值={effect.value} 标识={effect.metadata:#010x}"
-                    " ← 固定词条，禁止修改")
-                self.slot_combos[index].state(["disabled"])
+                    " ← 固定词条，词条与数值都不能改")
                 continue
             if index in grace:
                 # 恩宠 / 套装组合 effect: named from the workbook's 词条总目录 when
@@ -1982,6 +2004,10 @@ class AccessoryEditorApp(tk.Tk):
             return ()
         edits: list[dict[str, int]] = []
         for index in range(EFFECT_COUNT):
+            if view.slot_is_fixed(index, self.affix_db):
+                # 固定词条 is part of what the item is: never editable, never a
+                # pending edit (its combo label is not a catalog label on purpose).
+                continue
             try:
                 edit = self._pending_edit(index, view.effects[index])
             except UiEditError as error:
