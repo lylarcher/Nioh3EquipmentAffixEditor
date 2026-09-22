@@ -431,7 +431,8 @@ class AccessoryEditorApp(tk.Tk):
         self.tree.column("type", width=190, anchor=tk.W)
         self.tree.pack(fill=tk.BOTH, expand=True)
         self.tree.bind("<<TreeviewSelect>>", lambda _event: self._on_accessory_selected())
-        self.filter_status_var = tk.StringVar(value="")
+        self.filter_status_var = tk.StringVar(
+            value="筛选会级联：选了 种类 后，恩宠/套装 只列出该种类里出现过的；反之亦然")
         ttk.Label(left, textvariable=self.filter_status_var, foreground="#666666",
                   wraplength=380, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 0))
         mid.add(left, weight=2)
@@ -649,11 +650,44 @@ class AccessoryEditorApp(tk.Tk):
         return any(effect.effect_id == entry.effect_id
                    for effect in view.occupied_effects)
 
+    def _cascade_filter_values(self) -> None:
+        """需求(3): each filter offers only what the *other* one still allows.
+
+        With 种类 = 八尺琼勾玉[武士] picked, the 恩宠/套装 list shrinks to the graces
+        those records actually carry (and vice versa), so a combination that cannot
+        exist is not offered in the first place.  A current choice that is no longer
+        offered is kept in the list and left selected, so an empty result is explained
+        by the filter the user set instead of being silently reset.
+        """
+        if not hasattr(self, "kind_filter_combo") or not self.accessory_views:
+            return
+        kind_pool = [view for view in self.accessory_views
+                     if self._grace_filter_passes(view)]
+        grace_pool = [view for view in self.accessory_views
+                      if self._kind_filter_passes(view)]
+        kinds = {view.record_type for view in kind_pool}
+        graces = {effect.effect_id for view in grace_pool
+                  for effect in view.occupied_effects}
+        kind_values = [self.ALL_FILTER] + [
+            label for label, entry in self.item_choices.items() if entry.item_id in kinds]
+        grace_values = [self.ALL_FILTER] + [
+            name for name, entry in self.grace_choices.items()
+            if entry.effect_id in graces]
+        choice = self.kind_filter_var.get()
+        if choice and choice != self.ALL_FILTER and choice not in kind_values:
+            kind_values.append(f"{choice}（当前无记录）")
+        self.kind_filter_combo.configure(values=kind_values)
+        choice = self.grace_filter_var.get()
+        if choice and choice != self.ALL_FILTER and choice not in grace_values:
+            grace_values.append(f"{choice}（当前无记录）")
+        self.grace_filter_combo.configure(values=grace_values)
+
     def _refresh_accessory_tree(self) -> None:
         """Re-fill the tree from ``self.accessory_views`` honouring the filters."""
         self.tree.delete(*self.tree.get_children())
         shown = [view for view in self.accessory_views
                  if self._kind_filter_passes(view) and self._grace_filter_passes(view)]
+        self._cascade_filter_values()
         for view in shown:
             # 种类 = the item this record is, named from 物品总目录 when available
             # (display only).  Falls back to the raw id plus the catalog evidence.
@@ -719,7 +753,8 @@ class AccessoryEditorApp(tk.Tk):
 
     def _affix_search_hint(self) -> str:
         return (f"共 {len(self.affix_db)} 条合法词条；在某一槽里输入关键词只缩小"
-                "该槽的下拉列表，别的槽不受影响")
+                "该槽的下拉列表，别的槽不受影响。空格分隔多个关键词＝必须同时包含"
+                "（如「星 恢复」）")
 
     def _filter_slot(self, index: int, keyword: str) -> int:
         """Point **one** slot's dropdown at the matches; return how many there are.
@@ -1125,7 +1160,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def _soul_search_hint(self) -> str:
         return (f"共 {len(self.soul_db)} 条合法魂核词条；在某一槽里输入关键词只缩小"
-                "该槽的下拉列表，别的槽不受影响")
+                "该槽的下拉列表，别的槽不受影响。空格分隔多个关键词＝必须同时包含")
 
     def _filter_soul_slot(self, index: int, keyword: str) -> int:
         """Per-slot filter for 魂核 (same reasoning as :meth:`_filter_slot`)."""
@@ -1831,11 +1866,22 @@ class AccessoryEditorApp(tk.Tk):
             if index in grace:
                 # 恩宠 / 套装组合 effect: named from the workbook's 词条总目录 when
                 # the table is present, otherwise reported honestly as out-of-table.
+                # The name comes from 词条总目录, not from the affix catalog, so this
+                # box is *not* an affix picker: it is shown disabled (and skipped when
+                # edits are collected) and the 恩宠 combo below is the way to change
+                # it.  Leaving it enabled is what made 应用修改 complain that the text
+                # was "not in the affix table".
                 named = self.grace_db.describe(effect.effect_id)
                 label = (f"{effect.effect_id:#06x} {named}" if named
                          else f"{effect.effect_id:#06x} 恩宠/套装词条（表外）")
-                detail = (f"数值={effect.value} 标识={effect.metadata:#010x}"
-                          " ← 改选表内词条会把它替换掉")
+                self.slot_combos[index].set(f"{label}（用下方【恩宠】栏替换）")
+                self.slot_combos[index].state(["disabled"])
+                self.value_vars[index].set(str(effect.value))
+                self.value_entries[index].state(["disabled"])
+                self.slot_labels[index].set(
+                    f"数值={effect.value} 标识={effect.metadata:#010x}"
+                    " ← 恩宠/套装词条：用下方【恩宠】栏替换")
+                continue
             else:
                 label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
                 detail = f"数值={effect.value} 标识={effect.metadata:#010x}"
@@ -2003,10 +2049,12 @@ class AccessoryEditorApp(tk.Tk):
         if view is None:
             return ()
         edits: list[dict[str, int]] = []
+        grace_slots = view.grace_slots(self.affix_db)
         for index in range(EFFECT_COUNT):
-            if view.slot_is_fixed(index, self.affix_db):
-                # 固定词条 is part of what the item is: never editable, never a
-                # pending edit (its combo label is not a catalog label on purpose).
+            if view.slot_is_fixed(index, self.affix_db) or index in grace_slots:
+                # 固定词条 is part of what the item is, and an 恩宠/套装 slot is named
+                # from 词条总目录: neither is an affix choice, so neither is a pending
+                # edit here (the 恩宠 combo is how a grace gets replaced).
                 continue
             try:
                 edit = self._pending_edit(index, view.effects[index])

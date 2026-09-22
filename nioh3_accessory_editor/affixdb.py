@@ -239,24 +239,33 @@ class AffixDb:
         """Combo-box labels, prefixed with the empty-slot choice."""
         return ("(空)",) + tuple(entry.label for entry in self._entries)
 
-    def search(self, keyword: str, *, limit: int = 0) -> tuple[AffixEntry, ...]:
-        """Every entry whose name, category or id text contains ``keyword``.
-
-        Typing a keyword must never silently pick one affix: the caller shows the
-        whole match list (empty, one, or many) and the user chooses from it.  A
-        blank keyword matches nothing, so an empty search box can never be
-        mistaken for "everything".
-        """
-        text = keyword.strip().lower()
-        if not text:
-            return ()
-        compact = text.replace(" ", "")
-        matches = [
-            entry for entry in self._entries
-            if text in entry.name.lower() or text in entry.category.lower()
+    @staticmethod
+    def _token_matches(entry: AffixEntry, token: str) -> bool:
+        """One keyword against one entry: name, category, or id text."""
+        token = token.lower()
+        compact = token.replace(" ", "")
+        return bool(
+            token in entry.name.lower()
+            or token in entry.category.lower()
             or compact in entry.name.lower().replace(" ", "")
             or compact in f"{entry.effect_id:#x}".lower()
-        ]
+        )
+
+    def search(self, keyword: str, *, limit: int = 0) -> tuple[AffixEntry, ...]:
+        """Every entry matching **all** keywords, which are separated by spaces.
+
+        ``星 恢复`` therefore means "the name must contain 星 *and* 恢复", which is
+        how a list of 308 catalogued affixes stays usable.  A single keyword behaves
+        exactly as before.  Typing a keyword must never silently pick one affix: the
+        caller shows the whole match list (empty, one, or many) and the user chooses
+        from it.  A blank keyword matches nothing, so an empty search box can never
+        be mistaken for "everything".
+        """
+        tokens = [token for token in keyword.replace("\u3000", " ").split() if token]
+        if not tokens:
+            return ()
+        matches = [entry for entry in self._entries
+                   if all(self._token_matches(entry, token) for token in tokens)]
         if limit > 0:
             return tuple(matches[:limit])
         return tuple(matches)

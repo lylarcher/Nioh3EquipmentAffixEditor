@@ -17,10 +17,12 @@ from tests import support
 class _View:
     """Duck-typed view: enough for slot_is_fixed / effects / slot_index / level."""
 
-    def __init__(self, slot_index: int, effects, fixed: set[int]) -> None:
+    def __init__(self, slot_index: int, effects, fixed: set[int],
+                 grace: set[int] | None = None) -> None:
         self.slot_index = slot_index
         self.effects = effects
         self._fixed = fixed
+        self._grace = set() if grace is None else set(grace)
         self.level = 170
         self.level_mirror = 170
         self.rarity_name = "神器"
@@ -33,7 +35,7 @@ class _View:
         return index in self._fixed
 
     def grace_slots(self, affix_db=None) -> set[int]:
-        return set()
+        return set(self._grace)
 
     def describe_item(self, item_db=None) -> str:
         return "测试饰品"
@@ -150,3 +152,102 @@ class SupportRecordTests(unittest.TestCase):
 
 if __name__ == "__main__":  # pragma: no cover - manual runs only
     unittest.main()
+
+class GraceSlotTests(unittest.TestCase):
+    """恩宠/套装 slots are named from 词条总目录, so they are not affix pickers."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from unittest import mock
+
+        from nioh3_accessory_editor import ui
+
+        with mock.patch.object(ui.AccessoryEditorApp, "refresh_saves", lambda self: None):
+            cls.app = ui.AccessoryEditorApp()
+        cls.app.withdraw()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.app.destroy()
+
+    def test_a_grace_slot_is_disabled_and_never_an_edit(self) -> None:
+        from unittest import mock
+
+        from nioh3_accessory_editor import ui
+
+        grace = next(entry for entry in self.app.grace_db.all())
+        # Only the grace slot carries the grace effect; the rest is empty, like a
+        # real record (a grace id is not in the affix catalog, so a slot that is not
+        # reported as a grace slot could not name it).
+        effects = [_Effect(grace.effect_id, 0, 0)]
+        effects += [_Effect(ui.EMPTY_EFFECT_ID, 0)] * (ui.EFFECT_COUNT - 1)
+        view = _View(7, effects, set(), grace={0})
+        self.app.decrypted = b"\x00" * 16
+        self.app.selected_accessory = 7
+        self.app.accessory_views = [view]
+        self.app._selected_view = lambda: view
+        with mock.patch.object(self.app, "tree") as tree, \
+                mock.patch.object(ui.messagebox, "showwarning") as warned:
+            tree.selection.return_value = ("7",)
+            self.app._on_accessory_selected()
+            self.assertIn("用下方【恩宠】栏替换", self.app.slot_combos[0].get())
+            self.assertIn("disabled", str(self.app.slot_combos[0].state()))
+            self.assertIn("disabled", str(self.app.value_entries[0].state()))
+            self.assertEqual(self.app._current_edits(), ())
+            warned.assert_not_called()
+
+
+class AndKeywordTests(unittest.TestCase):
+    """空格分隔的关键词必须**同时**命中（AND），不是任一命中。"""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        from unittest import mock
+
+        from nioh3_accessory_editor import ui
+
+        with mock.patch.object(ui.AccessoryEditorApp, "refresh_saves", lambda self: None):
+            cls.app = ui.AccessoryEditorApp()
+        cls.app.withdraw()
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        cls.app.destroy()
+
+    def test_two_keywords_must_both_appear(self) -> None:
+        db = self.app.affix_db
+        both = db.search("星 恢复")
+        self.assertTrue(both)
+        for entry in both:
+            # Each keyword may hit the name *or* the 类别 (e.g. (星)体力 +38 sits in
+            # the 恢复体力 category), but every keyword must hit something.
+            haystack = f"{entry.name}{entry.category}".replace(" ", "")
+            self.assertIn("星", haystack)
+            self.assertIn("恢复", haystack)
+
+    def test_and_is_narrower_than_either_keyword_alone(self) -> None:
+        db = self.app.affix_db
+        star = db.search("星")
+        healing = db.search("恢复")
+        both = db.search("星 恢复")
+        self.assertLessEqual(len(both), min(len(star), len(healing)))
+        self.assertTrue(set(both) <= set(star))
+        self.assertTrue(set(both) <= set(healing))
+
+    def test_a_single_keyword_is_unchanged(self) -> None:
+        db = self.app.affix_db
+        self.assertTrue(db.search("火抗性"))
+        self.assertEqual(db.search("火抗性"), db.search(" 火抗性 "))
+
+    def test_a_blank_keyword_matches_nothing(self) -> None:
+        db = self.app.affix_db
+        self.assertEqual(db.search("   "), ())
+
+    def test_the_slot_filter_uses_the_same_rule(self) -> None:
+        self.app._reset_affix_lists()
+        self.app.slot_combos[0].set("星 恢复")
+        self.app._on_slot_typed(0)
+        values = self.app.slot_combos[0]["values"]
+        expected = self.app.affix_db.search("星 恢复")
+        self.assertEqual(len(values), len(expected) + 1)  # + (空)
+        self.assertIn("匹配", self.app.search_status_var.get())
