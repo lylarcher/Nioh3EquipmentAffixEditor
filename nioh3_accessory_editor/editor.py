@@ -16,12 +16,16 @@ after) anything is modified.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 from dataclasses import dataclass
 from pathlib import Path
 import struct
 
 from . import records
-from .affixdb import GRACE_KINDS, AffixDb, GraceDb, ItemDb
+from .affixdb import (  # noqa: PLC0415 - catalog helpers live here
+    GRACE_KINDS, AffixDb, AffixEntry, GraceDb, ItemDb, load_affix_category_codes,
+)
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .savefile import (
@@ -968,6 +972,59 @@ def _validate_edit(edit: dict[str, int], affix_db: AffixDb) -> dict[str, int]:
     return edit
 
 
+#: metadata (词条槽 +0x14) 的 bits 8..12 = 词条种类码，也就是游戏里词条前面那个
+#: 小图标。用参考存档实测得出（证据见 data/affix_categories.json 的 _evidence）。
+CATEGORY_CODE_MASK = 0x1F00
+
+_CATEGORY_CODES_CACHE: Mapping[str, int] | None = None
+
+
+def _category_codes() -> Mapping[str, int]:
+    """类别 → 种类码，来自随包的 data/affix_categories.json（只读一次）。"""
+    global _CATEGORY_CODES_CACHE
+    if _CATEGORY_CODES_CACHE is None:
+        _CATEGORY_CODES_CACHE = load_affix_category_codes()
+    return _CATEGORY_CODES_CACHE
+
+
+def affix_metadata(current: int, entry: AffixEntry | None,
+                   codes: Mapping[str, int] | None = None) -> int:
+    """Return ``current`` metadata with the 词条种类 bits set for ``entry``.
+
+    Replacing an affix used to change only the id and the value, so the game kept
+    drawing the *old* affix's icon (its 种类) — the reported bug.  The five bits at
+    ``0x1F00`` are that category code.  Everything else in the word (the 固定 flag
+    ``0x4000``, the ★ flag ``0x040000``, per-copy flags) is left exactly as it was,
+    because those bits were *not* measured to be 100% consistent per affix.
+
+    An unknown category (a catalog that grew past the measured table) raises instead
+    of writing an icon that contradicts the affix — fail closed.
+    """
+    if entry is None:
+        return current
+    table = _category_codes() if codes is None else codes
+    code = table.get(entry.category)
+    if code is None:
+        raise EditorError(
+            f"词条种类码未知：{entry.category}（{entry.name}）。为避免写出与新词条不符"
+            "的图标，已拒绝写入；请更新 data/affix_categories.json。"
+        )
+    return (current & ~CATEGORY_CODE_MASK) | code
+
+
+def _with_category_code(edit: dict[str, int], view, db: AffixDb) -> dict[str, int]:
+    """``edit`` plus its slot's metadata with the new affix's 种类 code applied.
+
+    A value-only edit (no ``effect_id``) leaves the metadata alone: the affix keeps
+    being the same one, so its icon must not move.
+    """
+    if "effect_id" not in edit:
+        return dict(edit)
+    slot = view.effects[edit["slot_index"]]
+    entry = db.lookup(edit["effect_id"])
+    return dict(edit, metadata=affix_metadata(slot.metadata, entry))
+
+
 def assert_single_grace(plans: tuple[EditPlan, ...], grace_db: GraceDb) -> None:
     """Refuse a plan that would leave **two** 恩宠/套装 affixes in one record.
 
@@ -1073,16 +1130,17 @@ def plan_edits(
         record = records.read_item_record(decrypted, record_index, layout=layout)
         if record is None:
             raise EditorError(f"记录 #{record_index} 无法解析为饰品记录")
+        prepared = [dict(_with_category_code(edit, view, affix_db),
+                         record_index=record_index)
+                    for edit in record_edits]
         patched = records.patch_effect_slots(
-            record.record,
-            [dict(edit, record_index=record_index) for edit in record_edits],
-            allow_record_index=True,
+            record.record, prepared, allow_record_index=True,
         )
         plans.append(
             EditPlan(
                 record_index=record_index,
                 offset=record.offset,
-                edits=tuple(record_edits),
+                edits=tuple(prepared),
                 before=view.effects,
                 after=records.read_effect_slots(patched),
             )
@@ -1154,15 +1212,17 @@ def plan_soul_edits(
         view = cores[record_index]
         offset = view.offset
         record = decrypted[offset:offset + records.SCROLL_RECORD_SIZE]
+        prepared = [dict(_with_category_code(edit, view, soul_db),
+                         record_index=record_index)
+                    for edit in record_edits]
         patched = records.patch_effect_slots(
-            record, [dict(edit, record_index=record_index) for edit in record_edits],
-            allow_record_index=True,
+            record, prepared, allow_record_index=True,
         )
         plans.append(
             EditPlan(
                 record_index=record_index,
                 offset=offset,
-                edits=tuple(record_edits),
+                edits=tuple(prepared),
                 before=view.effects,
                 after=records.read_effect_slots(patched),
             )

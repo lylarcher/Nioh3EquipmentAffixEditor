@@ -333,7 +333,10 @@ class EditCollectionTests(UiTestCase):
         # metadata is deliberately not touched: its bit layout is unverified.
         self.assertNotIn("metadata", edit)
 
-    def test_metadata_is_preserved_across_an_edit(self) -> None:
+    def test_metadata_is_preserved_except_the_category_bits(self) -> None:
+        """编辑词条时只改「词条种类」那 5 位（图标），其余位原样保留。"""
+        from nioh3_accessory_editor import editor
+
         plan = support.build_plain_save(
             records_by_slot={3: support.build_record(
                 record_type=0x4001,
@@ -349,7 +352,11 @@ class EditCollectionTests(UiTestCase):
         self.app.apply_edits_to_selection()
         view = next(v for v in self.app.accessory_views if v.slot_index == 3)
         self.assertEqual(view.effects[0].effect_id, other.effect_id)
-        self.assertEqual(view.effects[0].metadata, 0x3F)
+        codes = editor.load_affix_category_codes()
+        self.assertEqual(view.effects[0].metadata & editor.CATEGORY_CODE_MASK,
+                         codes[other.category])
+        self.assertEqual(view.effects[0].metadata & ~editor.CATEGORY_CODE_MASK,
+                         0x3F & ~editor.CATEGORY_CODE_MASK)
 
     def test_clearing_a_filled_slot_is_an_edit(self) -> None:
         self._select()

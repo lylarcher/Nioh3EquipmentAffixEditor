@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .paths import (
+    resource_root,
     default_catalog_path,
     default_grace_path,
     default_items_path,
@@ -53,6 +54,8 @@ __all__ = [
     "save_soul_catalog",
     "save_soul_item_catalog",
     "load_soul_catalog",
+    "load_affix_category_codes",
+    "DEFAULT_AFFIX_CATEGORIES",
     "load_soul_item_catalog",
     "DEFAULT_SOUL_CATALOG",
     "DEFAULT_SOUL_ITEM_CATALOG",
@@ -168,6 +171,32 @@ class AffixEntry:
     def label(self) -> str:
         """Stable combo-box label: ``0x0b32 (同名固定)守护灵技的伤害 +20.0%``."""
         return f"{self.effect_id:#06x} {self.name}"
+
+
+#: 词条种类码表：类别 → metadata bits 8..12（游戏里词条前面那个图标）。
+DEFAULT_AFFIX_CATEGORIES = resource_root() / "data" / "affix_categories.json"
+AFFIX_CATEGORY_SCHEMA = "nioh3-affix-categories/v1"
+
+
+def load_affix_category_codes(path: Path | None = None) -> dict[str, int]:
+    """类别 → 种类码，来自 ``data/affix_categories.json``（参考存档实测，0 冲突）。
+
+    改写词条时必须同时改写这几位，否则游戏里图标仍是旧词条的（用户报告的问题）。
+    """
+    target = DEFAULT_AFFIX_CATEGORIES if path is None else Path(path)
+    try:
+        payload = json.loads(target.read_text(encoding="utf-8"))
+        categories = payload["categories"]
+    except (OSError, KeyError, ValueError) as error:
+        raise AffixError(f"无法读取词条种类码表 {target}: {error}") from error
+    if not isinstance(categories, dict) or not categories:
+        raise AffixError(f"词条种类码表为空或格式错误: {target}")
+    codes: dict[str, int] = {}
+    for name, code in categories.items():
+        if not isinstance(code, int) or isinstance(code, bool):
+            raise AffixError(f"词条种类码必须是整数：{name}={code!r}")
+        codes[str(name)] = code
+    return codes
 
 
 class AffixDb:
