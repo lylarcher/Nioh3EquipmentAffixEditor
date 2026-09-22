@@ -3,9 +3,10 @@
 
 Layout produced by this spec:
 
-* ``Nioh3AccessoryEditor.exe`` -- one file, no ``.py`` sources, console
+* ``Nioh3AccessoryEditor.exe`` -- one file, no ``.py`` sources, windowed
   subsystem so ``--version`` / ``list`` / ``edit`` work from a terminal while the
-  GUI hides its own console when double-clicked (see ``ui._hide_own_console``).
+  no console window is created at all (the GUI needs none), and a CLI subcommand run
+from a terminal attaches to that terminal so its output stays visible.
   Explorer, the taskbar and the window title bar take their icon from
   ``assets/app.ico`` (all nine sizes are compiled into the PE resources).
 * Inside it: the Python runtime, ``nioh3_accessory_editor`` (including the
@@ -80,7 +81,10 @@ exe = EXE(  # noqa: F821
     upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    #: Windowed subsystem: a frozen build must never open a console window the
+    #: user has to look at (or can accidentally kill).  The CLI path attaches to
+    #: the terminal that launched it instead — see console.attach_parent_console().
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

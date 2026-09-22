@@ -19,7 +19,7 @@ from pathlib import Path
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from nioh3_accessory_editor import bootstrap
+from nioh3_accessory_editor import bootstrap, console
 
 #: Any of these as the first argument means "run the CLI, not the GUI".
 #: Kept in sync with the CLI subcommands by tests/test_entrypoints.py.
@@ -33,6 +33,13 @@ CLI_COMMANDS = frozenset(
 
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
+    wants_cli = bool(args) and args[0] in CLI_COMMANDS
+
+    # The frozen build is windowed (no console window of its own).  A CLI run is
+    # started *from* a terminal, so borrow that terminal for stdout/stderr; the GUI
+    # never attaches, so closing any console can never take it down.
+    if wants_cli:
+        console.attach_parent_console()
 
     # A frozen build carries its side-by-side files inside the executable;
     # unpack them next to it before importing anything that reads them.
@@ -40,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from nioh3_accessory_editor import cli  # noqa: PLC0415 - after bootstrap
 
-    if args and args[0] in CLI_COMMANDS:
+    if wants_cli:
         return cli.main(args)
 
     from nioh3_accessory_editor import ui  # noqa: PLC0415 - GUI is optional

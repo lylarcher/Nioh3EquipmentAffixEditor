@@ -257,9 +257,14 @@ class SpecContractTests(unittest.TestCase):
         self.assertIn("app-payload.zip", self.source)
         self.assertIn("datas=", self.source)
 
-    def test_keeps_the_console_subsystem(self) -> None:
-        """CLI subcommands need stdout; the GUI hides its own console."""
-        self.assertIn("console=True", self.source)
+    def test_uses_the_windowed_subsystem(self) -> None:
+        """No console window may be created (the GUI needs none).
+
+        CLI output still works because the entry point borrows the terminal that
+        started the process — see console.attach_parent_console().
+        """
+        self.assertIn("console=False", self.source)
+        self.assertNotIn("console=True", self.source)
 
     def test_includes_the_generated_build_identity(self) -> None:
         self.assertIn("nioh3_accessory_editor._buildinfo", self.source)
