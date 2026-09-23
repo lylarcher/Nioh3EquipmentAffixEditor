@@ -25,6 +25,7 @@ import struct
 from . import records
 from .affixdb import (  # noqa: PLC0415 - catalog helpers live here
     GRACE_KINDS, AffixDb, AffixEntry, GraceDb, ItemDb, load_affix_category_codes,
+    load_soul_catalog, load_soul_item_catalog,
 )
 from . import equipmentdb
 from .checksum import patch_user_checksum, verify_user_checksum
@@ -83,6 +84,7 @@ __all__ = [
     "list_armor",
     "list_backups",
     "list_equipment",
+    "list_items",
     "list_soul_cores",
     "list_weapons",
     "open_save",
@@ -1262,6 +1264,81 @@ def list_weapons(decrypted: bytes, **kwargs) -> tuple[EquipmentView, ...]:
 def list_armor(decrypted: bytes, **kwargs) -> tuple[EquipmentView, ...]:
     """只列防具。"""
     return list_equipment(decrypted, big="防具", **kwargs)
+
+
+# --------------------------------------------------------------------------
+# 统一列举入口（P2c）：一个 kind 转发到上面各自的列举函数
+# --------------------------------------------------------------------------
+
+#: :func:`list_items` 支持的 ``kind``；转发目标见该函数的说明。四个大类各有自己的
+#: 识别事实，所以这里是**白名单**：别的写法一律报错，不会退化成"列出全部"。
+ITEM_LIST_KINDS = ("武器", "防具", "饰品", "魂核")
+
+#: 魂核两张表的懒加载缓存：``list_items(kind="魂核")`` 没拿到注入的表时用随包的那两张
+#: （调用方仍可用 ``soul_db`` / ``soul_item_db`` 注入自己的表）。
+_SOUL_DB_CACHE: AffixDb | None = None
+_SOUL_ITEM_DB_CACHE: ItemDb | None = None
+
+
+def _default_soul_db() -> AffixDb:
+    """随包的魂核词条表（缓存：解析一次）。"""
+    global _SOUL_DB_CACHE
+    if _SOUL_DB_CACHE is None:
+        _SOUL_DB_CACHE = AffixDb(load_soul_catalog())
+    return _SOUL_DB_CACHE
+
+
+def _default_soul_item_db() -> ItemDb:
+    """随包的魂核种类表（缓存：解析一次）。"""
+    global _SOUL_ITEM_DB_CACHE
+    if _SOUL_ITEM_DB_CACHE is None:
+        _SOUL_ITEM_DB_CACHE = ItemDb(load_soul_item_catalog())
+    return _SOUL_ITEM_DB_CACHE
+
+
+def list_items(
+    decrypted: bytes,
+    *,
+    kind: str = "",
+    layout: records.InventoryLayout | None = None,
+    known_ids: frozenset[int] | None = None,
+    item_db: EquipmentItemDb | None = None,
+    soul_db: AffixDb | None = None,
+    soul_item_db: ItemDb | None = None,
+) -> tuple[AccessoryView | SoulCoreView | EquipmentView, ...]:
+    """按 ``kind`` 列出存档里的记录；**这个函数自己不解析任何记录**，只做转发。
+
+    四个 ``kind``（见 :data:`ITEM_LIST_KINDS`）与它们各自的既有入口：
+
+    * ``武器`` / ``防具`` -> :func:`list_equipment`（``big=kind``；等价于
+      :func:`list_weapons` / :func:`list_armor`，只是这里把 ``big`` 写在转发处），
+    * ``饰品`` -> :func:`list_accessories`（**薄封装**：``layout`` / ``known_ids``
+      原样传下去，不补也不改任何参数，所以它的行为与直接调用完全一致），
+    * ``魂核`` -> :func:`list_soul_cores`（``soul_db`` / ``soul_item_db`` 缺省时用随包的
+      魂核两张表，与 CLI 的 ``souls`` 子命令同一份数据）。
+
+    四个入口的参数名已经对齐，所以这里的每个参数都按名字转发；缺省的参数（``None``）
+    原样传下去，由被转发的函数用自己的默认值处理 —— 例如 ``layout=None`` 仍然是
+    "自己定位记录表"。``kind`` 不是这四个之一（包括空串）时抛 :class:`EditorError`：
+    四个大类的识别事实各不相同，猜一个只会让「这件是什么」变成猜测。
+    """
+    if kind == "饰品":
+        return list_accessories(decrypted, layout=layout, known_ids=known_ids)
+    if kind == "武器" or kind == "防具":
+        return list_equipment(decrypted, big=kind, item_db=item_db,
+                              layout=layout, known_ids=known_ids)
+    if kind == "魂核":
+        return list_soul_cores(
+            decrypted,
+            soul_db=_default_soul_db() if soul_db is None else soul_db,
+            soul_item_db=(_default_soul_item_db() if soul_item_db is None
+                          else soul_item_db),
+            layout=layout,
+            known_ids=known_ids,
+        )
+    raise EditorError(
+        f"未知的列举大类 {kind!r}；可选：{'、'.join(ITEM_LIST_KINDS)}"
+    )
 
 
 # --------------------------------------------------------------------------

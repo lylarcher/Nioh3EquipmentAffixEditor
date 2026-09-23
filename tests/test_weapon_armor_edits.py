@@ -1,5 +1,12 @@
 """P2：武器 / 防具记录的列出，以及两条新规则。
 
+**覆盖范围**：本模块只测武器 / 防具这两条线 —— `list_equipment()`（含
+`list_weapons()` / `list_armor()` 两个包装）与 `EquipmentView` / `EquipmentSlotView`
+的槽位明细，以及规则 1（装备种类标签必须匹配）与规则 2（等级 / +値 上限）在这些记录
+上的正反例、边界与「历史状态不拦」的口径。其它入口各有自己的测试模块：统一的列举入口
+`editor.list_items()` 见 `tests/test_list_items.py`，「装备种类」标签的合并表
+`equipmentdb.load_equipment_tags()` 见 `tests/test_equipment_tags.py`，这里不重复测。
+
 **规则 1「装备种类标签必须匹配」**：词条自带的 ``equipment_tags`` 按 ``/`` 拆成
 token 集合，与这件装备可接受的 token 集合（大类名 ``武器``/``防具`` + 小类
 （武器的具体类型 ``弓``/``火枪``/``大炮``、防具的部位 ``手臂``…）+ 武器的近战/远程

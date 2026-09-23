@@ -10,7 +10,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -256,8 +256,11 @@ def split_equipment_tags(label: str) -> tuple[str, ...]:
                  if part.strip())
 
 
-def load_equipment_tags(path: Path) -> dict[int, tuple[str, ...]]:
-    """读一张 P1 词条表的 ``equipment_tags``：词条 id -> 标签 token。
+def _read_equipment_tags(path: Path) -> dict[int, tuple[str, ...]]:
+    """读一张 P1 词条表的 ``equipment_tags``：词条 id -> 标签 token（**保序**）。
+
+    这是唯一的单文件解析，:class:`EquipmentPool`（:func:`load_pool`）与对外的
+    :func:`load_equipment_tags` 都用它 —— 标签只解析一份，两个入口不会各写一套。
 
     标签说的是「这条词条能出在哪些装备上」，与词条的 类别（``category``，例如
     造成伤害）是两件事，所以它不能替换 ``category``，只能作为**额外的**写入门槛。
@@ -323,11 +326,11 @@ def load_pool(key: str, path: Path | None = None) -> EquipmentPool:
     target = POOL_PATHS[key] if path is None else path
     if path is not None:
         return EquipmentPool(key=key, db=AffixDb.from_file(target),
-                             tags=load_equipment_tags(target), path=target)
+                             tags=_read_equipment_tags(target), path=target)
     cached = _POOL_CACHE.get(key)
     if cached is None:
         cached = EquipmentPool(key=key, db=AffixDb.from_file(target),
-                               tags=load_equipment_tags(target), path=target)
+                               tags=_read_equipment_tags(target), path=target)
         _POOL_CACHE[key] = cached
     return cached
 
@@ -365,6 +368,87 @@ def acceptable_equipment_tokens(item: "EquipmentItem") -> frozenset[str]:
     if item.big == "武器":
         tokens.add("近战" if pool_of_item(item) == "melee" else "远程")
     return frozenset(tokens)
+
+
+# --------------------------------------------------------------------------
+# 「装备种类」标签的合并表（对外）：三池合并成一份 id -> token 集合
+# --------------------------------------------------------------------------
+
+
+class EquipmentTagTable(dict):
+    """``load_equipment_tags()`` 的结果：词条 id -> 「装备种类」token 集合。
+
+    就是普通的 ``dict``（``isinstance(table, dict)`` 成立、能直接和 ``{}`` 比较、
+    能遍历），只多一条约定：**查不到的 id 一律得到空集合，不抛 ``KeyError``**
+    （``table[id]`` 与 ``table.get(id)`` 都是）。空集合 = 「没有标签」—— 与
+    :meth:`EquipmentPool.tags_of` 同一个口径：调用方据此 fail closed，绝不把
+    「没有标签」当成「哪儿都能写」。
+    """
+
+    __slots__ = ()
+
+    def __missing__(self, effect_id: int) -> frozenset[str]:
+        return frozenset()
+
+    def get(self, effect_id: int,
+            default: frozenset[str] | None = None) -> frozenset[str]:
+        """没给默认值时与 ``table[id]`` 一致：查不到得到空集合，而不是 ``None``。"""
+        if default is None:
+            return self[effect_id]
+        return dict.get(self, effect_id, default)
+
+
+def _pool_keys(include: str | Iterable[str] | None) -> tuple[str, ...]:
+    """把 ``include=`` 归一成池键元组；缺省 = 全部三池（顺序与 ``POOL_PATHS`` 一致）。"""
+    if include is None:
+        return tuple(POOL_PATHS)
+    keys = (include,) if isinstance(include, str) else tuple(include)
+    if not keys:
+        raise AffixError("include= 至少要指定一个词条池：melee / ranged / armor")
+    for key in keys:
+        if key not in POOL_PATHS:
+            raise AffixError(f"未知的词条池 {key!r}；可选：{' / '.join(POOL_PATHS)}")
+    return keys
+
+
+def load_equipment_tags(
+    path: Path | None = None,
+    *,
+    include: str | Iterable[str] | None = None,
+) -> dict[int, frozenset[str]]:
+    """读「装备种类」标签，按词条 id **合并**成一份 id -> token 集合表。
+
+    * **默认**（不带参数）：读三张随包词条表 —— ``data/melee_weapon_affixes.json``、
+      ``data/ranged_weapon_affixes.json``、``data/armor_affixes.json``（近战武器 /
+      远程武器 / 防具三个池）—— 并合并成一份；
+    * ``include=``：只取指定的池（池键 ``"melee"`` / ``"ranged"`` / ``"armor"``，
+      单个字符串或它们的序列），别的写法报 :class:`AffixError`；
+    * ``path=``：只读这一个文件（测试 / 工具指向自己的表时用），与 ``include=`` 互斥。
+
+    **合并规则**：同一个 id 出现在多张表里时取**并集** —— 随包数据里就有这种行
+    （近战表标 ``近战``、防具表标 ``手臂`` 的同一个 id），取并集才是「这几张表里它能
+    出在的全部装备」。拆分用 :func:`split_equipment_tags`：``"近战/手臂"`` ->
+    ``{"近战", "手臂"}``，去空白、去空 token。
+
+    没有标签的词条 id、以及表外的 id 一律得到**空集合**而不是报错（见
+    :class:`EquipmentTagTable`）：空集合 = 没有标签，调用方据此 fail closed。
+
+    解析只有一份：单文件解析复用 :func:`_read_equipment_tags`（``EquipmentPool``
+    用的同一个函数）；默认路径直接命中 :func:`load_pool` 的缓存，不重复读文件。
+    """
+    if path is not None and include is not None:
+        raise AffixError(
+            f"path= 与 include= 只能给一个：path 读单个文件 {path}，include 选词条池")
+    sources: tuple[Mapping[int, tuple[str, ...]], ...]
+    if path is not None:
+        sources = (_read_equipment_tags(Path(path)),)
+    else:
+        sources = tuple(load_pool(key).tags for key in _pool_keys(include))
+    merged: dict[int, frozenset[str]] = {}
+    for tags in sources:
+        for effect_id, tokens in tags.items():
+            merged[effect_id] = merged.get(effect_id, frozenset()) | frozenset(tokens)
+    return EquipmentTagTable(merged)
 
 
 # --------------------------------------------------------------------------
