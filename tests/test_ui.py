@@ -355,8 +355,12 @@ class EditCollectionTests(UiTestCase):
         codes = editor.load_affix_category_codes()
         self.assertEqual(view.effects[0].metadata & editor.CATEGORY_CODE_MASK,
                          codes[other.category])
-        self.assertEqual(view.effects[0].metadata & ~editor.CATEGORY_CODE_MASK,
-                         0x3F & ~editor.CATEGORY_CODE_MASK)
+        # ★ 位随词条走（见 tests/test_star_rule.py），其余位保留。
+        self.assertEqual(
+            view.effects[0].metadata & ~editor.CATEGORY_CODE_MASK & ~editor.STAR_BIT,
+            0x3F & ~editor.CATEGORY_CODE_MASK & ~editor.STAR_BIT)
+        self.assertEqual(bool(view.effects[0].metadata & editor.STAR_BIT),
+                         other.is_star)
 
     def test_clearing_a_filled_slot_is_an_edit(self) -> None:
         self._select()

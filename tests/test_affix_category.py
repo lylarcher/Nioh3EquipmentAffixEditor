@@ -72,8 +72,11 @@ class MetadataRewriteTests(unittest.TestCase):
         before = 0x0026_4C7C  # 固定位 (0x4000) + byte11 的 0x26 + 低位标志
         after = editor.affix_metadata(before, entry, self.codes)
         self.assertEqual(after & 0x4000, 0x4000)          # 固定保留
-        self.assertEqual(after & 0x0026_0000, 0x0026_0000)  # byte11 保留
+        # 0x0026_0000 里也含 ★ 位（byte10 bit2 = 0x040000），它随词条走，故排除：
+        self.assertEqual(after & 0x0022_0000, 0x0022_0000)  # byte10/11 其余位保留
         self.assertEqual(after & 0x0000_007C, 0x0000_007C)  # byte8 保留
+        # ★ 位是随词条走的派生标志位（见 tests/test_star_rule.py），不在这条断言里。
+        self.assertEqual(bool(after & editor.STAR_BIT), entry.is_star)
 
     def test_an_unknown_category_is_refused(self) -> None:
         entry = self._entry("恢复体力")

@@ -178,6 +178,9 @@ class AccessoryView:
         effect = self.effects[slot_index]
         if effect.is_empty:
             return False
+        if _star_rules_out_fixed(effect, affix_db, self.record_type):
+            # 除绘卷外，★ 词条不可能是固定词条，一律可改（用户规则）。
+            return False
         entry = affix_db.lookup(effect.effect_id)
         if entry is not None:
             if entry.is_fixed:
@@ -724,6 +727,9 @@ class SoulCoreView:
         effect = self.effects[slot_index]
         if effect.is_empty:
             return False
+        if _star_rules_out_fixed(effect, soul_db, self.record_type):
+            # 绘卷不在魂核/饰品这两条路径上；这里同样让 ★ 一律可改。
+            return False
         entry = soul_db.lookup(effect.effect_id)
         if entry is not None and entry.is_fixed:
             return True
@@ -1005,9 +1011,11 @@ def affix_metadata(current: int, entry: AffixEntry | None,
 
     Replacing an affix used to change only the id and the value, so the game kept
     drawing the *old* affix's icon (its 种类) — the reported bug.  The five bits at
-    ``0x1F00`` are that category code.  Everything else in the word (the 固定 flag
-    ``0x4000``, the ★ flag ``0x040000``, per-copy flags) is left exactly as it was,
-    because those bits were *not* measured to be 100% consistent per affix.
+    ``0x1F00`` are that category code, and the ★ flag ``0x040000`` is the affix's own
+    star marker (measured to agree with the catalog's ★ on 188/189 slots), so both
+    travel with the new affix: a ★ affix sets the bit, an ordinary affix clears it.
+    Every other bit (the 固定 flag ``0x4000``, per-copy flags, byte 11) is left exactly
+    as it was, because those were *not* measured to be 100% consistent per affix.
 
     An unknown category (a catalog that grew past the measured table) raises instead
     of writing an icon that contradicts the affix — fail closed.
@@ -1021,7 +1029,8 @@ def affix_metadata(current: int, entry: AffixEntry | None,
             f"词条种类码未知：{entry.category}（{entry.name}）。为避免写出与新词条不符"
             "的图标，已拒绝写入；请更新 data/affix_categories.json。"
         )
-    return (current & ~CATEGORY_CODE_MASK) | code
+    star = STAR_BIT if entry.is_star else 0
+    return (current & ~CATEGORY_CODE_MASK & ~STAR_BIT) | code | star
 
 
 def _with_category_code(edit: dict[str, int], view, db: AffixDb) -> dict[str, int]:
@@ -1040,14 +1049,40 @@ def _with_category_code(edit: dict[str, int], view, db: AffixDb) -> dict[str, in
 #: 「其他」种类允许重复出现；其余种类每个物品最多一个词条。
 CATEGORY_OTHER = "其他"
 
+#: 词条 metadata 的 ★（星号）位 —— 与词条表里的 ★（``FLAG_STAR``）对应，
+#: 参考存档里 188/189 一致，所以写入时按新词条同步设置/清除。
+STAR_BIT = 0x040000
+
+#: 绘卷记录类型。``records.SCROLL_TYPES`` 含 0x0000（「类型未知」），
+#: 不能当作「这是绘卷」的证据，所以这里去掉它：只有确定是绘卷的记录，
+#: 才允许出现「★ 同时也是固定词条」（用户规则）。
+SCROLL_RECORD_TYPES = frozenset(records.SCROLL_TYPES - {0x0000})
+
+
+def slot_is_star_affix(effect: records.EffectSlot, affix_db: AffixDb) -> bool:
+    """★ 词条：词条表标了 ★，或者存档的 metadata 带 ★ 位。"""
+    entry = affix_db.lookup(effect.effect_id)
+    if entry is not None and entry.is_star:
+        return True
+    return bool(effect.metadata & STAR_BIT)
+
+
+def _star_rules_out_fixed(effect: records.EffectSlot, affix_db: AffixDb,
+                          record_type: int | None) -> bool:
+    """★ 词条永远不是固定词条 —— 只有绘卷是例外（用户规则）。"""
+    if record_type is not None and record_type in SCROLL_RECORD_TYPES:
+        return False
+    return slot_is_star_affix(effect, affix_db)
+
 
 def _slot_is_star(slot: records.EffectSlot, db: AffixDb) -> bool:
-    entry = db.lookup(slot.effect_id)
-    return bool(entry is not None and entry.is_star)
+    return slot_is_star_affix(slot, db)
 
 
 def _slot_is_fixed(slot: records.EffectSlot, db: AffixDb) -> bool:
-    """固定词条的同一个口径：目录标记或存档 metadata 的固定位。"""
+    """固定词条的同一个口径：目录标记或存档 metadata 的固定位（★ 除外）。"""
+    if slot_is_star_affix(slot, db):
+        return False  # 除绘卷外，★ 不可能是固定词条
     entry = db.lookup(slot.effect_id)
     if entry is not None and entry.is_fixed:
         return True
