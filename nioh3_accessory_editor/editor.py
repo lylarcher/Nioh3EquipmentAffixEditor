@@ -26,8 +26,10 @@ from . import records
 from .affixdb import (  # noqa: PLC0415 - catalog helpers live here
     GRACE_KINDS, AffixDb, AffixEntry, GraceDb, ItemDb, load_affix_category_codes,
 )
+from . import equipmentdb
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
+from .equipmentdb import EquipmentItem, EquipmentItemDb, EquipmentPool
 from .savefile import (
     UNCOVERED_TAIL_BYTES,
     BackupEntry,
@@ -46,10 +48,13 @@ from .savefile import (
 
 __all__ = [
     "AccessoryView",
+    "ClassLimits",
     "CreationError",
     "CreationPlan",
     "EditPlan",
     "EditorError",
+    "EquipmentSlotView",
+    "EquipmentView",
     "FreeSlotReport",
     "KindSample",
     "KindSwapError",
@@ -61,21 +66,29 @@ __all__ = [
     "SoulCoreView",
     "apply_creations",
     "apply_edits",
+    "apply_equipment_edits",
     "apply_kind_swaps",
     "apply_level_edits",
     "apply_plus_edits",
     "apply_soul_edits",
+    "class_limits_for_record",
     "collect_kind_samples",
     "commit_save",
+    "default_equipment_item_db",
     "discover_saves",
+    "equipment_affix_allowed",
     "find_free_slots",
     "identify_soul_cores",
     "list_accessories",
+    "list_armor",
     "list_backups",
+    "list_equipment",
     "list_soul_cores",
+    "list_weapons",
     "open_save",
     "plan_creation",
     "plan_edits",
+    "plan_equipment_edits",
     "plan_kind_swap",
     "plan_level_edit",
     "plan_plus_edit",
@@ -535,12 +548,19 @@ def plan_level_edit(
     affix_db: AffixDb,
     known_ids: frozenset[int] | None = None,
     layout: records.InventoryLayout | None = None,
+    item_db: EquipmentItemDb | None = None,
+    ranges: Mapping | None = None,
 ) -> LevelPlan:
     """Validate one 等级 change and return its plan (nothing is written here).
 
     Legal range is ``1..180``: the reference project reads the effective level as
     ``min(record +0x06, 180)`` and the reference save tops out at exactly
     180, so anything above it is not something the game would ever serialise.
+
+    武器/防具/魂核 再加一道**按类别取**的上限（P2 规则 2）：上限来自
+    ``data/equipment_ranges.json`` 里该类别的实测最大值，类别查不到就退回文档值
+    180（``CLASS_CAPPED_BIGS``）。饰品不设这道闸门，行为与以前完全一样；比的是
+    **新值**，所以存档里已有的越界历史值不会拦住其它改动。
 
     Only the level fields change.  Measured on the reference save: the
     *stored* affix values of a kind are identical at every level (e.g. every
@@ -569,6 +589,14 @@ def plan_level_edit(
     record = records.read_item_record(decrypted, record_index, layout=layout)
     if record is None:
         raise LevelEditError(f"记录 #{record_index} 不存在或不是物品记录")
+    limits = class_limits_for_record(record.record_type, item_db=item_db,
+                                     ranges=ranges)
+    if limits is not None and level > limits.max_level:
+        raise LevelEditError(
+            f"等级必须在 {records.MIN_ITEM_LEVEL}..{limits.max_level} 之间："
+            f"记录 #{record_index} 属于 {limits.describe()}，"
+            f"{level} 超过该类别的实测上限 {limits.max_level}"
+        )
     current = records.read_record_level(record.record)
     mirror = records.read_record_level_mirror(record.record)
     if current != mirror:
@@ -629,8 +657,17 @@ def plan_plus_edit(
     affix_db: AffixDb,
     known_ids: frozenset[int] | None = None,
     layout: records.InventoryLayout | None = None,
+    item_db: EquipmentItemDb | None = None,
+    ranges: Mapping | None = None,
 ) -> PlusPlan:
-    """Validate one +値 change (0..30, the span the reference save actually uses)."""
+    """Validate one +値 change (0..30 by the workbook, tighter per 类别).
+
+    The flat span is what the reference save actually uses for 饰品, so 饰品 behaves
+    exactly as before.  武器 / 防具 / 魂核 再按**类别**取上限（P2 规则 2）：上限来自
+    ``data/equipment_ranges.json`` 里该类别的实测最大值 —— 魂核因此只到 15，武器 /
+    防具是各种类自己的 22..30；类别查不到就退回文档值 30（``CLASS_CAPPED_BIGS``）。
+    比的是**新值**，存档里已有的越界历史值不会拦住其它改动。
+    """
     if not isinstance(value, int) or isinstance(value, bool):
         raise EditorError("+值 必须是整数")
     if not 0 <= value <= records.MAX_RECORD_PLUS:
@@ -652,6 +689,13 @@ def plan_plus_edit(
     record = records.read_item_record(decrypted, record_index, layout=layout)
     if record is None:
         raise EditorError(f"记录 #{record_index} 不存在或不是物品记录")
+    limits = class_limits_for_record(record.record_type, item_db=item_db,
+                                     ranges=ranges)
+    if limits is not None and value > limits.max_plus:
+        raise EditorError(
+            f"+值必须在 0..{limits.max_plus} 之间：记录 #{record_index} 属于 "
+            f"{limits.describe()}，{value} 超过该类别的实测上限 {limits.max_plus}"
+        )
     current = records.read_record_plus(record.record)
     if current == value:
         raise EditorError(f"记录 #{record_index} 的 +值已经是 {value}")
@@ -727,14 +771,9 @@ class SoulCoreView:
         effect = self.effects[slot_index]
         if effect.is_empty:
             return False
-        if _star_rules_out_fixed(effect, soul_db, self.record_type):
-            # 绘卷不在魂核/饰品这两条路径上；这里同样让 ★ 一律可改。
-            return False
-        entry = soul_db.lookup(effect.effect_id)
-        if entry is not None and entry.is_fixed:
-            return True
+        # 绘卷不在魂核/饰品这两条路径上；这里同样让 ★ 一律可改。
         # 表外 id 也按存档自己的「固定」位判定（魂核没有恩宠/套装槽，无需例外）。
-        return records.effect_metadata_is_fixed(effect.metadata)
+        return _catalog_slot_is_fixed(effect, soul_db, self.record_type)
 
     def fixed_slots(self, soul_db: AffixDb) -> frozenset[int]:
         return frozenset(
@@ -934,6 +973,413 @@ def save_checksum_is_valid(decrypted: bytes) -> bool:
 
 
 # --------------------------------------------------------------------------
+# 武器 / 防具（P2）：列出与写入
+# --------------------------------------------------------------------------
+
+#: 本阶段（P2）可编辑的大类：武器 / 防具。
+EQUIPMENT_EDIT_BIGS = ("武器", "防具")
+
+#: 随包物品总目录 / 按类别范围表的懒加载缓存（解析一次就够）。
+_ITEM_DB_CACHE: EquipmentItemDb | None = None
+_RANGES_CACHE: dict | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class EquipmentSlotView:
+    """武器/防具的一个词条槽（记录号以外的展示信息都在这里）。
+
+    ``effect_id / name / value / metadata`` 直接来自存档，``is_fixed`` 与
+    ``is_star`` 是同一套既有口径算出来的结论，``category`` 是词条自己的 类别
+    （种类码表按它取值），``equipment_tags`` 是源表说这条词条**能出在哪些装备**上
+    的标签 —— 两者不是一回事。
+    """
+
+    slot_index: int
+    effect_id: int
+    name: str
+    category: str
+    value: int
+    metadata: int
+    is_empty: bool
+    is_fixed: bool
+    is_star: bool
+    equipment_tags: tuple[str, ...] = ()
+
+    @property
+    def is_occupied(self) -> bool:
+        return not self.is_empty
+
+
+@dataclass(frozen=True, slots=True)
+class EquipmentView:
+    """一件武器/防具记录的展示视图（与 ``AccessoryView`` / ``SoulCoreView`` 同构）。
+
+    物品种类来自随包的 ``data/equipment_items.json``：记录 ``+0x00`` 的物品 id
+    必须能在表里查到 大类 = 武器 / 防具 的一行，视图才存在（表外的 id 不会被列出，
+    更不会被写）。``pool`` 是它用的词条池（``melee`` / ``ranged`` / ``armor``），
+    ``catalog_hits`` 是"这一池的词条在槽里出现了几条"的证据计数。
+    """
+
+    slot_index: int
+    offset: int
+    item: EquipmentItem
+    level: int
+    rarity: int
+    rarity_name: str
+    account_id: int
+    effects: tuple[records.EffectSlot, ...]
+    plus_value: int = 0
+    level_mirror: int = 0
+    pool: str = ""
+    catalog_hits: int | None = None
+
+    @property
+    def record_type(self) -> int:
+        """物品种类 id（记录 ``+0x00`` 与其镜像 ``+0x02``）。"""
+        return self.item.item_id
+
+    @property
+    def item_label(self) -> str:
+        return self.item.label
+
+    @property
+    def item_name(self) -> str:
+        return self.item.name
+
+    @property
+    def big(self) -> str:
+        return self.item.big
+
+    @property
+    def category(self) -> str:
+        return self.item.category
+
+    @property
+    def small(self) -> str:
+        return self.item.small
+
+    @property
+    def school(self) -> str:
+        return self.item.school
+
+    @property
+    def pool_label(self) -> str:
+        return equipmentdb.POOL_LABELS.get(self.pool, self.pool)
+
+    @property
+    def acceptable_tokens(self) -> frozenset[str]:
+        """这件装备能接受的「装备种类」token（规则 1 的另一半）。"""
+        return equipmentdb.acceptable_equipment_tokens(self.item)
+
+    @property
+    def occupied_effects(self) -> tuple[records.EffectSlot, ...]:
+        return tuple(effect for effect in self.effects if not effect.is_empty)
+
+    def slot_affix_db(self, pool: EquipmentPool | None = None) -> AffixDb:
+        """这件装备的词条表（不传就按池现取，结果带缓存）。"""
+        return (pool if pool is not None else equipmentdb.pool_for_item(self.item)).db
+
+    def slot_is_star(self, slot_index: int, pool: EquipmentPool | None = None) -> bool:
+        if not 0 <= slot_index < len(self.effects):
+            return False
+        effect = self.effects[slot_index]
+        if effect.is_empty:
+            return False
+        return slot_is_star_affix(effect, self.slot_affix_db(pool))
+
+    def slot_is_fixed(self, slot_index: int, pool: EquipmentPool | None = None) -> bool:
+        """Whether this slot is a 固定词条 (目录「同名固定」或存档固定位, ★ 除外)。"""
+        if not 0 <= slot_index < len(self.effects):
+            return False
+        effect = self.effects[slot_index]
+        if effect.is_empty:
+            return False
+        return _catalog_slot_is_fixed(effect, self.slot_affix_db(pool), self.record_type)
+
+    def fixed_slots(self, pool: EquipmentPool | None = None) -> frozenset[int]:
+        return frozenset(effect.slot_index for effect in self.occupied_effects
+                         if self.slot_is_fixed(effect.slot_index, pool))
+
+    def slot_role(self, slot_index: int, pool: EquipmentPool | None = None) -> str:
+        """``空`` / ``不在武器/防具词条库内`` / ``固定词条`` / ``近战武器词条`` …"""
+        if not 0 <= slot_index < len(self.effects):
+            return "越界"
+        effect = self.effects[slot_index]
+        if effect.is_empty:
+            return "空"
+        db = self.slot_affix_db(pool)
+        if db.lookup(effect.effect_id) is None:
+            return "不在武器/防具词条库内"
+        if self.slot_is_fixed(slot_index, pool):
+            return "固定词条"
+        return f"{self.pool_label}词条"
+
+    def slots(self, pool: EquipmentPool | None = None) -> tuple[EquipmentSlotView, ...]:
+        """每个词条槽的 effect_id / 名称 / 固定 / ★ / 类别 / 数值。"""
+        resolved = pool if pool is not None else equipmentdb.pool_for_item(self.item)
+        views: list[EquipmentSlotView] = []
+        for effect in self.effects:
+            if effect.is_empty:
+                views.append(EquipmentSlotView(
+                    slot_index=effect.slot_index, effect_id=effect.effect_id,
+                    name="(空)", category="", value=effect.value,
+                    metadata=effect.metadata, is_empty=True,
+                    is_fixed=False, is_star=False,
+                ))
+                continue
+            entry = resolved.db.lookup(effect.effect_id)
+            views.append(EquipmentSlotView(
+                slot_index=effect.slot_index,
+                effect_id=effect.effect_id,
+                name=entry.name if entry is not None
+                else f"未知词条 {effect.effect_id:#010x}",
+                category=entry.category if entry is not None else "",
+                value=effect.value,
+                metadata=effect.metadata,
+                is_empty=False,
+                is_fixed=self.slot_is_fixed(effect.slot_index, resolved),
+                is_star=self.slot_is_star(effect.slot_index, resolved),
+                equipment_tags=resolved.tags_of(effect.effect_id),
+            ))
+        return tuple(views)
+
+    def limits(self, ranges: Mapping | None = None) -> ClassLimits:
+        """这件装备所在类别的 (等级上限, +値上限) 及其来源。"""
+        limits = class_limits_for_record(self.record_type, ranges=ranges)
+        if limits is None:  # pragma: no cover - 视图本身只由武器/防具构成
+            limits = ClassLimits(key=equipmentdb.equipment_class_key(self.item),
+                                 max_level=records.MAX_ITEM_LEVEL,
+                                 max_plus=records.MAX_RECORD_PLUS,
+                                 samples=0, measured=False)
+        return limits
+
+    def describe_item(self) -> str:
+        """``种类 0x01a8 千手院太刀（武器/武士武器/刀）``。"""
+        return (f"种类 {self.item_label}"
+                f"（{equipmentdb.equipment_class_key(self.item)}）")
+
+    def describe_effects(self, pool: EquipmentPool | None = None) -> tuple[str, ...]:
+        lines: list[str] = [
+            f"  {self.describe_item()} 等级 {self.level} +値 {self.plus_value}"
+            f" {self.rarity_name}"
+        ]
+        for slot in self.slots(pool):
+            if slot.is_empty:
+                lines.append(f"  [{slot.slot_index}] (空)")
+                continue
+            marks = []
+            if slot.is_star:
+                marks.append("★")
+            if slot.is_fixed:
+                marks.append("固定词条，不可修改")
+            suffix = f"（{'、'.join(marks)}）" if marks else ""
+            lines.append(
+                f"  [{slot.slot_index}] {slot.name}{suffix} "
+                f"(id={slot.effect_id:#06x} 数值={slot.value} "
+                f"类别={slot.category or '未知'} "
+                f"装备种类={'/'.join(slot.equipment_tags) or '（没有标签）'} "
+                f"标识={slot.metadata:#010x})"
+            )
+        return tuple(lines)
+
+
+def default_equipment_item_db() -> EquipmentItemDb:
+    """随包的物品总目录（缓存：解析一次，之后所有调用共用）。"""
+    global _ITEM_DB_CACHE
+    if _ITEM_DB_CACHE is None:
+        _ITEM_DB_CACHE = equipmentdb.load_equipment_item_db()
+    return _ITEM_DB_CACHE
+
+
+def default_equipment_ranges() -> dict:
+    """随包的按类别范围表（缓存）。"""
+    global _RANGES_CACHE
+    if _RANGES_CACHE is None:
+        _RANGES_CACHE = equipmentdb.load_equipment_ranges()
+    return _RANGES_CACHE
+
+
+def list_equipment(
+    decrypted: bytes,
+    *,
+    big: str = "",
+    item_db: EquipmentItemDb | None = None,
+    layout: records.InventoryLayout | None = None,
+    known_ids: frozenset[int] | None = None,
+) -> tuple[EquipmentView, ...]:
+    """列出存档里的武器/防具记录（``big`` 为空 = 武器 + 防具）。
+
+    识别只用**物品总目录**这一个事实：记录 ``+0x00`` 的物品 id 必须能查到一行，
+    且它的大类是 武器 / 防具。表外 id、饰品、魂核、绘卷都不会出现在结果里——它们
+    各有自己的入口，混在一起只会让「这件是什么」变成猜测。
+    ``catalog_hits`` 是这件装备自己那一池词条的命中数（只作证据展示，不作门槛）。
+    """
+    db = default_equipment_item_db() if item_db is None else item_db
+    wanted = EQUIPMENT_EDIT_BIGS if not big else (big,)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    pool_ids: dict[str, frozenset[int]] = {}
+    views: list[EquipmentView] = []
+    for record in records.iter_item_records(decrypted, layout=layout):
+        item = db.lookup(record.record_type)
+        if item is None or item.big not in wanted:
+            continue
+        key = equipmentdb.pool_name_for(item)
+        ids = pool_ids.get(key)
+        if ids is None:
+            ids = pool_ids[key] = frozenset(
+                entry.effect_id for entry in equipmentdb.load_pool(key).db.all())
+        views.append(EquipmentView(
+            slot_index=record.slot_index,
+            offset=record.offset,
+            item=item,
+            level=record.level,
+            rarity=record.rarity,
+            rarity_name=record.rarity_name,
+            account_id=record.account_id,
+            effects=record.effects,
+            plus_value=records.read_record_plus(record.record),
+            level_mirror=records.read_record_level_mirror(record.record),
+            pool=key,
+            catalog_hits=records.record_catalog_hits(record.record, known_ids=ids),
+        ))
+    return tuple(views)
+
+
+def list_weapons(decrypted: bytes, **kwargs) -> tuple[EquipmentView, ...]:
+    """只列武器（近战 + 远程；两者的区别在 ``view.pool`` 上）。"""
+    return list_equipment(decrypted, big="武器", **kwargs)
+
+
+def list_armor(decrypted: bytes, **kwargs) -> tuple[EquipmentView, ...]:
+    """只列防具。"""
+    return list_equipment(decrypted, big="防具", **kwargs)
+
+
+# --------------------------------------------------------------------------
+# 规则 1 / 规则 2（P2）：装备种类标签必须匹配、等级/+値 上限按类别取
+# --------------------------------------------------------------------------
+
+#: 「等级 / +値 上限按类别取」适用的大类。饰品**不在**此列：它的现有行为必须原样
+#: 保留（仍是文档值 0..30 的扁平上限），魂核按实测上限 15。
+CLASS_CAPPED_BIGS = ("武器", "防具", "魂核")
+
+#: 等级上限是否也按类别取：True = 用该类别实测上限（例如弓 170、大太刀 172），
+#: False = 一律用文档值 180。做成开关是因为实测上限只说明"参考存档里没出现过更高
+#: 的"，比游戏真实上限保守；想放宽时改这一行即可（行为有测试卡住）。
+LEVEL_CAP_BY_CLASS = True
+
+
+@dataclass(frozen=True, slots=True)
+class ClassLimits:
+    """一条记录所属类别的字段上限及其来源（拒绝信息要能说清依据）。"""
+
+    key: str
+    max_level: int
+    max_plus: int
+    samples: int = 0
+    measured: bool = True
+
+    def describe(self) -> str:
+        if not self.measured:
+            return (f"{self.key}（该类别不在实测范围表里，用文档值 等级 "
+                    f"{self.max_level} / +値 {self.max_plus}）")
+        return (f"{self.key}（参考存档实测 {self.samples} 条样本，见 "
+                "data/equipment_ranges.json）")
+
+
+def class_limits_for_record(
+    record_type: int,
+    *,
+    item_db: EquipmentItemDb | None = None,
+    ranges: Mapping | None = None,
+) -> ClassLimits | None:
+    """这条记录所属类别的上限；**不适用时返回 ``None``**（调用方沿用文档值）。
+
+    不适用有两种情况：记录的物品 id 不在物品总目录里（例如合成件、饰品页签之外
+    的未知 id），或者它的大类不需要按类别设限（饰品）。这样"没查到"绝不会变成
+    "查到了 0"，也就不会把存档里已有的东西误判成越界。
+    """
+    db = default_equipment_item_db() if item_db is None else item_db
+    item = db.lookup(record_type)
+    if item is None or item.big not in CLASS_CAPPED_BIGS:
+        return None
+    table = default_equipment_ranges() if ranges is None else ranges
+    bucket = equipmentdb.equipment_class_range(item, table)
+    if bucket is None:
+        max_level, max_plus = (records.MAX_ITEM_LEVEL, records.MAX_RECORD_PLUS)
+        return ClassLimits(key=equipmentdb.equipment_class_key(item),
+                           max_level=max_level, max_plus=max_plus,
+                           samples=0, measured=False)
+    max_level, max_plus = equipmentdb.equipment_caps(item, table)
+    if not LEVEL_CAP_BY_CLASS:
+        max_level = records.MAX_ITEM_LEVEL
+    return ClassLimits(
+        key=equipmentdb.equipment_class_key(item),
+        max_level=max_level,
+        max_plus=max_plus,
+        samples=int(bucket.get("samples", 0) or 0),
+    )
+
+
+def equipment_affix_allowed(
+    pool: EquipmentPool,
+    item: EquipmentItem,
+    effect_id: int,
+) -> bool:
+    """规则 1 的纯判定：词条在本装备的词条池里，且装备种类标签有交集。
+
+    判定方式（用户规则）：把词条的 ``equipment_tags`` 按 ``/`` 拆成 token 集合，
+    与装备可接受的 token 集合（大类名 + 小类 + 武器的近战/远程归属）取交集；
+    **有交集就允许，完全没交集就拒绝**。空槽（``EMPTY_EFFECT_ID``）不参与判定：
+    清空一个槽不会引入任何词条。
+    """
+    if effect_id == records.EMPTY_EFFECT_ID:
+        return True
+    tokens = pool.tags_of(effect_id)
+    if not tokens:
+        return False
+    if pool.db.lookup(effect_id) is None:
+        return False
+    return bool(set(tokens) & equipmentdb.acceptable_equipment_tokens(item))
+
+
+def _assert_equipment_affix_allowed(
+    pool: EquipmentPool,
+    item: EquipmentItem,
+    effect_id: int,
+    *,
+    record_index: int,
+) -> None:
+    """规则 1 的拒绝信息：把"为什么不行"说清楚（fail closed）。"""
+    if equipment_affix_allowed(pool, item, effect_id):
+        return
+    accepted = "/".join(sorted(equipmentdb.acceptable_equipment_tokens(item)))
+    entry = pool.db.lookup(effect_id)
+    tokens = pool.tags_of(effect_id)
+    reasons: list[str] = []
+    if entry is None:
+        reasons.append(f"它不在「{pool.label}」词条表（{pool.path.name}）里")
+    elif not tokens:
+        reasons.append("它在词条表里没有「装备种类」标签，无法确认能出在这件装备上")
+    elif not set(tokens) & equipmentdb.acceptable_equipment_tokens(item):
+        reasons.append(f"它的「装备种类」标签是「{pool.describe_tags(effect_id)}」，"
+                       f"与 {item.label} 可接受的标签（{accepted}）没有交集")
+    raise EditorError(
+        f"记录 #{record_index}：词条 {effect_id:#010x} 不能写到 {item.label} 上 —— "
+        + "；".join(reasons) + "。"
+    )
+
+
+def _equipment_pool(key: str, pools: Mapping[str, EquipmentPool] | None) -> EquipmentPool:
+    """取词条池：调用方给了就用它的（测试/工具可以注入），否则用随包的表。"""
+    if pools is not None and key in pools:
+        return pools[key]
+    return equipmentdb.load_pool(key)
+
+
+
+# --------------------------------------------------------------------------
 # Editing
 # --------------------------------------------------------------------------
 
@@ -1083,6 +1529,22 @@ def _slot_is_fixed(slot: records.EffectSlot, db: AffixDb) -> bool:
     """固定词条的同一个口径：目录标记或存档 metadata 的固定位（★ 除外）。"""
     if slot_is_star_affix(slot, db):
         return False  # 除绘卷外，★ 不可能是固定词条
+    entry = db.lookup(slot.effect_id)
+    if entry is not None and entry.is_fixed:
+        return True
+    return records.effect_metadata_is_fixed(slot.metadata)
+
+
+def _catalog_slot_is_fixed(slot: records.EffectSlot, db: AffixDb,
+                           record_type: int | None = None) -> bool:
+    """``_slot_is_fixed`` 再加「★ 例外只对绘卷成立」这一层（视图用）。
+
+    魂核与武器/防具的视图共用这一个口径：词条表标了「同名固定」，或存档
+    metadata 带了固定位 ``0x4000``，都算固定词条；★（词条表 ★ 或 metadata ★ 位）
+    一律不算——只有确定是绘卷的记录（``SCROLL_RECORD_TYPES``）才允许「★ 且固定」。
+    """
+    if _star_rules_out_fixed(slot, db, record_type):
+        return False
     entry = db.lookup(slot.effect_id)
     if entry is not None and entry.is_fixed:
         return True
@@ -1417,6 +1879,164 @@ def apply_edits(
             raise EditorError(
                 f"记录 #{plan.record_index} 的修改未能正确写入，已中止"
             )
+    return bytes(output)
+
+
+def plan_equipment_edits(
+    decrypted: bytes,
+    edits: tuple[dict[str, int], ...] | list[dict[str, int]],
+    *,
+    item_db: EquipmentItemDb | None = None,
+    pools: Mapping[str, EquipmentPool] | None = None,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+    grace_db: GraceDb | None = None,
+) -> tuple[EditPlan, ...]:
+    """校验武器/防具的词条改动，返回按记录分组的计划（这里不写任何字节）。
+
+    与 :func:`plan_edits` 同构，多出的闸门是 P2 的**规则 1**
+    （:func:`equipment_affix_allowed`）：要写入的词条必须在这件装备自己的词条池里，
+    且词条的 ``equipment_tags`` token 与装备可接受的 token（大类 / 小类 / 近战或远程）
+    **有交集**；没有交集就拒绝。
+
+    其余规则与饰品/魂核完全一致：固定词条不可改（目录「同名固定」或存档固定位
+    ``0x4000``，★ 除外）、同一「种类」只能有一个词条（``其他`` 豁免）、一件装备
+    只能有一个恩宠/套装（调用方给了 ``grace_db`` 时检查）。
+
+    "没动过的槽"永远不参与判定：只有 edit 里真的写了新 ``effect_id`` 的槽才会过规则 1，
+    所以存档里本来就存在的历史状态不会拦住一件无关的改动。清空一个槽（写
+    ``EMPTY_EFFECT_ID``）不引入词条，一律放行。
+
+    ``known_ids``/``layout`` 必须是**列出记录时用的那一套**：记录号只对同一张定位
+    出来的记录表有意义，换一套证据重新定位就可能改到另一件装备。
+    """
+    if not edits:
+        raise EditorError("至少需要一个编辑项")
+
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    known = {view.slot_index: view
+             for view in list_equipment(decrypted, item_db=item_db, layout=layout)}
+
+    # 记录归属先判：后面每一步都要按"这件装备用哪一池词条"来选表。
+    targets: list[tuple[int, dict[str, int]]] = []
+    for edit in edits:
+        if not isinstance(edit, dict):
+            raise EditorError("编辑项必须是字典")
+        index = edit.get("record_index")
+        if not isinstance(index, int) or isinstance(index, bool):
+            raise EditorError("编辑缺少目标记录索引 (record_index)")
+        targets.append((index, edit))
+    missing = sorted({index for index, _edit in targets} - set(known))
+    if missing:
+        raise EditorError(
+            "以下记录不在当前存档的武器/防具记录中："
+            + "、".join(f"#{index}" for index in missing)
+        )
+
+    resolved: dict[int, EquipmentPool] = {
+        index: _equipment_pool(view.pool, pools) for index, view in known.items()
+    }
+
+    # 固定词条先拒（与饰品路径同一个顺序）：这种槽根本不可编辑，再报数值/标签
+    # 的问题只会误导。★ 一律不算固定（绘卷例外只对绘卷成立，武器/防具不是绘卷）。
+    fixed_refusals: list[str] = []
+    for index, edit in targets:
+        view = known[index]
+        slot_index = edit.get("slot_index")
+        if not isinstance(slot_index, int) or isinstance(slot_index, bool):
+            continue  # 形状不对的编辑交给 _validate_edit 报
+        if not 0 <= slot_index < records.EFFECT_COUNT:
+            continue
+        if view.slot_is_fixed(slot_index, resolved[index]):
+            entry = resolved[index].db.lookup(view.effects[slot_index].effect_id)
+            fixed_refusals.append(
+                f"#{index} 槽{slot_index}"
+                f"（{entry.name if entry else '未收录'}）"
+            )
+    if fixed_refusals:
+        raise EditorError("固定词条不能修改：" + "、".join(fixed_refusals))
+
+    # 规则 1 + 既有字段校验。规则 1 只看这个 edit 新写的 effect_id，历史状态不参与。
+    normalized: list[dict[str, int]] = []
+    for index, edit in targets:
+        pool = resolved[index]
+        effect_id = edit.get("effect_id")
+        if isinstance(effect_id, int) and not isinstance(effect_id, bool):
+            _assert_equipment_affix_allowed(pool, known[index].item, effect_id,
+                                            record_index=index)
+        normalized.append(_validate_edit(dict(edit), pool.db))
+
+    by_record: dict[int, list[dict[str, int]]] = {}
+    for edit in normalized:
+        by_record.setdefault(edit["record_index"], []).append(edit)
+
+    plans: list[EditPlan] = []
+    for record_index, record_edits in sorted(by_record.items()):
+        view = known[record_index]
+        pool = resolved[record_index]
+        record = records.read_item_record(decrypted, record_index, layout=layout)
+        if record is None:
+            raise EditorError(f"记录 #{record_index} 无法解析为武器/防具记录")
+        prepared = [dict(_with_category_code(edit, view, pool.db),
+                         record_index=record_index)
+                    for edit in record_edits]
+        patched = records.patch_effect_slots(
+            record.record, prepared, allow_record_index=True,
+        )
+        plans.append(
+            EditPlan(
+                record_index=record_index,
+                offset=record.offset,
+                edits=tuple(prepared),
+                before=view.effects,
+                after=records.read_effect_slots(patched),
+            )
+        )
+
+    # 「同一物品每个种类只能有一个词条」按池分别判定（近战/远程/防具三张表不同）。
+    by_pool: dict[str, list[EditPlan]] = {}
+    for plan in plans:
+        by_pool.setdefault(known[plan.record_index].pool, []).append(plan)
+    for key, group in sorted(by_pool.items()):
+        assert_single_affix_per_category(tuple(group), _equipment_pool(key, pools).db)
+    if grace_db is not None:
+        # 恩宠 id 不在武器/防具词条池里，所以规则 1 已经会把它们挡在外面；这里
+        # 仍然照饰品的口径查一遍，等 P3 把恩宠/套装的写入路径接上来时规则已经在了。
+        assert_single_grace(tuple(plans), grace_db)
+    return tuple(plans)
+
+
+def apply_equipment_edits(
+    decrypted: bytes,
+    edits: tuple[dict[str, int], ...] | list[dict[str, int]],
+    *,
+    item_db: EquipmentItemDb | None = None,
+    pools: Mapping[str, EquipmentPool] | None = None,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+    grace_db: GraceDb | None = None,
+) -> bytes:
+    """按 :func:`plan_equipment_edits` 的计划写入武器/防具词条，返回新的存档字节。"""
+    plans = plan_equipment_edits(decrypted, edits, item_db=item_db, pools=pools,
+                                 known_ids=known_ids, layout=layout, grace_db=grace_db)
+    output = bytearray(decrypted)
+    for plan in plans:
+        offset = plan.offset
+        record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        patched = records.patch_effect_slots(
+            record,
+            [dict(edit, record_index=plan.record_index) for edit in plan.edits],
+            allow_record_index=True,
+        )
+        output[offset:offset + records.SCROLL_RECORD_SIZE] = patched
+    for plan in plans:
+        offset = plan.offset
+        applied = records.read_effect_slots(
+            bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        )
+        if applied != plan.after:
+            raise EditorError(f"记录 #{plan.record_index} 的修改未能正确写入，已中止")
     return bytes(output)
 
 
