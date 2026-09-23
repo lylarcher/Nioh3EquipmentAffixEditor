@@ -20,7 +20,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from . import paths
+from . import equipmentdb, paths
 from .affixdb import (
     AffixDb,
     AffixError,
@@ -34,11 +34,16 @@ from .editor import (
     AccessoryView,
     CreationError,
     EditorError,
+    EquipmentView,
     GraceEditError,
     SaveDescriptor,
     SoulCoreView,
     accessory_catalog_ids,
     apply_creations,
+    apply_equipment_creations,
+    apply_equipment_edits,
+    class_limits_for_record,
+    equipment_affix_allowed,
     find_free_slots,
     plan_creation,
     apply_edits,
@@ -54,8 +59,11 @@ from .editor import (
     inspect_layout,
     list_accessories,
     list_backups,
+    list_equipment,
     list_soul_cores,
     open_save,
+    plan_create_equipment,
+    plan_equipment_edits,
     plan_kind_swap,
     plan_level_edit,
     plan_plus_edit,
@@ -140,6 +148,921 @@ def _load_image(path: Path, master: tk.Misc | None = None) -> tk.PhotoImage | No
         return None
 
 
+#: 武器 / 防具两个页签：(大类, 页签标题)。
+EQUIPMENT_TAB_KINDS = (("武器", "武器"), ("防具", "防具"))
+
+#: 四个筛选轴在界面上的名字（顺序就是从左到右的排列顺序）。
+EQUIPMENT_FILTER_AXES = ("small", "kind", "grace", "school")
+EQUIPMENT_FILTER_LABELS = {
+    "small": "类型",
+    "kind": "种类",
+    "grace": "恩宠/套装",
+    "school": "武士/忍者",
+}
+
+
+class EquipmentTab(ttk.Frame):
+    """武器 / 防具页签（同一个组件实例化两次，只有 ``big`` 不同）。
+
+    与饰品页签同构：左边记录列表 + 四轴级联筛选，右边词条槽 / 等级 / +值 /
+    无中生有。差异只在**规则来源**：
+
+    * 候选词条来自这件装备自己的词条池（远程武器 = 远程表，其余武器 = 近战表，
+      防具 = 防具表），并且只列出「装备种类」标签相容的词条 —— 判定直接调用引擎的
+      :func:`editor.equipment_affix_allowed`，界面里不重写一套规则；
+    * 固定词条（目录标着同名固定，或存档标识带 0x4000）与恩宠/套装槽都只读；
+    * 等级 / +值 的上限取自 :func:`editor.class_limits_for_record`（等级 180、
+      +值按大类），不再写死。
+
+    写入路径与其它页签共用：改动先落在内存里的 ``app.decrypted``，
+    最后由窗口底部的「写入存档」写回副本。
+    """
+
+    def __init__(self, master: tk.Widget, app: "AccessoryEditorApp", *,
+                 big: str, title: str) -> None:
+        super().__init__(master, padding=(2, 2))
+        self.app = app
+        self.big = big
+        self.title = title
+        self.item_db = app.equipment_item_db
+        #: 本大类的物品种类（标签 -> 条目），筛选与「无中生有」都用它。
+        self.kind_choices = {
+            entry.label: entry for entry in self.item_db.all() if entry.big == big
+        }
+        self.views: list[EquipmentView] = []
+        self.selected: int | None = None
+        self._pool = None
+        self._pool_error = ""
+        self._candidates: tuple[str, ...] = (EMPTY_LABEL,)
+        self._candidate_entries: dict[str, object] = {}
+        self._candidate_ids: frozenset[int] = frozenset()
+        self._build()
+
+    # ------------------------------------------------------------- 构 建
+    def _build(self) -> None:
+        mid = ttk.Panedwindow(self, orient=tk.HORIZONTAL)
+        mid.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        left = ttk.Frame(mid)
+        ttk.Label(left, text=f"{self.title}记录（选择后编辑右侧词条槽）").pack(anchor=tk.W)
+        # 四个筛选轴：类型（小类）/ 种类（具体物品）/ 恩宠·套装 / 武士·忍者。
+        filter_row = ttk.Frame(left)
+        filter_row.pack(fill=tk.X, pady=(2, 2))
+        self.filter_vars: dict[str, tk.StringVar] = {}
+        self.filter_combos: dict[str, ttk.Combobox] = {}
+        for axis in EQUIPMENT_FILTER_AXES:
+            ttk.Label(filter_row, text=f"{self._axis_label(axis)}:").pack(side=tk.LEFT)
+            var = tk.StringVar(value=ALL_FILTER)
+            combo = ttk.Combobox(filter_row, state="readonly", width=16,
+                                 textvariable=var, values=(ALL_FILTER,))
+            combo.pack(side=tk.LEFT, padx=2)
+            combo.bind("<<ComboboxSelected>>", lambda _event: self.refresh_tree())
+            self.filter_vars[axis] = var
+            self.filter_combos[axis] = combo
+        ttk.Button(filter_row, text="清除筛选",
+                   command=self.clear_filters).pack(side=tk.LEFT, padx=2)
+
+        self.tree = ttk.Treeview(
+            left, columns=("small", "grace", "level", "plus", "rarity"),
+            show="tree headings", height=16,
+        )
+        self.tree.heading("#0", text="记录")
+        self.tree.heading("small", text=f"{EQUIPMENT_FILTER_LABELS['small']}（只读）")
+        self.tree.heading("grace", text=EQUIPMENT_FILTER_LABELS["grace"])
+        self.tree.heading("level", text="等级")
+        self.tree.heading("plus", text="+值")
+        self.tree.heading("rarity", text="品质")
+        self.tree.column("small", width=64, anchor=tk.W)
+        self.tree.column("grace", width=150, anchor=tk.W)
+        self.tree.column("level", width=52, anchor=tk.CENTER)
+        self.tree.column("plus", width=44, anchor=tk.CENTER)
+        self.tree.column("rarity", width=76, anchor=tk.CENTER)
+        self.tree.pack(fill=tk.BOTH, expand=True)
+        self.tree.bind("<<TreeviewSelect>>", lambda _event: self._on_selected())
+        self.filter_status_var = tk.StringVar(
+            value="筛选会级联：四个轴互相收窄，选了任意一个，其余三个只列出还有记录的取值")
+        ttk.Label(left, textvariable=self.filter_status_var, foreground="#666666",
+                  wraplength=420, justify=tk.LEFT).pack(anchor=tk.W, pady=(2, 0))
+        mid.add(left, weight=2)
+
+        right_scroll = ttk.Frame(mid)
+        right = self.app._scrollable(right_scroll, width=540, register=False)
+        ttk.Label(right, text="词条槽（下拉选择；也可在某一槽里输入关键词，"
+                              "只缩小该槽的下拉列表）").pack(anchor=tk.W)
+        self.search_status_var = tk.StringVar(value=self._search_hint())
+        ttk.Label(right, textvariable=self.search_status_var, foreground="#1a4f8f",
+                  wraplength=520, justify=tk.LEFT).pack(anchor=tk.W)
+        slot_frame = ttk.Frame(right)
+        slot_frame.pack(fill=tk.BOTH, expand=True)
+        self.slot_combos: list[ttk.Combobox] = []
+        self.slot_labels: list[tk.StringVar] = []
+        self.value_vars: list[tk.StringVar] = []
+        self.value_entries: list[ttk.Entry] = []
+        for index in range(EFFECT_COUNT):
+            box = ttk.Frame(slot_frame)
+            box.pack(fill=tk.X, pady=(2, 4))
+            top = ttk.Frame(box)
+            top.pack(fill=tk.X)
+            ttk.Label(top, text=f"槽{index + 1}:", width=5).pack(side=tk.LEFT)
+            combo = ttk.Combobox(top, width=46, values=(EMPTY_LABEL,))
+            combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+            combo.bind("<<ComboboxSelected>>",
+                       lambda _event, slot=index: self._on_slot_picked(slot))
+            combo.bind("<KeyRelease>",
+                       lambda _event, slot=index: self._on_slot_typed(slot))
+            combo.bind("<Return>",
+                       lambda _event, slot=index: self._on_slot_return(slot))
+            self.slot_combos.append(combo)
+            self.slot_labels.append(tk.StringVar(value=""))
+            bottom = ttk.Frame(box)
+            bottom.pack(fill=tk.X)
+            ttk.Label(bottom, text="数值:", width=5).pack(side=tk.LEFT)
+            value_var = tk.StringVar(value="")
+            entry = ttk.Entry(bottom, textvariable=value_var, width=7)
+            entry.pack(side=tk.LEFT)
+            self.value_vars.append(value_var)
+            self.value_entries.append(entry)
+            ttk.Label(bottom, textvariable=self.slot_labels[index],
+                      foreground="#666666", wraplength=360,
+                      justify=tk.LEFT).pack(side=tk.LEFT, padx=6)
+
+        self._build_note(right)
+        self._build_level(right)
+        self._build_plus(right)
+        self._build_grace(right)
+        self._build_create(right)
+
+        self.item_var = tk.StringVar(
+            value=f"选择一条{self.title}记录后，这里会显示它是什么装备。")
+        ttk.Label(right, textvariable=self.item_var, foreground="#1a4f8f",
+                  wraplength=520, justify=tk.LEFT).pack(anchor=tk.W, pady=(6, 0))
+        self.detail_var = tk.StringVar(value="")
+        ttk.Label(right, textvariable=self.detail_var, foreground="#1a4f8f",
+                  wraplength=520, justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        mid.add(right_scroll, weight=3)
+        # This tab wires its own scrolling column (see ``register=False`` above),
+        # now that every child of the column exists.
+        self.app._bind_wheel_to_children(right, right.master)
+
+    def _build_note(self, right: ttk.Frame) -> None:
+        note = (
+            f"{self.title}词条来自《仁王3词条装备库v2.21》的对应词条表，"
+            "非表内词条一律拒绝。\n"
+            "候选表按装备选：远程武器（弓 / 火枪 / 大炮）只看远程词条表，"
+            "其余武器只看近战词条表，防具看防具词条表；并且只列出源表标着"
+            "「装备种类」相容的词条 —— 例如只标「近战」的词条不会出现在弓的列表里。\n"
+            "同名固定词条是该件装备固有的一部分，**禁止修改**（显示为「固定，不可修改」）；"
+            "★（星号）词条可以改。恩宠/套装词条只显示、不在本页替换。\n"
+            "等级上限 180；+值上限按大类（武器 / 防具都是 0..30），上限数值来自"
+            "按类别收集的实测范围表。\n"
+            "仅供测试学习用，不要用于联机影响游戏平衡。"
+        )
+        ttk.Label(right, text=note, foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(6, 0))
+
+    def _build_level(self, right: ttk.Frame) -> None:
+        self.level_frame = ttk.LabelFrame(right, text="等级（上限 180）", padding=(6, 4))
+        self.level_frame.pack(fill=tk.X, pady=(6, 0))
+        row = ttk.Frame(self.level_frame)
+        row.pack(fill=tk.X)
+        ttk.Label(row, text="改成:").pack(side=tk.LEFT)
+        self.level_var = tk.StringVar(value="")
+        self.level_entry = ttk.Entry(row, textvariable=self.level_var, width=8)
+        self.level_entry.pack(side=tk.LEFT, padx=4)
+        self.level_button = ttk.Button(row, text="应用等级", command=self.apply_level)
+        self.level_button.pack(side=tk.LEFT, padx=2)
+        self.level_status_var = tk.StringVar(
+            value=f"选择一条{self.title}记录后，这里会显示它的等级。")
+        ttk.Label(self.level_frame, textvariable=self.level_status_var,
+                  foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        self._set_level_enabled(False)
+
+    def _build_plus(self, right: ttk.Frame) -> None:
+        caps = self._caps_for_big()
+        self.plus_frame = ttk.LabelFrame(
+            right, text=f"+值（0..{caps}，字段 +0x0A）", padding=(6, 4))
+        self.plus_frame.pack(fill=tk.X, pady=(6, 0))
+        row = ttk.Frame(self.plus_frame)
+        row.pack(fill=tk.X)
+        ttk.Label(row, text="改成:").pack(side=tk.LEFT)
+        self.plus_var = tk.StringVar(value="")
+        self.plus_entry = ttk.Entry(row, textvariable=self.plus_var, width=8)
+        self.plus_entry.pack(side=tk.LEFT, padx=4)
+        self.plus_button = ttk.Button(row, text="应用 +值", command=self.apply_plus)
+        self.plus_button.pack(side=tk.LEFT, padx=2)
+        self.plus_status_var = tk.StringVar(
+            value=f"选择一条{self.title}记录后，这里会显示它的 +值。")
+        ttk.Label(self.plus_frame, textvariable=self.plus_status_var,
+                  foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        self._set_plus_enabled(False)
+
+    def _build_grace(self, right: ttk.Frame) -> None:
+        self.grace_frame = ttk.LabelFrame(right, text="恩宠 / 套装（只读）", padding=(6, 4))
+        self.grace_frame.pack(fill=tk.X, pady=(6, 0))
+        self.grace_status_var = tk.StringVar(
+            value=f"选择一条{self.title}记录后，这里会显示它带的恩宠/套装词条。")
+        ttk.Label(self.grace_frame, textvariable=self.grace_status_var,
+                  foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W)
+
+    def _build_create(self, right: ttk.Frame) -> None:
+        self.create_frame = ttk.LabelFrame(
+            right, text="无中生有（实验性：需要进游戏实测确认）", padding=(6, 4))
+        self.create_frame.pack(fill=tk.X, pady=(6, 0))
+        row = ttk.Frame(self.create_frame)
+        row.pack(fill=tk.X)
+        ttk.Label(row, text="种类:").pack(side=tk.LEFT)
+        self.create_kind_combo = ttk.Combobox(
+            row, state="readonly", width=28,
+            values=tuple(self.kind_choices))
+        self.create_kind_combo.pack(side=tk.LEFT, padx=4)
+        ttk.Label(row, text="等级:").pack(side=tk.LEFT)
+        self.create_level_var = tk.StringVar(value=str(MAX_ITEM_LEVEL))
+        ttk.Entry(row, textvariable=self.create_level_var,
+                  width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row, text="+值:").pack(side=tk.LEFT)
+        self.create_plus_var = tk.StringVar(value="0")
+        ttk.Entry(row, textvariable=self.create_plus_var,
+                  width=4).pack(side=tk.LEFT, padx=2)
+        self.create_button = ttk.Button(row, text="新建到空槽", command=self.create_item)
+        self.create_button.pack(side=tk.LEFT, padx=4)
+        self.preview_button = ttk.Button(row, text="预览改动", command=self.preview_edits)
+        self.preview_button.pack(side=tk.LEFT, padx=2)
+        self.create_status_var = tk.StringVar(
+            value="实验性功能：需要进游戏实测确认后才算数。用法：在右侧槽位挑好词条，"
+                  "选种类并点「新建到空槽」。模板优先取同种类；没有同种类时改用"
+                  "同类型（小类）记录并清空不适用的槽，原因会写在这里。")
+        ttk.Label(self.create_frame, textvariable=self.create_status_var,
+                  foreground="#666666", wraplength=560,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+
+    # ------------------------------------------------------- 列 表 / 筛 选
+    def populate(self, views) -> None:
+        """Replace the list (called on load and after every edit)."""
+        self.views = list(views)
+        self.refresh_tree()
+        known = {view.slot_index for view in self.views}
+        if self.selected not in known:
+            self.selected = None
+            self._reset_slot_widgets()
+            self.item_var.set(f"选择一条{self.title}记录后，这里会显示它是什么装备。")
+            self.detail_var.set("")
+            self._set_level_enabled(False)
+            self._set_plus_enabled(False)
+
+    def set_note(self, message: str) -> None:
+        """Report a listing problem without raising (fail soft, per tab)."""
+        self.filter_status_var.set(message)
+
+    def reload(self) -> None:
+        """Re-list this tab's records from the bytes already in memory."""
+        if self.app.decrypted is None:
+            self.populate(())
+            return
+        keep = self.selected
+        views = list_equipment(self.app.decrypted, big=self.big,
+                               layout=self.app.layout, item_db=self.item_db)
+        self.views = list(views)
+        self.refresh_tree()
+        if keep is not None and any(v.slot_index == keep for v in self.views):
+            self.selected = keep
+            self.tree.selection_set(str(keep))
+            self._on_selected()
+
+    def clear_filters(self) -> None:
+        for var in self.filter_vars.values():
+            var.set(ALL_FILTER)
+        self.refresh_tree()
+
+    def _axis_label(self, axis: str) -> str:
+        """筛选轴的名字（武士/忍者 这一轴按本大类实际的取值显示）。"""
+        if axis == "school":
+            schools = self.item_db.schools(self.big)
+            if schools:
+                return "/".join(schools)
+        return EQUIPMENT_FILTER_LABELS[axis]
+
+    def _view_value(self, axis: str, view: EquipmentView) -> str:
+        """这条记录在某个筛选轴上的取值。"""
+        if axis == "small":
+            return view.small
+        if axis == "kind":
+            entry = self.item_db.lookup(view.record_type)
+            return entry.label if entry is not None else f"{view.record_type:#06x}"
+        if axis == "grace":
+            return self.grace_name(view)
+        return view.school
+
+    def _static_values(self, axis: str) -> tuple[str, ...]:
+        """该轴的候选取值：类型 / 种类 / 武士忍者 来自物品总目录，恩宠来自恩宠表。"""
+        if axis == "small":
+            return self.item_db.small_classes(self.big)
+        if axis == "kind":
+            return tuple(self.kind_choices)
+        if axis == "school":
+            return self.item_db.schools(self.big)
+        # 恩宠/套装：只列出本页记录真正带着的那些，名字与 ``_view_value``
+        # 用的是同一个来源（``GraceDb.describe``），否则筛选项和记录对不上。
+        return tuple(sorted({self.grace_name(view) for view in self.views
+                             if self.grace_name(view)}))
+
+    def _passes(self, axis: str, view: EquipmentView) -> bool:
+        choice = self.filter_vars[axis].get()
+        if choice in ("", ALL_FILTER):
+            return True
+        return self._view_value(axis, view) == choice
+
+    def _shown_views(self) -> list[EquipmentView]:
+        return [view for view in self.views
+                if all(self._passes(axis, view) for axis in EQUIPMENT_FILTER_AXES)]
+
+    def _cascade_filter_values(self) -> None:
+        """每个轴只列出**其余三个轴**仍然允许的取值。"""
+        for axis in EQUIPMENT_FILTER_AXES:
+            others = [name for name in EQUIPMENT_FILTER_AXES if name != axis]
+            pool = [view for view in self.views
+                    if all(self._passes(name, view) for name in others)]
+            allowed = {self._view_value(axis, view) for view in pool}
+            values = [ALL_FILTER] + [value for value in self._static_values(axis)
+                                     if value in allowed]
+            choice = self.filter_vars[axis].get()
+            if choice and choice != ALL_FILTER and choice not in values:
+                # 保留当前选择（并说明当前没有记录），而不是把它悄悄重置掉。
+                values.append(f"{choice}（当前无记录）")
+            self.filter_combos[axis].configure(values=tuple(values))
+
+    def refresh_tree(self) -> None:
+        self.tree.delete(*self.tree.get_children())
+        shown = self._shown_views()
+        self._cascade_filter_values()
+        for view in shown:
+            self.tree.insert(
+                "", "end", iid=str(view.slot_index),
+                text=f"#{view.slot_index} {view.item_name}",
+                values=(view.small, self.grace_name(view), view.level,
+                        str(view.plus_value), view.rarity_name),
+            )
+        total = len(self.views)
+        if all(self.filter_vars[axis].get() in ("", ALL_FILTER)
+               for axis in EQUIPMENT_FILTER_AXES):
+            self.filter_status_var.set(f"共 {total} 条{self.title}记录（未筛选）")
+        else:
+            self.filter_status_var.set(f"筛选后 {len(shown)} / {total} 条{self.title}记录")
+
+    def grace_name(self, view: EquipmentView) -> str:
+        """这条记录带的恩宠/套装名（没有就空串）。"""
+        index = self.grace_slot(view)
+        if index is None:
+            return ""
+        return self.app.grace_db.describe(view.effects[index].effect_id)
+
+    def grace_slot(self, view: EquipmentView) -> int | None:
+        """恩宠/套装词条所在的槽（词条 id 在恩宠表里才算）。"""
+        for index, effect in enumerate(view.effects):
+            if not effect.is_empty and self.app.grace_db.describe(effect.effect_id):
+                return index
+        return None
+
+    # ------------------------------------------------------------ 词 条 槽
+    def _caps_for_big(self) -> int:
+        """+值上限：按大类查随包表（武器 / 防具 30），查不到退回文档值。"""
+        return equipmentdb.plus_cap_for_big(self.big) or MAX_RECORD_PLUS
+
+    def pool_for(self, view: EquipmentView):
+        """这件装备的词条池（表 + 装备种类标签）。"""
+        return self.app.equipment_pools.get(view.pool)
+
+    def _set_candidates(self, view: EquipmentView | None) -> None:
+        """候选词条 = 本池词条中「装备种类标签相容」且**可以手写**的那些。
+
+        同名固定词条（表中 ``is_fixed``）不列进候选：引擎明确拒绝手写它们
+        （只能由「改种类」自动带入），列出来只会让用户选了再被拒。占着槽位的
+        固定词条照旧显示成「固定，不可修改」。
+        """
+        self._pool = self.pool_for(view) if view is not None else None
+        self._pool_error = ""
+        if view is None or self._pool is None:
+            self._candidates = (EMPTY_LABEL,)
+            self._candidate_entries = {}
+            self._candidate_ids = frozenset()
+            if view is not None:
+                self._pool_error = (f"{view.big}的词条表不可用："
+                                    f"{self.app.equipment_error or '未随包提供'}")
+            return
+        entries = [entry for entry in self._pool.db.all()
+                   if not entry.is_fixed
+                   and equipment_affix_allowed(self._pool, view.item, entry.effect_id)]
+        self._candidates = (EMPTY_LABEL,) + tuple(entry.label for entry in entries)
+        self._candidate_entries = {entry.label: entry for entry in entries}
+        self._candidate_ids = frozenset(entry.effect_id for entry in entries)
+
+    def _search_hint(self) -> str:
+        if self.selected is None:
+            return "选择一条记录后，这里会列出它自己的候选词条。"
+        count = max(len(self._candidates) - 1, 0)
+        pool = self._pool.label if self._pool is not None else "（词条表不可用）"
+        return (f"这件装备可以手写的候选词条 {count} 条（{pool}表，已按装备种类标签过滤；"
+                "同名固定词条不在候选里，它只能由「改种类」带入）；"
+                "在某一槽里输入关键词只缩小该槽的下拉列表，别的槽不受影响。"
+                "空格分隔多个关键词＝必须同时包含（如「星 恢复」）")
+
+    def _reset_slot_widgets(self) -> None:
+        self._set_candidates(None)
+        for index in range(EFFECT_COUNT):
+            self.slot_combos[index].configure(values=(EMPTY_LABEL,))
+            self.slot_combos[index].set("")
+            self.slot_labels[index].set("")
+            self.value_vars[index].set("")
+        self.search_status_var.set("选择一条记录后，这里会列出它自己的候选词条。")
+
+    def _reset_slot_lists(self) -> None:
+        for combo in self.slot_combos:
+            combo.configure(values=self._candidates)
+        self.search_status_var.set(self._search_hint())
+
+    def _search_candidates(self, keyword: str):
+        """在本池里按关键词搜索，再按装备种类标签过滤（顺序与饰品页签一致）。"""
+        if self._pool is None:
+            return []
+        return [entry for entry in self._pool.db.search(keyword.strip())
+                if entry.effect_id in self._candidate_ids
+                and entry.label in self._candidate_entries]
+
+    def _filter_slot(self, index: int, keyword: str) -> int:
+        combo = self.slot_combos[index]
+        keyword = keyword.strip()
+        if not keyword:
+            combo.configure(values=self._candidates)
+            return max(len(self._candidates) - 1, 0)
+        matches = self._search_candidates(keyword)
+        combo.configure(values=(EMPTY_LABEL,) + tuple(e.label for e in matches))
+        return len(matches)
+
+    def _on_slot_typed(self, index: int) -> None:
+        typed = self.slot_combos[index].get()
+        if typed in self._candidate_entries or typed == EMPTY_LABEL:
+            return
+        count = self._filter_slot(index, typed)
+        if not typed.strip():
+            self.search_status_var.set(self._search_hint())
+        elif count:
+            self.search_status_var.set(
+                f"槽{index + 1}: 「{typed.strip()}」匹配 {count} 条，"
+                "展开该槽的下拉列表选择（其它槽不受影响）")
+        else:
+            self.search_status_var.set(
+                f"槽{index + 1}: 「{typed.strip()}」在本装备的候选词条里没有匹配 —— "
+                "换个更短的关键词，或直接写词条 id（如 0x0b32）")
+
+    def _on_slot_return(self, index: int) -> None:
+        typed = self.slot_combos[index].get().strip()
+        if not typed or typed == EMPTY_LABEL or typed in self._candidate_entries:
+            return
+        matches = self._search_candidates(typed)
+        if len(matches) == 1:
+            self.slot_combos[index].set(matches[0].label)
+            self._on_slot_picked(index)
+            self.slot_combos[index].configure(values=self._candidates)
+            self.search_status_var.set(f"槽{index + 1}: 已选中 {matches[0].label}")
+        elif matches:
+            self._filter_slot(index, typed)
+            self.search_status_var.set(
+                f"槽{index + 1}: 「{typed}」匹配 {len(matches)} 条，"
+                "请从该槽的下拉列表里选一条")
+        else:
+            self._filter_slot(index, typed)
+            self.search_status_var.set(
+                f"槽{index + 1}: 「{typed}」在本装备的候选词条里没有匹配")
+
+    def _on_slot_picked(self, index: int) -> None:
+        """Pick a value: show the affix's own value span next to the box."""
+        if self.selected is None:
+            return
+        text = self.slot_combos[index].get()
+        entry = self._candidate_entries.get(text)
+        if entry is None:
+            self.slot_labels[index].set("")
+            return
+        self.value_vars[index].set(str(entry.value))
+        self.slot_labels[index].set(f"可改区间 {entry.describe_value_range()}")
+
+    @staticmethod
+    def _entry_from_id_text(text: str, db):
+        for base in (16, 10):
+            try:
+                value = int(text, base)
+            except ValueError:
+                continue
+            entry = db.lookup(value)
+            if entry is not None:
+                return entry
+        return None
+
+    def _resolve_slot_text(self, index: int) -> str:
+        combo = self.slot_combos[index]
+        if "disabled" in combo.state():
+            return ""
+        typed = combo.get().strip()
+        if not typed or typed == EMPTY_LABEL or typed in self._candidate_entries:
+            return typed
+        matches = self._search_candidates(typed)
+        if len(matches) == 1:
+            combo.set(matches[0].label)
+            return matches[0].label
+        if self._pool is not None:
+            by_id = self._entry_from_id_text(typed, self._pool.db)
+            if by_id is not None and by_id.label in self._candidate_entries:
+                combo.set(by_id.label)
+                return by_id.label
+        raise EditorError(
+            f"槽{index + 1} 的文本不是这件装备能用的词条：{typed!r}"
+            f"（候选里匹配 {len(matches)} 条，请从该槽下拉列表里选一条）")
+
+    def _slot_value(self, index: int):
+        text = self.value_vars[index].get().strip()
+        if not text:
+            return None
+        try:
+            return int(text, 10)
+        except ValueError as error:
+            raise EditorError(f"槽{index + 1} 的数值必须是整数，实际 {text!r}") from error
+
+    # ------------------------------------------------------------ 选 中
+    def _selected_view(self) -> EquipmentView | None:
+        return next((view for view in self.views
+                     if view.slot_index == self.selected), None)
+
+    def _on_selected(self) -> None:
+        selection = self.tree.selection()
+        if not selection:
+            return
+        self.selected = int(selection[0])
+        view = self._selected_view()
+        if view is None:
+            return
+        self._set_candidates(view)
+        self._reset_slot_lists()
+        grace = self.grace_slot(view)
+        pool = self._pool
+        for index in range(EFFECT_COUNT):
+            combo = self.slot_combos[index]
+            if index >= len(view.effects):
+                combo.configure(values=(EMPTY_LABEL,))
+                combo.set(EMPTY_LABEL)
+                combo.state(["!disabled"])
+                self.value_entries[index].state(["!disabled"])
+                self.slot_labels[index].set("")
+                continue
+            effect = view.effects[index]
+            self.value_entries[index].state(["!disabled"])
+            if effect.is_empty:
+                combo.set(EMPTY_LABEL)
+                combo.state(["!disabled"])
+                self.slot_labels[index].set("")
+                continue
+            entry = pool.db.lookup(effect.effect_id) if pool is not None else None
+            if view.slot_is_fixed(index, pool):
+                label = entry.label if entry is not None else                     f"{effect.effect_id:#06x}（非本池词条）"
+                combo.configure(values=(f"{label}（固定，不可修改）",))
+                combo.set(f"{label}（固定，不可修改）")
+                combo.state(["disabled"])
+                self.value_vars[index].set(str(effect.value))
+                self.value_entries[index].state(["disabled"])
+                self.slot_labels[index].set(
+                    f"数值={effect.value} 标识={effect.metadata:#010x}"
+                    " ← 固定词条，词条与数值都不能改")
+                continue
+            if index == grace:
+                named = self.app.grace_db.describe(effect.effect_id)
+                combo.configure(values=(f"{effect.effect_id:#06x} {named}",))
+                combo.set(f"{effect.effect_id:#06x} {named}（只读）")
+                combo.state(["disabled"])
+                self.value_vars[index].set(str(effect.value))
+                self.value_entries[index].state(["disabled"])
+                self.slot_labels[index].set(
+                    f"数值={effect.value} ← 恩宠/套装词条：本页只显示，不替换")
+                continue
+            if entry is not None:
+                combo.state(["!disabled"])
+                combo.set(entry.label)
+                # A star slot is editable on purpose (★ is never a fixed affix).
+                marks = ("★ 词条（可改）" if view.slot_is_star(index) else "可改")
+                self.slot_labels[index].set(
+                    f"数值={effect.value} 标识={effect.metadata:#010x}"
+                    f"（可改区间 {entry.describe_value_range()}）· {marks}")
+            else:
+                combo.state(["!disabled"])
+                outside = f"{effect.effect_id:#06x}（非本池词条）"
+                combo.configure(values=(EMPTY_LABEL, outside))
+                combo.set(outside)
+                self.slot_labels[index].set(
+                    f"数值={effect.value} 标识={effect.metadata:#010x}"
+                    " ← 这条不在本装备的词条表里；换掉它才能改这一槽")
+        limits = class_limits_for_record(view.record_type, item_db=self.item_db)
+        self.item_var.set(
+            f"记录 #{view.slot_index}：{self.item_db.lookup(view.record_type).label} "
+            f"（{view.big}/{view.category}/{view.small}）"
+            f"  Lv{view.level} {view.rarity_name}  词条池 {view.pool_label}"
+        )
+        self.level_var.set(str(view.level))
+        self.plus_var.set(str(view.plus_value))
+        if limits is not None:
+            self.level_frame.configure(text=f"等级（上限 {limits.max_level}）")
+            self.plus_frame.configure(text=f"+值（0..{limits.max_plus}，字段 +0x0A）")
+            self.level_status_var.set(
+                f"当前 Lv{view.level}；{limits.describe()}")
+            self.plus_status_var.set(
+                f"当前 +{view.plus_value}（字段 +0x0A，只写这两个字节）")
+        self._set_level_enabled(True)
+        self._set_plus_enabled(True)
+        name = self.grace_name(view)
+        if name:
+            self.grace_status_var.set(
+                f"当前：{view.effects[grace].effect_id:#06x} {name}（槽{grace + 1}）。"
+                "恩宠/套装词条不在武器的词条表里，本工具在本阶段不会改写它 —— "
+                "所以这一栏只显示；一件装备只能有一个恩宠/套装。")
+        else:
+            self.grace_status_var.set("这条记录没有恩宠/套装词条。")
+        self.detail_var.set("")
+
+    # ------------------------------------------------------- 收 集 / 应 用
+    def _pending_edit(self, index: int, view: EquipmentView):
+        """把一个槽的控件状态变成一个改动；没有改动返回 ``None``。"""
+        try:
+            text = self._resolve_slot_text(index)
+        except EditorError as error:
+            raise UiEditError(str(error)) from error
+        current = view.effects[index]
+        if not text:
+            return None
+        if text == EMPTY_LABEL:
+            if current.is_empty:
+                return None
+            return {"slot_index": index, "effect_id": EMPTY_EFFECT_ID}
+        entry = self._candidate_entries.get(text)
+        if entry is None:
+            return None  # 表外/未选中的文本：没有改动可收集
+        if entry.effect_id == current.effect_id:
+            typed = self._slot_value(index)
+            if typed is None or typed == current.value:
+                return None
+            return {"slot_index": index, "effect_id": entry.effect_id, "value": typed}
+        typed = self._slot_value(index)
+        if typed is not None and typed == current.value                 and not entry.allows_value(typed):
+            typed = None  # 预填的是旧词条的数值，对新词条没有意义
+        return {"slot_index": index, "effect_id": entry.effect_id,
+                "value": entry.value if typed is None else typed}
+
+    def _editable_slots(self, view: EquipmentView) -> tuple[int, ...]:
+        """能改的槽：既不是固定词条，也不是恩宠/套装那一槽。"""
+        grace = self.grace_slot(view)
+        pool = self.pool_for(view)
+        return tuple(index for index in range(len(view.effects))
+                     if index != grace and not view.slot_is_fixed(index, pool))
+
+    def current_edits(self) -> tuple[dict[str, int], ...]:
+        view = self._selected_view()
+        if view is None:
+            return ()
+        edits: list[dict[str, int]] = []
+        for index in self._editable_slots(view):
+            try:
+                edit = self._pending_edit(index, view)
+            except UiEditError as error:
+                messagebox.showwarning("提示", str(error))
+                return ()
+            if edit is not None:
+                edits.append(dict(edit, record_index=view.slot_index))
+        return tuple(edits)
+
+    def describe_edits(self, view: EquipmentView,
+                       edits: tuple[dict[str, int], ...]) -> str:
+        """改动预览：逐槽说清楚「从什么改成什么」。"""
+        names: list[str] = []
+        for edit in edits:
+            index = int(edit["slot_index"])
+            current = view.effects[index]
+            new_id = int(edit["effect_id"])
+            if new_id == EMPTY_EFFECT_ID:
+                new_name = EMPTY_LABEL
+            else:
+                entry = (self._candidate_entries.get(self.slot_combos[index].get())
+                         or (self._pool.db.lookup(new_id) if self._pool else None))
+                new_name = entry.label if entry is not None else f"{new_id:#06x}"
+            old_name = (self._pool.db.lookup(current.effect_id).label
+                        if self._pool is not None
+                        and self._pool.db.lookup(current.effect_id) is not None
+                        else (EMPTY_LABEL if current.is_empty
+                              else f"{current.effect_id:#06x}"))
+            value = f"，数值 {current.value} → {edit['value']}" if "value" in edit else ""
+            names.append(f"槽{index + 1}: {old_name} → {new_name}{value}")
+        return "；".join(names)
+
+    def preview_edits(self) -> None:
+        view = self._selected_view()
+        if view is None or self.app.decrypted is None:
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+            return
+        edits = self.current_edits()
+        if not edits:
+            messagebox.showwarning("提示", "当前没有检测到改动")
+            return
+        try:
+            plan_equipment_edits(self.app.decrypted, edits,
+                                 item_db=self.item_db,
+                                 pools=self.app.equipment_pools,
+                                 grace_db=self.app.grace_db,
+                                 layout=self.app.layout)
+        except Exception as error:  # noqa: BLE001 - 预览也要给出拒绝原因
+            self.detail_var.set(f"预览被拒绝：{error}")
+            messagebox.showerror("预览被拒绝", str(error))
+            return
+        text = self.describe_edits(view, edits)
+        self.detail_var.set(f"预览（尚未写入）：{text}")
+        self.app._status(f"{self.title}记录 #{view.slot_index} 预览：{text}")
+
+    def apply_edits(self) -> None:
+        view = self._selected_view()
+        if view is None or self.app.decrypted is None:
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+            return
+        edits = self.current_edits()
+        if not edits:
+            messagebox.showwarning("提示", "当前没有检测到改动")
+            return
+        target = view.slot_index
+        try:
+            plan_equipment_edits(self.app.decrypted, edits, item_db=self.item_db,
+                                 pools=self.app.equipment_pools,
+                                 grace_db=self.app.grace_db, layout=self.app.layout)
+            self.app.decrypted = apply_equipment_edits(
+                self.app.decrypted, edits, item_db=self.item_db,
+                pools=self.app.equipment_pools, grace_db=self.app.grace_db,
+                layout=self.app.layout)
+        except Exception as error:  # noqa: BLE001 - 通过对话框反馈
+            messagebox.showerror("错误", str(error))
+            return
+        self.detail_var.set(f"已应用（内存中，尚未写入存档）：{self.describe_edits(view, edits)}")
+        self.app._status(f"{self.title}记录 #{target} 的修改已应用到内存数据（尚未写入存档）")
+        self.reload()
+
+    # --------------------------------------------------- 等级 / +值 / 新建
+    def _set_level_enabled(self, enabled: bool) -> None:
+        state = ["!disabled"] if enabled else ["disabled"]
+        self.level_entry.state(state)
+        self.level_button.state(state)
+
+    def _set_plus_enabled(self, enabled: bool) -> None:
+        state = ["!disabled"] if enabled else ["disabled"]
+        self.plus_entry.state(state)
+        self.plus_button.state(state)
+
+    def apply_level(self) -> None:
+        view = self._selected_view()
+        if view is None or self.app.decrypted is None:
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+            return
+        try:
+            level = int(self.level_var.get().strip(), 10)
+        except ValueError:
+            messagebox.showwarning("提示", "等级必须是整数")
+            return
+        if not messagebox.askokcancel(
+            "确认修改等级",
+            f"把{self.title}记录 #{view.slot_index} 的等级改成 {level}？\n\n"
+            "· 只写入等级字段（+0x06/+0x08），词条数值不会被改写；\n"
+            "· 请谨慎修改：改完请进游戏确认显示与属性是否正常；\n"
+            "· 存档写入前会自动备份，出问题可以用「恢复备份」恢复。",
+            icon="warning",
+        ):
+            return
+        try:
+            plan = plan_level_edit(self.app.decrypted, view.slot_index, level,
+                                   affix_db=self.app.affix_db,
+                                   known_ids=self.app.known_ids,
+                                   layout=self.app.layout)
+            self.app.decrypted = apply_level_edits(self.app.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - 通过对话框反馈
+            messagebox.showerror("错误", str(error))
+            return
+        self.detail_var.set(f"{plan.describe()}（内存中，尚未写入存档）")
+        self.app._status(f"{self.title}记录 #{view.slot_index} 的等级改为 {plan.new_level}")
+        self.reload()
+
+    def apply_plus(self) -> None:
+        view = self._selected_view()
+        if view is None or self.app.decrypted is None:
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+            return
+        try:
+            plus = int(self.plus_var.get().strip(), 10)
+        except ValueError:
+            messagebox.showwarning("提示", "+值必须是整数")
+            return
+        limits = class_limits_for_record(view.record_type, item_db=self.item_db)
+        cap = limits.max_plus if limits is not None else MAX_RECORD_PLUS
+        if not messagebox.askokcancel(
+            "确认修改 +值",
+            f"把{self.title}记录 #{view.slot_index} 的 +值改成 {plus}？\n\n"
+            "· 只写入 +值 字段（+0x0A）与校验和，词条、等级、标识都不动；\n"
+            f"· 合法范围 0..{cap}（按大类收集的上限）；\n"
+            "· 存档写入前会自动备份，出问题可以用「恢复备份」恢复。",
+            icon="warning",
+        ):
+            return
+        try:
+            plan = plan_plus_edit(self.app.decrypted, view.slot_index, plus,
+                                  affix_db=self.app.affix_db,
+                                  known_ids=self.app.known_ids,
+                                  layout=self.app.layout)
+            self.app.decrypted = apply_plus_edits(self.app.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - 通过对话框反馈
+            messagebox.showerror("错误", str(error))
+            return
+        self.detail_var.set(f"{plan.describe()}（内存中，尚未写入存档）")
+        self.app._status(f"{self.title}记录 #{view.slot_index} 的 +值改为 {plan.new_value}")
+        self.reload()
+
+    def _chosen_effects(self) -> list[dict[str, int]]:
+        effects: list[dict[str, int]] = []
+        for index in range(EFFECT_COUNT):
+            text = self.slot_combos[index].get().strip()
+            entry = self._candidate_entries.get(text)
+            if entry is None:
+                continue
+            edit: dict[str, int] = {"slot_index": index, "effect_id": entry.effect_id}
+            value = self._slot_value(index)
+            if value is not None:
+                edit["value"] = value
+            effects.append(edit)
+        return effects
+
+    def create_item(self) -> None:
+        if self.app.decrypted is None:
+            messagebox.showwarning("提示", "请先读取存档")
+            return
+        combo = self.create_kind_combo
+        item = self.kind_choices.get(combo.get())
+        if item is None:
+            messagebox.showwarning("提示", "请先选择要新建的种类")
+            return
+        try:
+            level = int(self.create_level_var.get().strip(), 10)
+            plus = int(self.create_plus_var.get().strip() or "0", 10)
+            effects = self._chosen_effects()
+        except (ValueError, EditorError) as error:
+            messagebox.showwarning("提示", str(error) or "等级 / +值必须是整数")
+            return
+        try:
+            plan = plan_create_equipment(
+                self.app.decrypted, record_type=item.item_id, level=level, plus=plus,
+                effects=effects, item_db=self.item_db,
+                pools=self.app.equipment_pools, grace_db=self.app.grace_db,
+                layout=self.app.layout,
+            )
+        except CreationError as error:
+            self.create_status_var.set(str(error))
+            messagebox.showerror("无法新建", str(error))
+            return
+        detail = [plan.describe()]
+        if plan.cleared_slots:
+            detail.append("模板带入但已清空的槽："
+                          + "、".join(f"槽{index + 1}" for index in plan.cleared_slots))
+        else:
+            detail.append("模板带入的槽全部可用，没有清空任何槽")
+        if not messagebox.askokcancel(
+            "确认新建",
+            f"新建一件 {item.label}（Lv{level} +{plan.plus_value}）放进空槽？\n\n"
+            + "\n".join("· " + line for line in detail)
+            + "\n\n· 这是实验性功能：造出来的装备还没有在游戏里核对过，"
+              "请先备份、进游戏确认后再继续。\n"
+              "· 写入前会自动备份；背包已满时会拒绝。",
+            icon="warning",
+        ):
+            return
+        try:
+            self.app.decrypted = apply_equipment_creations(self.app.decrypted, [plan])
+        except CreationError as error:
+            self.create_status_var.set(str(error))
+            messagebox.showerror("无法新建", str(error))
+            return
+        self.create_status_var.set("\n".join(detail))
+        self.app._status(f"已新建 {plan.describe()}（尚未写入存档）")
+        self.reload()
+        if any(view.slot_index == plan.slot_index for view in self.views):
+            self.tree.selection_set(str(plan.slot_index))
+            self._on_selected()
+
+    def set_error(self, message: str) -> None:
+        """目录/词条表缺失时把页签标成只读（fail closed）。"""
+        self.create_status_var.set(message)
+        self.create_button.state(["disabled"])
+        self.preview_button.state(["disabled"])
+
+
+
 class AccessoryEditorApp(tk.Tk):
     """Main window: save selection, record list, affix slots, write actions."""
 
@@ -178,6 +1101,18 @@ class AccessoryEditorApp(tk.Tk):
             self.soul_db = AffixDb([])
             self.soul_db_error = str(error)
         self.soul_item_db = ItemDb.best_effort(default_soul_items_path())
+        # 武器 / 防具页签：物品种类表（物品总目录全类别）+ 三个词条池。
+        # 缺文件时页签只读并说明原因，而不是让整个窗口起不来（fail closed）。
+        self.equipment_item_db = equipmentdb.load_equipment_item_db()
+        self.equipment_error = self.equipment_item_db.error
+        self.equipment_pools: dict[str, object] = {}
+        for pool_key in (equipmentdb.POOL_MELEE, equipmentdb.POOL_RANGED,
+                         equipmentdb.POOL_ARMOR):
+            try:
+                self.equipment_pools[pool_key] = equipmentdb.load_pool(pool_key)
+            except Exception as error:  # noqa: BLE001 - 缺表只影响对应页签
+                self.equipment_error = self.equipment_error or str(error)
+        self.equipment_tabs: list[EquipmentTab] = []
         self.soul_views: list[SoulCoreView] = []
         #: (canvas, inner frame) per scrollable editor column (饰品 / 魂核).
         self.scroll_columns: list[tuple[tk.Canvas, ttk.Frame]] = []
@@ -255,11 +1190,15 @@ class AccessoryEditorApp(tk.Tk):
 
     # ------------------------------------------------------------------ UI
 
-    def _scrollable(self, parent: tk.Widget, *, width: int) -> ttk.Frame:
+    def _scrollable(self, parent: tk.Widget, *, width: int,
+                    register: bool = True) -> ttk.Frame:
         """A vertically scrolling viewport inside ``parent``; returns its content.
 
         pack() clips whatever does not fit, which silently hid the lower rows of
         the editor column on a short window, so the column scrolls instead.
+        ``register=False`` leaves ``scroll_columns`` (the 饰品 / 魂核 columns the
+        window wires at the end of :meth:`_build_ui`) untouched: a self-contained
+        tab wires its own column with :meth:`_bind_wheel_to_children`.
         """
         canvas = tk.Canvas(parent, highlightthickness=0, borderwidth=0, width=width)
         bar = ttk.Scrollbar(parent, orient=tk.VERTICAL, command=canvas.yview)
@@ -280,7 +1219,8 @@ class AccessoryEditorApp(tk.Tk):
         canvas.bind("<Configure>", resize)
         canvas.bind("<MouseWheel>", wheel)
         inner.bind("<MouseWheel>", wheel)
-        self.scroll_columns.append((canvas, inner))
+        if register:
+            self.scroll_columns.append((canvas, inner))
         return inner
 
     def _bind_wheel_to_children(self, widget: tk.Widget, canvas: tk.Canvas) -> None:
@@ -389,6 +1329,15 @@ class AccessoryEditorApp(tk.Tk):
         self.soul_tab = ttk.Frame(self.notebook, padding=(2, 2))
         self.notebook.add(self.accessory_tab, text="饰品")
         self.notebook.add(self.soul_tab, text="魂核（魂之核）")
+        # 武器 / 防具：与饰品页签同一套操作（列表 -> 逐槽编辑 -> 预览 -> 应用
+        # -> 写入副本），只是候选词条按这件装备自己的词条池与装备种类标签过滤。
+        for big, label in EQUIPMENT_TAB_KINDS:
+            tab = EquipmentTab(self.notebook, self, big=big, title=label)
+            if self.equipment_error or not self.equipment_item_db.is_loaded:
+                tab.set_error(f"{label}页签只读：随包的物品/词条表不可用"
+                              f"（{self.equipment_error or '未随包提供'}）")
+            self.notebook.add(tab, text=label)
+            self.equipment_tabs.append(tab)
 
         mid = ttk.Panedwindow(self.accessory_tab, orient=tk.HORIZONTAL)
         mid.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=8, pady=4)
@@ -1741,6 +2690,8 @@ class AccessoryEditorApp(tk.Tk):
         self.decrypted = None
         self.accessory_views = []
         self.other_views = []
+        for tab in getattr(self, "equipment_tabs", []):
+            tab.populate(())
         self.layout = None
         self.known_ids = frozenset()
         self.selected_accessory = None
@@ -1823,6 +2774,7 @@ class AccessoryEditorApp(tk.Tk):
         # a different item than the one the user selected.
         self.known_ids = accessory_catalog_ids(self.affix_db)
         self._populate_soul_cores()
+        self._populate_equipment_tabs()
         # Only records whose affixes really are 饰品词条 are editable accessories;
         # weapons/armour/绘卷 share the same array and are reported separately.
         # ``is_accessory is None`` means no catalog evidence was supplied, so the
@@ -1871,11 +2823,36 @@ class AccessoryEditorApp(tk.Tk):
                      f"{other_note}{soul_note}")
         self.table_var.set(layout.describe())
 
+    def _populate_equipment_tabs(self) -> None:
+        """用已经解密在内存里的字节填满 武器 / 防具 两个页签。
+
+        记录只解析一次（``list_equipment``），再按大类分给两个页签；任何一个页签
+        出问题都不会影响别的页签，也不会影响饰品 / 魂核的既有流程。
+        """
+        if not self.equipment_tabs or self.decrypted is None:
+            return
+        try:
+            views = list_equipment(self.decrypted, layout=self.layout,
+                                   item_db=self.equipment_item_db)
+        except Exception as error:  # noqa: BLE001 - 逐页签报告，不抛出
+            for tab in self.equipment_tabs:
+                tab.populate(())
+                tab.set_note(f"未能列出{tab.big}记录：{error}")
+            return
+        for tab in self.equipment_tabs:
+            try:
+                tab.populate([view for view in views if view.big == tab.big])
+            except Exception as error:  # noqa: BLE001 - 同上
+                tab.populate(())
+                tab.set_note(f"未能列出{tab.big}记录：{error}")
+
     def _report_no_layout(self, payload: object) -> None:
         """Show why nothing could be read, with the raw diagnosis."""
         _data, checksum_ok, message, diagnosis = payload
         self.accessory_views = []
         self.other_views = []
+        for tab in getattr(self, "equipment_tabs", []):
+            tab.populate(())
         self.layout = None
         self.known_ids = frozenset()
         self.selected_accessory = None

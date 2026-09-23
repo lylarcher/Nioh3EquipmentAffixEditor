@@ -476,7 +476,7 @@ build artifacts: a fresh checkout reports live git information
 ## Tests
 
 ```powershell
-# Whole suite (645 tests, ~7 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (1049 tests, ~11 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter
@@ -711,6 +711,39 @@ soul cores with the same three edits, switched to the core tables by `--soul`:
 * **Verification** — the workbook's own 固定词条代码 matched the save on all 132
   confirmed cores with **0 mismatches**, which is what makes the catalog flag the
   right fixed-affix evidence here too.
+
+### The 武器 / 防具 tabs (weapons and armour)
+
+武器 and 防具 are the two tabs next to 饰品 / 魂核. They read the same decrypted
+bytes — one 读取数据 fills all four tabs — and follow the accessory tab's flow:
+pick a record, edit its slots, 预览改动, 应用修改, then 写入副本 (the write path *is*
+that tab's code and its copy gate).
+
+* **Candidates belong to the item** — a 刀 offers the melee table, a 弓 / 火枪 / 大炮
+  offers the ranged table, armour offers the armour table; on top of that the affix's
+  装备种类 token must intersect what this item accepts, so a 近战-only affix never
+  appears on a bow. Both checks are the engine's (`equipment_affix_allowed`), the tabs
+  do not re-implement them. 同名固定 affixes are not offered for writing at all: they
+  may only arrive through 改种类, which is also why a fixed slot is greyed out with
+  `固定，不可修改`.
+* **4-axis filter** — 类型 / 种类 / 恩宠·套装 / 武士·忍者, each listing only the values
+  the other 3 still allow. A value that has no records keeps its place as
+  `xxx（当前无记录）` instead of being silently reset, so an empty list is explained by
+  the filter you set.
+* **Per-slot search** — every slot owns its dropdown; typing narrows only that slot,
+  a space means AND, Enter takes an unambiguous hit, and 2 or more matches must be
+  picked from that slot's list.
+* **恩宠 / 套装 is shown, not rewritten** — those ids are not in the weapon / armour
+  tables, so the engine refuses to write them (that is the same 一件一个恩宠 rule that
+  applies to accessories). The tab displays the current one and the 恩宠·套装 filter
+  axis finds records by it.
+* **等级 / +値** — 180 and 30 for both tabs, taken from `class_limits_for_record`; the
+  per-class observed maxima in `data/equipment_ranges.json` stay evidence and are never
+  used as a cap.
+* **无中生有（实验性：需要进游戏实测确认）** — the button and its engine path exist and
+  carry 34 tests, but a created item has not been confirmed in game yet. A same-kind
+  real record is the template; when there is none, a same-小类 record is used and the
+  slots that do not fit are cleared, with the reason shown before anything is written.
 
 ### 筛选、关键词搜索、数值区间与「无中生有」
 
