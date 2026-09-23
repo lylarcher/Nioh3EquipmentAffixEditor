@@ -562,6 +562,8 @@ function Invoke-Build {
         foreach ($relative in @('config\editor.json', 'data\accessory_affixes.json',
                 'data\grace_affixes.json', 'data\accessory_items.json',
                 'data\soul_affixes.json', 'data\soul_items.json',
+                'data\weapon_affixes.json', 'data\armor_affixes.json',
+                'data\equipment_items.json', 'data\equipment_ranges.json',
                 'assets\app.ico', 'assets\logo-32.png', 'assets\logo.png',
                 'bin\Nioh_Savefile_decrypt.exe', 'readme.txt', 'README.md',
                 'README.zh-CN.md', 'CHANGELOG.md',

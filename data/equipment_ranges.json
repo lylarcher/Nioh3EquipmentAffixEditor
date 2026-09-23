@@ -1,0 +1,859 @@
+{
+  "schema": "nioh3-equipment-ranges/v1",
+  "source": "SAVEDATA.BIN（只读实测）",
+  "sha256": "8aa596b9549b808e0f02cb449732acf9621b16139b9dfbdc47493b1009da1b45",
+  "item_catalog": "equipment_items.json",
+  "classes": {
+    "武器/忍者武器/忍刀": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "忍刀",
+      "samples": 22,
+      "level": [
+        160,
+        180
+      ],
+      "plus": [
+        3,
+        25
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 12,
+      "fixed_slots": 13,
+      "slot_total": 110
+    },
+    "武器/忍者武器/忍双刀": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "忍双刀",
+      "samples": 16,
+      "level": [
+        160,
+        170
+      ],
+      "plus": [
+        2,
+        25
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 10,
+      "fixed_slots": 9,
+      "slot_total": 80
+    },
+    "武器/忍者武器/忍盾矛": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "忍盾矛",
+      "samples": 21,
+      "level": [
+        151,
+        180
+      ],
+      "plus": [
+        0,
+        23
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 16,
+      "fixed_slots": 13,
+      "slot_total": 105
+    },
+    "武器/忍者武器/手斧": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "手斧",
+      "samples": 27,
+      "level": [
+        152,
+        170
+      ],
+      "plus": [
+        0,
+        26
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 15,
+      "fixed_slots": 15,
+      "slot_total": 135
+    },
+    "武器/忍者武器/手甲钩": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "手甲钩",
+      "samples": 24,
+      "level": [
+        151,
+        170
+      ],
+      "plus": [
+        0,
+        22
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 16,
+      "fixed_slots": 15,
+      "slot_total": 120
+    },
+    "武器/忍者武器/旋棍": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "旋棍",
+      "samples": 20,
+      "level": [
+        154,
+        170
+      ],
+      "plus": [
+        0,
+        25
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 10,
+      "fixed_slots": 10,
+      "slot_total": 100
+    },
+    "武器/忍者武器/机关棍": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "机关棍",
+      "samples": 27,
+      "level": [
+        152,
+        180
+      ],
+      "plus": [
+        0,
+        23
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 17,
+      "fixed_slots": 19,
+      "slot_total": 135
+    },
+    "武器/忍者武器/锁镰": {
+      "big": "武器",
+      "category": "忍者武器",
+      "small": "锁镰",
+      "samples": 20,
+      "level": [
+        144,
+        170
+      ],
+      "plus": [
+        0,
+        25
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 12,
+      "fixed_slots": 12,
+      "slot_total": 100
+    },
+    "武器/武士武器/刀": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "刀",
+      "samples": 23,
+      "level": [
+        160,
+        180
+      ],
+      "plus": [
+        2,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 13,
+      "fixed_slots": 14,
+      "slot_total": 115
+    },
+    "武器/武士武器/双刀": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "双刀",
+      "samples": 18,
+      "level": [
+        153,
+        180
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 12,
+      "fixed_slots": 13,
+      "slot_total": 90
+    },
+    "武器/武士武器/大太刀": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "大太刀",
+      "samples": 29,
+      "level": [
+        150,
+        172
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 23,
+      "fixed_slots": 21,
+      "slot_total": 145
+    },
+    "武器/武士武器/手甲": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "手甲",
+      "samples": 20,
+      "level": [
+        158,
+        180
+      ],
+      "plus": [
+        1,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 8,
+      "fixed_slots": 10,
+      "slot_total": 100
+    },
+    "武器/武士武器/斧": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "斧",
+      "samples": 34,
+      "level": [
+        153,
+        180
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 21,
+      "fixed_slots": 24,
+      "slot_total": 170
+    },
+    "武器/武士武器/枪": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "枪",
+      "samples": 23,
+      "level": [
+        152,
+        180
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 15,
+      "fixed_slots": 17,
+      "slot_total": 115
+    },
+    "武器/武士武器/盾矛": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "盾矛",
+      "samples": 44,
+      "level": [
+        155,
+        180
+      ],
+      "plus": [
+        1,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 30,
+      "fixed_slots": 30,
+      "slot_total": 220
+    },
+    "武器/武士武器/薙刀镰": {
+      "big": "武器",
+      "category": "武士武器",
+      "small": "薙刀镰",
+      "samples": 29,
+      "level": [
+        153,
+        170
+      ],
+      "plus": [
+        1,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 19,
+      "fixed_slots": 19,
+      "slot_total": 145
+    },
+    "武器/远程武器/大炮": {
+      "big": "武器",
+      "category": "远程武器",
+      "small": "大炮",
+      "samples": 46,
+      "level": [
+        167,
+        170
+      ],
+      "plus": [
+        11,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 16,
+      "fixed_slots": 46,
+      "slot_total": 230
+    },
+    "武器/远程武器/弓": {
+      "big": "武器",
+      "category": "远程武器",
+      "small": "弓",
+      "samples": 22,
+      "level": [
+        150,
+        170
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 13,
+      "fixed_slots": 22,
+      "slot_total": 110
+    },
+    "武器/远程武器/火枪": {
+      "big": "武器",
+      "category": "远程武器",
+      "small": "火枪",
+      "samples": 32,
+      "level": [
+        168,
+        180
+      ],
+      "plus": [
+        10,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 13,
+      "fixed_slots": 32,
+      "slot_total": 160
+    },
+    "防具/忍者防具/头部": {
+      "big": "防具",
+      "category": "忍者防具",
+      "small": "头部",
+      "samples": 42,
+      "level": [
+        150,
+        180
+      ],
+      "plus": [
+        0,
+        26
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 28,
+      "fixed_slots": 41,
+      "slot_total": 210
+    },
+    "防具/忍者防具/手臂": {
+      "big": "防具",
+      "category": "忍者防具",
+      "small": "手臂",
+      "samples": 49,
+      "level": [
+        149,
+        180
+      ],
+      "plus": [
+        0,
+        23
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 38,
+      "fixed_slots": 49,
+      "slot_total": 245
+    },
+    "防具/忍者防具/腿部": {
+      "big": "防具",
+      "category": "忍者防具",
+      "small": "腿部",
+      "samples": 38,
+      "level": [
+        151,
+        180
+      ],
+      "plus": [
+        0,
+        29
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 26,
+      "fixed_slots": 37,
+      "slot_total": 190
+    },
+    "防具/忍者防具/足部": {
+      "big": "防具",
+      "category": "忍者防具",
+      "small": "足部",
+      "samples": 51,
+      "level": [
+        150,
+        174
+      ],
+      "plus": [
+        0,
+        28
+      ],
+      "slots": [
+        4,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 39,
+      "fixed_slots": 50,
+      "slot_total": 254
+    },
+    "防具/忍者防具/身体": {
+      "big": "防具",
+      "category": "忍者防具",
+      "small": "身体",
+      "samples": 65,
+      "level": [
+        153,
+        180
+      ],
+      "plus": [
+        0,
+        27
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 51,
+      "fixed_slots": 64,
+      "slot_total": 325
+    },
+    "防具/武士防具/头部": {
+      "big": "防具",
+      "category": "武士防具",
+      "small": "头部",
+      "samples": 64,
+      "level": [
+        153,
+        180
+      ],
+      "plus": [
+        1,
+        30
+      ],
+      "slots": [
+        5,
+        6
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 44,
+      "fixed_slots": 66,
+      "slot_total": 322
+    },
+    "防具/武士防具/手臂": {
+      "big": "防具",
+      "category": "武士防具",
+      "small": "手臂",
+      "samples": 74,
+      "level": [
+        150,
+        180
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 54,
+      "fixed_slots": 74,
+      "slot_total": 370
+    },
+    "防具/武士防具/腿部": {
+      "big": "防具",
+      "category": "武士防具",
+      "small": "腿部",
+      "samples": 71,
+      "level": [
+        150,
+        180
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        4,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 57,
+      "fixed_slots": 70,
+      "slot_total": 354
+    },
+    "防具/武士防具/足部": {
+      "big": "防具",
+      "category": "武士防具",
+      "small": "足部",
+      "samples": 78,
+      "level": [
+        148,
+        170
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 58,
+      "fixed_slots": 78,
+      "slot_total": 390
+    },
+    "防具/武士防具/身体": {
+      "big": "防具",
+      "category": "武士防具",
+      "small": "身体",
+      "samples": 82,
+      "level": [
+        151,
+        180
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        4,
+        5
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 67,
+      "fixed_slots": 81,
+      "slot_total": 409
+    },
+    "饰品/忍者饰品": {
+      "big": "饰品",
+      "category": "忍者饰品",
+      "small": "",
+      "samples": 1,
+      "level": [
+        170,
+        170
+      ],
+      "plus": [
+        19,
+        19
+      ],
+      "slots": [
+        6,
+        6
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 0,
+      "fixed_slots": 2,
+      "slot_total": 6
+    },
+    "饰品/忍者饰品/忍者饰品": {
+      "big": "饰品",
+      "category": "忍者饰品",
+      "small": "忍者饰品",
+      "samples": 50,
+      "level": [
+        147,
+        180
+      ],
+      "plus": [
+        0,
+        30
+      ],
+      "slots": [
+        5,
+        6
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 9,
+      "fixed_slots": 53,
+      "slot_total": 253
+    },
+    "饰品/武士饰品": {
+      "big": "饰品",
+      "category": "武士饰品",
+      "small": "",
+      "samples": 1,
+      "level": [
+        170,
+        170
+      ],
+      "plus": [
+        18,
+        18
+      ],
+      "slots": [
+        6,
+        6
+      ],
+      "rarity": [
+        4,
+        4
+      ],
+      "star_slots": 0,
+      "fixed_slots": 2,
+      "slot_total": 6
+    },
+    "饰品/武士饰品/武士饰品": {
+      "big": "饰品",
+      "category": "武士饰品",
+      "small": "武士饰品",
+      "samples": 161,
+      "level": [
+        135,
+        180
+      ],
+      "plus": [
+        0,
+        28
+      ],
+      "slots": [
+        2,
+        5
+      ],
+      "rarity": [
+        0,
+        4
+      ],
+      "star_slots": 30,
+      "fixed_slots": 161,
+      "slot_total": 802
+    },
+    "魂核/魂核/魂核": {
+      "big": "魂核",
+      "category": "魂核",
+      "small": "魂核",
+      "samples": 132,
+      "level": [
+        151,
+        180
+      ],
+      "plus": [
+        0,
+        15
+      ],
+      "slots": [
+        3,
+        4
+      ],
+      "rarity": [
+        2,
+        3
+      ],
+      "star_slots": 91,
+      "fixed_slots": 264,
+      "slot_total": 526
+    }
+  },
+  "unnamed_types": {}
+}

@@ -1,0 +1,5936 @@
+{
+  "schema": "nioh3-armor-affixes/v1",
+  "count": 605,
+  "source": "仁王3词条装备库v2.21.xlsx / 防具词条 + 绿色星号词条（防具）",
+  "conflicts": [],
+  "affixes": [
+    {
+      "effect_id": 58696,
+      "value": 21,
+      "flags": 0,
+      "name": "上段架式攻击伤害 +2.1%",
+      "category": "造成伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 20373,
+      "value": 21,
+      "flags": 0,
+      "name": "中段架式攻击伤害 +2.1%",
+      "category": "造成伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 54171,
+      "value": 21,
+      "flags": 0,
+      "name": "下段架式攻击伤害 +2.1%",
+      "category": "造成伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 55706,
+      "value": 21,
+      "flags": 0,
+      "name": "速攻击伤害 +2.1%",
+      "category": "造成伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 58116,
+      "value": 32,
+      "flags": 4,
+      "name": "(星)速攻击伤害 +3.2%",
+      "category": "造成伤害",
+      "value_min": 32,
+      "value_max": 32
+    },
+    {
+      "effect_id": 43624,
+      "value": 21,
+      "flags": 0,
+      "name": "强攻击伤害 +2.1%",
+      "category": "造成伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 43562,
+      "value": 19,
+      "flags": 0,
+      "name": "近距离攻击伤害 +1.9%",
+      "category": "造成伤害",
+      "value_min": 19,
+      "value_max": 19
+    },
+    {
+      "effect_id": 54565,
+      "value": 57,
+      "flags": 0,
+      "name": "近距离攻击伤害(绝境) +5.7%",
+      "category": "造成伤害",
+      "value_min": 57,
+      "value_max": 57
+    },
+    {
+      "effect_id": 14054,
+      "value": 49,
+      "flags": 64,
+      "name": "(同名固定)近距离攻击伤害(地狱) +4.9%",
+      "category": "造成伤害",
+      "value_min": 49,
+      "value_max": 49
+    },
+    {
+      "effect_id": 55930,
+      "value": 25,
+      "flags": 0,
+      "name": "近距离攻击伤害(地狱) +2.5%",
+      "category": "造成伤害",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 63201,
+      "value": 14,
+      "flags": 0,
+      "name": "对处于火状态敌人的守护灵技伤害 +1.4%",
+      "category": "造成伤害",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 21035,
+      "value": 14,
+      "flags": 0,
+      "name": "对处于水状态敌人的守护灵技伤害 +1.4%",
+      "category": "造成伤害",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 16892,
+      "value": 14,
+      "flags": 0,
+      "name": "对处于雷状态敌人的守护灵技伤害 +1.4%",
+      "category": "造成伤害",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 10893,
+      "value": 14,
+      "flags": 0,
+      "name": "对处于风状态敌人的守护灵技伤害 +1.4%",
+      "category": "造成伤害",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 1691,
+      "value": 14,
+      "flags": 0,
+      "name": "对处于毒状态敌人的守护灵技伤害 +1.4%",
+      "category": "造成伤害",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 26248,
+      "value": 70,
+      "flags": 0,
+      "name": "对处于麻痹状态敌人的守护灵技伤害 +7.0%",
+      "category": "造成伤害",
+      "value_min": 70,
+      "value_max": 70
+    },
+    {
+      "effect_id": 63636,
+      "value": 75,
+      "flags": 0,
+      "name": "箭弹命中弱点时伤害 +7.5%",
+      "category": "造成伤害",
+      "value_min": 75,
+      "value_max": 75
+    },
+    {
+      "effect_id": 21010,
+      "value": 19,
+      "flags": 0,
+      "name": "地狱武器伤害 +1.9%",
+      "category": "造成伤害",
+      "value_min": 19,
+      "value_max": 19
+    },
+    {
+      "effect_id": 37209,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)对无伤敌人造成的近距离伤害 +2.0%",
+      "category": "造成伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 26907,
+      "value": 40,
+      "flags": 64,
+      "name": "(同名固定)对无伤敌人造成的近距离伤害 +4.0%",
+      "category": "造成伤害",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 10534,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)对无伤敌人造成的近距离伤害 +3.0%",
+      "category": "造成伤害",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 33098,
+      "value": 38,
+      "flags": 0,
+      "name": "对无伤敌人造成的近距离伤害 +3.8%",
+      "category": "造成伤害",
+      "value_min": 38,
+      "value_max": 38
+    },
+    {
+      "effect_id": 28798,
+      "value": 4,
+      "flags": 64,
+      "name": "(同名固定)伤害反映(阴阳术术力) C",
+      "category": "造成伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 26598,
+      "value": 25,
+      "flags": 0,
+      "name": "对精力耗尽敌人的近距离伤害 +2.5%",
+      "category": "造成伤害",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 65119,
+      "value": 23,
+      "flags": 0,
+      "name": "对攻击中敌人的近距离伤害 +2.3%",
+      "category": "造成伤害",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 36346,
+      "value": 21,
+      "flags": 0,
+      "name": "刺击伤害 +2.1%",
+      "category": "造成伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 26681,
+      "value": 19,
+      "flags": 0,
+      "name": "暗杀伤害 +1.9%",
+      "category": "造成伤害",
+      "value_min": 19,
+      "value_max": 19
+    },
+    {
+      "effect_id": 50666,
+      "value": 25,
+      "flags": 0,
+      "name": "打倒敌人时赋予造成伤害增加(2.5%)",
+      "category": "造成伤害",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 15108,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)祓除常世赋予造成伤害增加(2%)",
+      "category": "造成伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 7280,
+      "value": 27,
+      "flags": 0,
+      "name": "祓除常世赋予造成伤害增加(2.7%)",
+      "category": "造成伤害",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 27184,
+      "value": 29,
+      "flags": 0,
+      "name": "陷入异常状态时赋予造成伤害增加(2.9%)",
+      "category": "造成伤害",
+      "value_min": 29,
+      "value_max": 29
+    },
+    {
+      "effect_id": 42543,
+      "value": 23,
+      "flags": 0,
+      "name": "吸收精华后赋予造成伤害增加(2.3%)",
+      "category": "造成伤害",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 59147,
+      "value": 22,
+      "flags": 0,
+      "name": "下段武技伤害 +2.2%",
+      "category": "造成伤害",
+      "value_min": 22,
+      "value_max": 22
+    },
+    {
+      "effect_id": 22462,
+      "value": 23,
+      "flags": 0,
+      "name": "格挡成功时赋予造成伤害增加(2.3%)",
+      "category": "造成伤害",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 32060,
+      "value": 23,
+      "flags": 0,
+      "name": "成功识破时造成伤害增加(2.3%)",
+      "category": "造成伤害",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 59966,
+      "value": 21,
+      "flags": 0,
+      "name": "空中攻击伤害 +2.1%",
+      "category": "造成伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 32424,
+      "value": 23,
+      "flags": 0,
+      "name": "追击和近身刺击伤害 +2.3%",
+      "category": "造成伤害",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 22423,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)背后攻击伤害 +2.0%",
+      "category": "造成伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 32377,
+      "value": 40,
+      "flags": 64,
+      "name": "(同名固定)背后攻击伤害 +4.0%",
+      "category": "造成伤害",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 42789,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)背后攻击伤害 +3.0%",
+      "category": "造成伤害",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 57246,
+      "value": 80,
+      "flags": 0,
+      "name": "近距离攻击的精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 62060,
+      "value": 80,
+      "flags": 0,
+      "name": "上段架式攻击的精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 23586,
+      "value": 80,
+      "flags": 0,
+      "name": "中段架式攻击的精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 48057,
+      "value": 80,
+      "flags": 0,
+      "name": "下段架式攻击的精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 19432,
+      "value": 80,
+      "flags": 0,
+      "name": "速攻击精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 28084,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)强攻击精力消耗降低 -1.0%",
+      "category": "精力减少",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 16403,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)强攻击精力消耗降低 -2.0%",
+      "category": "精力减少",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 41489,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)强攻击精力消耗降低 -1.5%",
+      "category": "精力减少",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 6461,
+      "value": 80,
+      "flags": 0,
+      "name": "强攻击精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 13566,
+      "value": 80,
+      "flags": 0,
+      "name": "武技精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 15200,
+      "value": 80,
+      "flags": 0,
+      "name": "近距离攻击精力消耗降低(绝境) -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 53895,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)防御精力消耗降低 -1.0%",
+      "category": "精力减少",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 52648,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)防御精力消耗降低 -2.0%",
+      "category": "精力减少",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 39769,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)防御精力消耗降低 -1.5%",
+      "category": "精力减少",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 8955,
+      "value": 80,
+      "flags": 0,
+      "name": "防御精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 15442,
+      "value": 80,
+      "flags": 0,
+      "name": "上段架式防御精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 22867,
+      "value": 80,
+      "flags": 0,
+      "name": "中段架式防御精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 16284,
+      "value": 80,
+      "flags": 0,
+      "name": "下段架式防御精力消耗降低 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 54457,
+      "value": 80,
+      "flags": 0,
+      "name": "行动精力消耗(负面效果时) -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 49567,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)精力 +10",
+      "category": "精力减少",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 7663,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)精力 +20",
+      "category": "精力减少",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 2610,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)精力 +15",
+      "category": "精力减少",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 34216,
+      "value": 80,
+      "flags": 0,
+      "name": "上段武技精力 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 16470,
+      "value": 80,
+      "flags": 0,
+      "name": "中段武技精力 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 61592,
+      "value": 80,
+      "flags": 0,
+      "name": "下段武技精力 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 20521,
+      "value": 80,
+      "flags": 0,
+      "name": "跳跃的精力 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 3086,
+      "value": 80,
+      "flags": 0,
+      "name": "跳跃的精力 -8.0%",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 43003,
+      "value": 5,
+      "flags": 0,
+      "name": "火抗性 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 44177,
+      "value": 10,
+      "flags": 0,
+      "name": "火抗性 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 2818,
+      "value": 7,
+      "flags": 0,
+      "name": "火抗性 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 43767,
+      "value": 5,
+      "flags": 0,
+      "name": "水抗性 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 4938,
+      "value": 10,
+      "flags": 0,
+      "name": "水抗性 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 4073,
+      "value": 7,
+      "flags": 0,
+      "name": "水抗性 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 5321,
+      "value": 5,
+      "flags": 0,
+      "name": "雷抗性 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 12121,
+      "value": 10,
+      "flags": 0,
+      "name": "雷抗性 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 57485,
+      "value": 7,
+      "flags": 0,
+      "name": "雷抗性 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 52871,
+      "value": 5,
+      "flags": 0,
+      "name": "风抗性 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 22258,
+      "value": 10,
+      "flags": 0,
+      "name": "风抗性 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 48794,
+      "value": 7,
+      "flags": 0,
+      "name": "风抗性 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 13384,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)防御时的属性攻击伤害降低 +8",
+      "category": "承受异常状态",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 32839,
+      "value": 8,
+      "flags": 0,
+      "name": "防御时的属性攻击伤害降低 +8",
+      "category": "承受异常状态",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 29435,
+      "value": 17,
+      "flags": 0,
+      "name": "防御时的属性攻击伤害降低 +17",
+      "category": "承受异常状态",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 50096,
+      "value": 13,
+      "flags": 0,
+      "name": "防御时的属性攻击伤害降低 +13",
+      "category": "承受异常状态",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 42170,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)持续性伤害不会导致死亡",
+      "category": "承受异常状态",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 14178,
+      "value": 5,
+      "flags": 64,
+      "name": "(同名固定)属性攻击伤害降低 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 59269,
+      "value": 11,
+      "flags": 64,
+      "name": "(同名固定)属性攻击伤害降低 +11",
+      "category": "承受异常状态",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 59135,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)属性攻击伤害降低 +8",
+      "category": "承受异常状态",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 58807,
+      "value": 2,
+      "flags": 0,
+      "name": "属性攻击伤害降低 +2",
+      "category": "承受异常状态",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 28883,
+      "value": 5,
+      "flags": 0,
+      "name": "属性攻击伤害降低 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 7406,
+      "value": 3,
+      "flags": 0,
+      "name": "属性攻击伤害降低 +3",
+      "category": "承受异常状态",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 15056,
+      "value": 5,
+      "flags": 64,
+      "name": "(同名固定)火属性伤害降低 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 60566,
+      "value": 5,
+      "flags": 0,
+      "name": "火属性伤害降低 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 24546,
+      "value": 10,
+      "flags": 0,
+      "name": "火属性伤害降低 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 53228,
+      "value": 7,
+      "flags": 0,
+      "name": "火属性伤害降低 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 4394,
+      "value": 5,
+      "flags": 0,
+      "name": "水属性伤害降低 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 28750,
+      "value": 10,
+      "flags": 0,
+      "name": "水属性伤害降低 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 45859,
+      "value": 7,
+      "flags": 0,
+      "name": "水属性伤害降低 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 12076,
+      "value": 5,
+      "flags": 0,
+      "name": "雷属性伤害降低 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 9061,
+      "value": 10,
+      "flags": 0,
+      "name": "雷属性伤害降低 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 7192,
+      "value": 7,
+      "flags": 0,
+      "name": "雷属性伤害降低 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 40248,
+      "value": 5,
+      "flags": 0,
+      "name": "风属性伤害降低 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 46921,
+      "value": 10,
+      "flags": 0,
+      "name": "风属性伤害降低 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 8721,
+      "value": 7,
+      "flags": 0,
+      "name": "风属性伤害降低 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 50187,
+      "value": 15,
+      "flags": 4,
+      "name": "(星)风属性伤害降低 +15",
+      "category": "承受异常状态",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 16288,
+      "value": 5,
+      "flags": 0,
+      "name": "毒抗性 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 9604,
+      "value": 10,
+      "flags": 0,
+      "name": "毒抗性 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 31656,
+      "value": 7,
+      "flags": 0,
+      "name": "毒抗性 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 54552,
+      "value": 5,
+      "flags": 0,
+      "name": "麻痹抗性 +5",
+      "category": "承受异常状态",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 23571,
+      "value": 10,
+      "flags": 0,
+      "name": "麻痹抗性 +10",
+      "category": "承受异常状态",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 56830,
+      "value": 7,
+      "flags": 0,
+      "name": "麻痹毒抗性 +7",
+      "category": "承受异常状态",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 21681,
+      "value": 15,
+      "flags": 0,
+      "name": "中毒时持续承受伤害降低 -1.5%",
+      "category": "承受异常状态",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 53806,
+      "value": 31,
+      "flags": 0,
+      "name": "中毒时持续承受伤害降低 -3.1%",
+      "category": "承受异常状态",
+      "value_min": 31,
+      "value_max": 31
+    },
+    {
+      "effect_id": 26284,
+      "value": 24,
+      "flags": 0,
+      "name": "中毒时持续承受伤害降低 -2.4%",
+      "category": "承受异常状态",
+      "value_min": 24,
+      "value_max": 24
+    },
+    {
+      "effect_id": 33577,
+      "value": 15,
+      "flags": 0,
+      "name": "着火时持续承受伤害降低 -1.5%",
+      "category": "承受异常状态",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 27714,
+      "value": 31,
+      "flags": 0,
+      "name": "着火时持续承受伤害降低 -3.1%",
+      "category": "承受异常状态",
+      "value_min": 31,
+      "value_max": 31
+    },
+    {
+      "effect_id": 25885,
+      "value": 24,
+      "flags": 0,
+      "name": "着火时持续承受伤害降低 -2.4%",
+      "category": "承受异常状态",
+      "value_min": 24,
+      "value_max": 24
+    },
+    {
+      "effect_id": 16848,
+      "value": 12,
+      "flags": 64,
+      "name": "(同名固定)获得金钱 +1.2%",
+      "category": "掉落",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 53266,
+      "value": 24,
+      "flags": 64,
+      "name": "(同名固定)获得金钱 +2.4%",
+      "category": "掉落",
+      "value_min": 24,
+      "value_max": 24
+    },
+    {
+      "effect_id": 12589,
+      "value": 18,
+      "flags": 64,
+      "name": "(同名固定)获得金钱 +1.8%",
+      "category": "掉落",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 65447,
+      "value": 12,
+      "flags": 0,
+      "name": "获得金钱 +1.2%",
+      "category": "掉落",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 20539,
+      "value": 24,
+      "flags": 0,
+      "name": "获得金钱 +2.4%",
+      "category": "掉落",
+      "value_min": 24,
+      "value_max": 24
+    },
+    {
+      "effect_id": 41597,
+      "value": 18,
+      "flags": 0,
+      "name": "获得金钱 +1.8%",
+      "category": "掉落",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 60671,
+      "value": 18,
+      "flags": 4,
+      "name": "(星)获得金钱 +1.8%",
+      "category": "掉落",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 50228,
+      "value": 8,
+      "flags": 0,
+      "name": "获得武功 +0.8%",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 3915,
+      "value": 16,
+      "flags": 0,
+      "name": "获得武功 +1.6%",
+      "category": "掉落",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 56919,
+      "value": 12,
+      "flags": 0,
+      "name": "获得武功 +1.2%",
+      "category": "掉落",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 32526,
+      "value": 11,
+      "flags": 0,
+      "name": "打倒敌人时赋予幸运增加(11)",
+      "category": "掉落",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 11342,
+      "value": 21,
+      "flags": 0,
+      "name": "打倒敌人时赋予幸运增加(21)",
+      "category": "掉落",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 63808,
+      "value": 16,
+      "flags": 0,
+      "name": "打倒敌人时赋予幸运增加(16)",
+      "category": "掉落",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 35244,
+      "value": 4,
+      "flags": 0,
+      "name": "幸运(绝境) +4",
+      "category": "掉落",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 56756,
+      "value": 8,
+      "flags": 0,
+      "name": "幸运(绝境) +8",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 44419,
+      "value": 6,
+      "flags": 0,
+      "name": "幸运(绝境) +6",
+      "category": "掉落",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 39554,
+      "value": 2,
+      "flags": 0,
+      "name": "幸运(地狱) +2",
+      "category": "掉落",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 33734,
+      "value": 5,
+      "flags": 0,
+      "name": "幸运(地狱) +5",
+      "category": "掉落",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 42435,
+      "value": 4,
+      "flags": 0,
+      "name": "幸运(地狱) +4",
+      "category": "掉落",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 7155,
+      "value": 9,
+      "flags": 0,
+      "name": "吸收精华后赋予幸运增加(9)",
+      "category": "掉落",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 5233,
+      "value": 18,
+      "flags": 0,
+      "name": "吸收精华后赋予幸运增加(18)",
+      "category": "掉落",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 55328,
+      "value": 13,
+      "flags": 0,
+      "name": "吸收精华后赋予幸运增加(13)",
+      "category": "掉落",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 55371,
+      "value": 2,
+      "flags": 0,
+      "name": "幸运反映(精华槽) D+",
+      "category": "掉落",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 20415,
+      "value": 2,
+      "flags": 0,
+      "name": "幸运反映(精华槽) D+",
+      "category": "掉落",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 50699,
+      "value": 2,
+      "flags": 0,
+      "name": "幸运反映(精华槽) D+",
+      "category": "掉落",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 16871,
+      "value": 9,
+      "flags": 0,
+      "name": "强攻击获得精华 9",
+      "category": "掉落",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 47777,
+      "value": 18,
+      "flags": 0,
+      "name": "强攻击获得精华 18",
+      "category": "掉落",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 43463,
+      "value": 13,
+      "flags": 0,
+      "name": "强攻击获得精华 13",
+      "category": "掉落",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 55719,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)获得精华 +0.8%",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 12689,
+      "value": 16,
+      "flags": 64,
+      "name": "(同名固定)获得精华 +1.6%",
+      "category": "掉落",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 43296,
+      "value": 12,
+      "flags": 64,
+      "name": "(同名固定)获得精华 +1.2%",
+      "category": "掉落",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 38366,
+      "value": 8,
+      "flags": 0,
+      "name": "获得精华 +0.8%",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 22225,
+      "value": 16,
+      "flags": 0,
+      "name": "获得精华 +1.6%",
+      "category": "掉落",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 8885,
+      "value": 12,
+      "flags": 0,
+      "name": "获得精华 +1.2%",
+      "category": "掉落",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 32069,
+      "value": 24,
+      "flags": 4,
+      "name": "(星)获得精华 +2.4%",
+      "category": "掉落",
+      "value_min": 24,
+      "value_max": 24
+    },
+    {
+      "effect_id": 52340,
+      "value": 11,
+      "flags": 0,
+      "name": "获得精华(地狱) +1.1%",
+      "category": "掉落",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 64698,
+      "value": 21,
+      "flags": 0,
+      "name": "获得精华(地狱) +2.1%",
+      "category": "掉落",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 54361,
+      "value": 15,
+      "flags": 0,
+      "name": "获得精华(地狱) +1.5%",
+      "category": "掉落",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 6109,
+      "value": 40,
+      "flags": 0,
+      "name": "道具掉落率 +4.0%",
+      "category": "掉落",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 8479,
+      "value": 80,
+      "flags": 0,
+      "name": "道具掉落率 +8.0%",
+      "category": "掉落",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 37287,
+      "value": 60,
+      "flags": 0,
+      "name": "道具掉落率 +6.0%",
+      "category": "掉落",
+      "value_min": 60,
+      "value_max": 60
+    },
+    {
+      "effect_id": 30742,
+      "value": 60,
+      "flags": 4,
+      "name": "(星)道具掉落率 +6.0%",
+      "category": "掉落",
+      "value_min": 60,
+      "value_max": 60
+    },
+    {
+      "effect_id": 19863,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)装备品掉落率 +0.8%",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 43040,
+      "value": 16,
+      "flags": 64,
+      "name": "(同名固定)装备品掉落率 +1.6%",
+      "category": "掉落",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 22902,
+      "value": 12,
+      "flags": 64,
+      "name": "(同名固定)装备品掉落率 +1.2%",
+      "category": "掉落",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 36341,
+      "value": 40,
+      "flags": 0,
+      "name": "装备品掉落率 +4.0%",
+      "category": "掉落",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 59256,
+      "value": 80,
+      "flags": 0,
+      "name": "装备品掉落率 +8.0%",
+      "category": "掉落",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 13037,
+      "value": 60,
+      "flags": 0,
+      "name": "装备品掉落率 +6.0%",
+      "category": "掉落",
+      "value_min": 60,
+      "value_max": 60
+    },
+    {
+      "effect_id": 31,
+      "value": 60,
+      "flags": 4,
+      "name": "(星)装备品掉落率 +6.0%",
+      "category": "掉落",
+      "value_min": 60,
+      "value_max": 60
+    },
+    {
+      "effect_id": 51493,
+      "value": 40,
+      "flags": 0,
+      "name": "魂核掉落率 +4.0%",
+      "category": "掉落",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 64507,
+      "value": 80,
+      "flags": 0,
+      "name": "魂核掉落率 +8.0%",
+      "category": "掉落",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 59799,
+      "value": 60,
+      "flags": 0,
+      "name": "魂核掉落率 +6.0%",
+      "category": "掉落",
+      "value_min": 60,
+      "value_max": 60
+    },
+    {
+      "effect_id": 48543,
+      "value": 2,
+      "flags": 0,
+      "name": "幸运 +2",
+      "category": "掉落",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 46443,
+      "value": 4,
+      "flags": 0,
+      "name": "幸运 +4",
+      "category": "掉落",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 21712,
+      "value": 3,
+      "flags": 0,
+      "name": "幸运 +3",
+      "category": "掉落",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 24621,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)幸运 +8",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 11311,
+      "value": 12,
+      "flags": 4,
+      "name": "(星)幸运 +12",
+      "category": "掉落",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 59778,
+      "value": 18,
+      "flags": 4,
+      "name": "(星)幸运 +18",
+      "category": "掉落",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 17674,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)感应敌人",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 42660,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)感应宝物",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 28932,
+      "value": 8,
+      "flags": 64,
+      "name": "(同名固定)感应木灵",
+      "category": "掉落",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 20691,
+      "value": 17,
+      "flags": 0,
+      "name": "背后攻击灵力增加量 +1.7%",
+      "category": "灵力",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 59187,
+      "value": 2,
+      "flags": 0,
+      "name": "造成火属性伤害时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 5678,
+      "value": 2,
+      "flags": 0,
+      "name": "造成水属性伤害时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 10822,
+      "value": 2,
+      "flags": 0,
+      "name": "造成雷属性伤害时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 2726,
+      "value": 2,
+      "flags": 0,
+      "name": "造成风属性伤害时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 59105,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入火状态时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 35508,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入水状态时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 62427,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入雷状态时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 15944,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入风状态时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 32977,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入毒状态时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 14959,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入麻痹状态时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 33299,
+      "value": 2,
+      "flags": 0,
+      "name": "使敌人陷入异常状态时增加灵力 D+",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 15909,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)强攻击灵力增加量 +1.5%",
+      "category": "灵力",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 32342,
+      "value": 2,
+      "flags": 0,
+      "name": "灵力 +2.0",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 60848,
+      "value": 2,
+      "flags": 0,
+      "name": "灵力 +2.0",
+      "category": "灵力",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 52317,
+      "value": 1,
+      "flags": 0,
+      "name": "灵力 +1.0",
+      "category": "灵力",
+      "value_min": 1,
+      "value_max": 1
+    },
+    {
+      "effect_id": 14170,
+      "value": 6,
+      "flags": 4,
+      "name": "(星)灵力 +6.0",
+      "category": "灵力",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 13288,
+      "value": 5,
+      "flags": 4,
+      "name": "(星)灵力 +5.0",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 26128,
+      "value": 4,
+      "flags": 0,
+      "name": "获得精华增加灵力 C",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 48776,
+      "value": 4,
+      "flags": 0,
+      "name": "获得精华增加灵力 C",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 35678,
+      "value": 4,
+      "flags": 0,
+      "name": "获得精华增加灵力 C",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 1669,
+      "value": 7,
+      "flags": 4,
+      "name": "(星)获得精华增加灵力 B",
+      "category": "灵力",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 33369,
+      "value": 6,
+      "flags": 0,
+      "name": "获得精华增加灵力(绝境) B-",
+      "category": "灵力",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 18559,
+      "value": 6,
+      "flags": 0,
+      "name": "获得精华增加灵力(绝境) B-",
+      "category": "灵力",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 16132,
+      "value": 6,
+      "flags": 0,
+      "name": "获得精华增加灵力(绝境) B-",
+      "category": "灵力",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 20107,
+      "value": 5,
+      "flags": 0,
+      "name": "获得精华增加灵力(无伤) C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 50517,
+      "value": 5,
+      "flags": 0,
+      "name": "获得精华增加灵力(无伤) C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 16066,
+      "value": 5,
+      "flags": 0,
+      "name": "获得精华增加灵力(无伤) C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 34316,
+      "value": 25,
+      "flags": 0,
+      "name": "攻击处于麻痹状态的敌人增加灵力 AAA+",
+      "category": "灵力",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 30656,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于毒状态的敌人增加灵力 C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 33275,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于火状态的敌人增加灵力 C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 46483,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于水状态的敌人增加灵力 C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 14547,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于雷状态的敌人增加灵力 C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 46299,
+      "value": 5,
+      "flags": 0,
+      "name": "攻击处于风状态的敌人增加灵力 C+",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 29431,
+      "value": 5,
+      "flags": 0,
+      "name": "追击和近身刺击增加灵力(C+)",
+      "category": "灵力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 9950,
+      "value": 14,
+      "flags": 64,
+      "name": "(同名固定)灵力增加量 +1.4%",
+      "category": "灵力",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 12877,
+      "value": 14,
+      "flags": 0,
+      "name": "灵力增加量 +1.4%",
+      "category": "灵力",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 54510,
+      "value": 10,
+      "flags": 0,
+      "name": "灵力增加量 +1.0%",
+      "category": "灵力",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 11220,
+      "value": 10,
+      "flags": 0,
+      "name": "灵力增加量 +1.0%",
+      "category": "灵力",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 14580,
+      "value": 21,
+      "flags": 4,
+      "name": "(星)灵力增加量 +2.1%",
+      "category": "灵力",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 24728,
+      "value": 41,
+      "flags": 0,
+      "name": "灵力增加量(绝境) +4.1%",
+      "category": "灵力",
+      "value_min": 41,
+      "value_max": 41
+    },
+    {
+      "effect_id": 53515,
+      "value": 30,
+      "flags": 0,
+      "name": "灵力增加量(绝境) +3.0%",
+      "category": "灵力",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 49231,
+      "value": 30,
+      "flags": 0,
+      "name": "灵力增加量(绝境) +3.0%",
+      "category": "灵力",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 11162,
+      "value": 17,
+      "flags": 0,
+      "name": "灵力增加量(无伤) +1.7%",
+      "category": "灵力",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 11718,
+      "value": 12,
+      "flags": 0,
+      "name": "灵力增加量(无伤) +1.2%",
+      "category": "灵力",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 42010,
+      "value": 12,
+      "flags": 0,
+      "name": "灵力增加量(无伤) +1.2%",
+      "category": "灵力",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 1518,
+      "value": 18,
+      "flags": 0,
+      "name": "灵力增加量(地狱) +1.8%",
+      "category": "灵力",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 3541,
+      "value": 13,
+      "flags": 0,
+      "name": "灵力增加量(地狱) +1.3%",
+      "category": "灵力",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 37421,
+      "value": 13,
+      "flags": 0,
+      "name": "灵力增加量(地狱) +1.3%",
+      "category": "灵力",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 28045,
+      "value": 18,
+      "flags": 0,
+      "name": "灵力增加量(负面效果时) +1.8%",
+      "category": "灵力",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 1224,
+      "value": 13,
+      "flags": 0,
+      "name": "灵力增加量(负面效果时) +1.3%",
+      "category": "灵力",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 41511,
+      "value": 13,
+      "flags": 0,
+      "name": "灵力增加量(负面效果时) +1.3%",
+      "category": "灵力",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 6188,
+      "value": 15,
+      "flags": 0,
+      "name": "灵力增加量(正面效果时) +1.5%",
+      "category": "灵力",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 43261,
+      "value": 11,
+      "flags": 0,
+      "name": "灵力增加量(正面效果时) +1.1%",
+      "category": "灵力",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 40948,
+      "value": 11,
+      "flags": 0,
+      "name": "灵力增加量(正面效果时) +1.1%",
+      "category": "灵力",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 44535,
+      "value": 4,
+      "flags": 0,
+      "name": "祓除常世增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 60390,
+      "value": 4,
+      "flags": 0,
+      "name": "祓除常世增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 31164,
+      "value": 4,
+      "flags": 0,
+      "name": "祓除常世增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 32124,
+      "value": 3,
+      "flags": 64,
+      "name": "(同名固定)承受伤害增加灵力 C-",
+      "category": "灵力",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 64387,
+      "value": 4,
+      "flags": 0,
+      "name": "承受伤害增加灵力 C",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 52514,
+      "value": 4,
+      "flags": 0,
+      "name": "承受伤害增加灵力 C",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 12104,
+      "value": 4,
+      "flags": 0,
+      "name": "承受伤害增加灵力 C",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 11358,
+      "value": 4,
+      "flags": 0,
+      "name": "格挡可增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 50969,
+      "value": 4,
+      "flags": 0,
+      "name": "格挡可增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 39335,
+      "value": 4,
+      "flags": 0,
+      "name": "格挡可增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 17519,
+      "value": 4,
+      "flags": 0,
+      "name": "识破可增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 29630,
+      "value": 4,
+      "flags": 0,
+      "name": "识破可增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 54461,
+      "value": 4,
+      "flags": 0,
+      "name": "识破可增加灵力 +4",
+      "category": "灵力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 55174,
+      "value": 40,
+      "flags": 64,
+      "name": "(同名固定)以守护灵技打倒敌人可回收灵力 +4.0%",
+      "category": "灵力",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 5530,
+      "value": 7,
+      "flags": 0,
+      "name": "追击与近身刺击赋予昂神(B)",
+      "category": "灵力",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 16125,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)阴阳术 术力 +10",
+      "category": "其他",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 5500,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)阴阳术 术力 +20",
+      "category": "其他",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 24569,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)阴阳术 术力 +15",
+      "category": "其他",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 10295,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)负面效果持续时间缩短 -2.0%",
+      "category": "其他",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 6133,
+      "value": 40,
+      "flags": 64,
+      "name": "(同名固定)负面效果持续时间缩短 -4.0%",
+      "category": "其他",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 8457,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)负面效果持续时间缩短 -3.0%",
+      "category": "其他",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 1656,
+      "value": 25,
+      "flags": 0,
+      "name": "绝境时赋予承受伤害减少(2.5%)",
+      "category": "承受伤害",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 15928,
+      "value": 54,
+      "flags": 0,
+      "name": "绝境时赋予承受伤害减少(5.4%)",
+      "category": "承受伤害",
+      "value_min": 54,
+      "value_max": 54
+    },
+    {
+      "effect_id": 40784,
+      "value": 42,
+      "flags": 0,
+      "name": "绝境时赋予承受伤害减少(4.2%)",
+      "category": "承受伤害",
+      "value_min": 42,
+      "value_max": 42
+    },
+    {
+      "effect_id": 28327,
+      "value": 10,
+      "flags": 0,
+      "name": "恢复体力赋予承受伤害减少(1.0%)",
+      "category": "承受伤害",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 25916,
+      "value": 22,
+      "flags": 0,
+      "name": "恢复体力赋予承受伤害减少(2.2%)",
+      "category": "承受伤害",
+      "value_min": 22,
+      "value_max": 22
+    },
+    {
+      "effect_id": 39340,
+      "value": 17,
+      "flags": 0,
+      "name": "恢复体力赋予承受伤害减少(1.7%)",
+      "category": "承受伤害",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 44812,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)打倒敌人时赋予承受伤害减少(1.0%)",
+      "category": "承受伤害",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 42027,
+      "value": 10,
+      "flags": 0,
+      "name": "打倒敌人时赋予承受伤害减少(1.0%)",
+      "category": "承受伤害",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 30073,
+      "value": 22,
+      "flags": 0,
+      "name": "打倒敌人时赋予承受伤害减少(2.2%)",
+      "category": "承受伤害",
+      "value_min": 22,
+      "value_max": 22
+    },
+    {
+      "effect_id": 44831,
+      "value": 17,
+      "flags": 0,
+      "name": "打倒敌人时赋予承受伤害减少(1.7%)",
+      "category": "承受伤害",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 52720,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(精华槽) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 15506,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(精华槽) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 8019,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(精华槽) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 13063,
+      "value": 11,
+      "flags": 0,
+      "name": "陷入异常状态时赋予承受伤害减少(1.1%)",
+      "category": "承受伤害",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 53145,
+      "value": 23,
+      "flags": 0,
+      "name": "陷入异常状态时赋予承受伤害减少(2.3%)",
+      "category": "承受伤害",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 37699,
+      "value": 18,
+      "flags": 0,
+      "name": "陷入异常状态时赋予承受伤害减少(1.8%)",
+      "category": "承受伤害",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 17110,
+      "value": 11,
+      "flags": 0,
+      "name": "祓除常世赋予承受伤害减少(1.1%)",
+      "category": "承受伤害",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 26316,
+      "value": 24,
+      "flags": 0,
+      "name": "祓除常世赋予承受伤害减少(2.4%)",
+      "category": "承受伤害",
+      "value_min": 24,
+      "value_max": 24
+    },
+    {
+      "effect_id": 34319,
+      "value": 18,
+      "flags": 0,
+      "name": "祓除常世赋予承受伤害减少(1.8%)",
+      "category": "承受伤害",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 26925,
+      "value": 10,
+      "flags": 0,
+      "name": "吸收精华后赋予承受伤害减少(1.0%)",
+      "category": "承受伤害",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 21013,
+      "value": 20,
+      "flags": 0,
+      "name": "吸收精华后赋予承受伤害减少(2.0%)",
+      "category": "承受伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 20097,
+      "value": 16,
+      "flags": 0,
+      "name": "吸收精华后赋予承受伤害减少(1.6%)",
+      "category": "承受伤害",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 30137,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)承受的伤害降低(攻击动作期间) -2.0%",
+      "category": "承受伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 44138,
+      "value": 40,
+      "flags": 64,
+      "name": "(同名固定)承受的伤害降低(攻击动作期间) -4.0%",
+      "category": "承受伤害",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 33715,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)承受的伤害降低(攻击动作期间) -3.0%",
+      "category": "承受伤害",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 40127,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)承受的伤害减半(无伤状态) 2.0%",
+      "category": "承受伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 17451,
+      "value": 4,
+      "flags": 0,
+      "name": "防御力 +4",
+      "category": "承受伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 22272,
+      "value": 9,
+      "flags": 0,
+      "name": "防御力 +9",
+      "category": "承受伤害",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 50179,
+      "value": 6,
+      "flags": 0,
+      "name": "防御力 +6",
+      "category": "承受伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 55241,
+      "value": 7,
+      "flags": 4,
+      "name": "(星)防御力 +7",
+      "category": "承受伤害",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 27946,
+      "value": 11,
+      "flags": 4,
+      "name": "(星)防御力 +11",
+      "category": "承受伤害",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 64139,
+      "value": 9,
+      "flags": 4,
+      "name": "(星)防御力 +9",
+      "category": "承受伤害",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 62162,
+      "value": 4,
+      "flags": 0,
+      "name": "防御性能 +4",
+      "category": "承受伤害",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 9146,
+      "value": 9,
+      "flags": 0,
+      "name": "防御性能 +9",
+      "category": "承受伤害",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 48622,
+      "value": 6,
+      "flags": 0,
+      "name": "防御性能 +6",
+      "category": "承受伤害",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 21814,
+      "value": 8,
+      "flags": 0,
+      "name": "坚忍度 +8",
+      "category": "承受伤害",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 47660,
+      "value": 8,
+      "flags": 0,
+      "name": "坚忍度 +12",
+      "category": "承受伤害",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 52162,
+      "value": 11,
+      "flags": 0,
+      "name": "坚忍度 +11",
+      "category": "承受伤害",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 7042,
+      "value": 12,
+      "flags": 4,
+      "name": "(星)坚忍度 +12",
+      "category": "承受伤害",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 44270,
+      "value": 9,
+      "flags": 64,
+      "name": "(同名固定)承受的远距离伤害降低 -0.9%",
+      "category": "承受伤害",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 24741,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)承受的远距离伤害降低 -2.0%",
+      "category": "承受伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 46356,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)承受的远距离伤害降低 -1.5%",
+      "category": "承受伤害",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 61010,
+      "value": 9,
+      "flags": 0,
+      "name": "承受的远距离伤害降低 -0.9%",
+      "category": "承受伤害",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 32625,
+      "value": 20,
+      "flags": 0,
+      "name": "承受的远距离伤害降低 -2.0%",
+      "category": "承受伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 11494,
+      "value": 15,
+      "flags": 0,
+      "name": "承受的远距离伤害降低 -1.5%",
+      "category": "承受伤害",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 36969,
+      "value": 34,
+      "flags": 64,
+      "name": "(同名固定)被攻击时承受的伤害降低(绝境) -3.4%",
+      "category": "承受伤害",
+      "value_min": 34,
+      "value_max": 34
+    },
+    {
+      "effect_id": 42398,
+      "value": 74,
+      "flags": 64,
+      "name": "(同名固定)被攻击时承受的伤害降低(绝境) -7.4%",
+      "category": "承受伤害",
+      "value_min": 74,
+      "value_max": 74
+    },
+    {
+      "effect_id": 21525,
+      "value": 57,
+      "flags": 64,
+      "name": "(同名固定)被攻击时承受的伤害降低(绝境) -5.7%",
+      "category": "承受伤害",
+      "value_min": 57,
+      "value_max": 57
+    },
+    {
+      "effect_id": 48025,
+      "value": 34,
+      "flags": 0,
+      "name": "被攻击时承受的伤害降低(绝境) -3.4%",
+      "category": "承受伤害",
+      "value_min": 34,
+      "value_max": 34
+    },
+    {
+      "effect_id": 29559,
+      "value": 74,
+      "flags": 0,
+      "name": "被攻击时承受的伤害降低(绝境) -7.4%",
+      "category": "承受伤害",
+      "value_min": 74,
+      "value_max": 74
+    },
+    {
+      "effect_id": 45976,
+      "value": 57,
+      "flags": 0,
+      "name": "被攻击时承受的伤害降低(绝境) -5.7%",
+      "category": "承受伤害",
+      "value_min": 57,
+      "value_max": 57
+    },
+    {
+      "effect_id": 34589,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(体) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 40656,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(体) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 14886,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(体) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 6161,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(心) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 14552,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(心) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 5280,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(心) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 49716,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(刚) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 60998,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(武) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 48800,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(武) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 8247,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(技) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 64207,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(技) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 36961,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(技) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 47941,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(智) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 52561,
+      "value": 2,
+      "flags": 0,
+      "name": "防御反映(智) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 2017,
+      "value": 2,
+      "flags": 0,
+      "name": "对防御力反映(咒) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 49741,
+      "value": 2,
+      "flags": 0,
+      "name": "对防御力反映(咒) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 59191,
+      "value": 2,
+      "flags": 0,
+      "name": "对防御力反映(咒) D+",
+      "category": "承受伤害",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 56140,
+      "value": 13,
+      "flags": 0,
+      "name": "空中承受的伤害 -1.3%",
+      "category": "承受伤害",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 31701,
+      "value": 27,
+      "flags": 0,
+      "name": "空中承受的伤害 -2.7%",
+      "category": "承受伤害",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 16769,
+      "value": 21,
+      "flags": 0,
+      "name": "空中承受的伤害 -2.1%",
+      "category": "承受伤害",
+      "value_min": 21,
+      "value_max": 21
+    },
+    {
+      "effect_id": 21984,
+      "value": 12,
+      "flags": 64,
+      "name": "(同名固定)被攻击时承受的伤害降低 -1.2%",
+      "category": "承受伤害",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 56254,
+      "value": 12,
+      "flags": 0,
+      "name": "被攻击时承受的伤害降低 -1.2%",
+      "category": "承受伤害",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 20213,
+      "value": 25,
+      "flags": 0,
+      "name": "被攻击时承受的伤害降低 -2.5%",
+      "category": "承受伤害",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 47948,
+      "value": 19,
+      "flags": 0,
+      "name": "被攻击时承受的伤害降低 -1.9%",
+      "category": "承受伤害",
+      "value_min": 19,
+      "value_max": 19
+    },
+    {
+      "effect_id": 7379,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)使用药品时赋予承受伤害减少(2.0%)",
+      "category": "承受伤害",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 41318,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)近距离攻击精力伤害(地狱) +1.5%",
+      "category": "造成精力伤害",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 49107,
+      "value": 17,
+      "flags": 64,
+      "name": "(同名固定)打倒敌人时赋予自动恢复体力(17)",
+      "category": "恢复体力",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 9127,
+      "value": 33,
+      "flags": 64,
+      "name": "(同名固定)打倒敌人时赋予自动恢复体力(33)",
+      "category": "恢复体力",
+      "value_min": 33,
+      "value_max": 33
+    },
+    {
+      "effect_id": 43623,
+      "value": 27,
+      "flags": 64,
+      "name": "(同名固定)打倒敌人时赋予自动恢复体力(27)",
+      "category": "恢复体力",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 44470,
+      "value": 16,
+      "flags": 0,
+      "name": "格挡成功时赋予自动恢复体力(16)",
+      "category": "恢复体力",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 58510,
+      "value": 31,
+      "flags": 0,
+      "name": "格挡成功时赋予自动恢复体力(31)",
+      "category": "恢复体力",
+      "value_min": 31,
+      "value_max": 31
+    },
+    {
+      "effect_id": 39894,
+      "value": 25,
+      "flags": 0,
+      "name": "格挡成功时赋予自动恢复体力(25)",
+      "category": "恢复体力",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 20111,
+      "value": 16,
+      "flags": 0,
+      "name": "成功识破时自动恢复体力(16)",
+      "category": "恢复体力",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 25478,
+      "value": 31,
+      "flags": 0,
+      "name": "成功识破时自动恢复体力(31)",
+      "category": "恢复体力",
+      "value_min": 31,
+      "value_max": 31
+    },
+    {
+      "effect_id": 27726,
+      "value": 25,
+      "flags": 0,
+      "name": "成功识破时自动恢复体力(25)",
+      "category": "恢复体力",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 46864,
+      "value": 7,
+      "flags": 64,
+      "name": "(同名固定)追击和近身刺击可恢复体力 7",
+      "category": "恢复体力",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 40774,
+      "value": 17,
+      "flags": 0,
+      "name": "祓除常世可恢复体力 17",
+      "category": "恢复体力",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 41303,
+      "value": 33,
+      "flags": 0,
+      "name": "祓除常世可恢复体力 33",
+      "category": "恢复体力",
+      "value_min": 33,
+      "value_max": 33
+    },
+    {
+      "effect_id": 30723,
+      "value": 26,
+      "flags": 0,
+      "name": "祓除常世可恢复体力 26",
+      "category": "恢复体力",
+      "value_min": 26,
+      "value_max": 26
+    },
+    {
+      "effect_id": 45010,
+      "value": 3,
+      "flags": 0,
+      "name": "吸收精华可恢复体力 3",
+      "category": "恢复体力",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 13603,
+      "value": 6,
+      "flags": 0,
+      "name": "吸收精华可恢复体力 6",
+      "category": "恢复体力",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 54752,
+      "value": 3,
+      "flags": 0,
+      "name": "吸收精华可恢复体力 3",
+      "category": "恢复体力",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 39003,
+      "value": 42,
+      "flags": 64,
+      "name": "(同名固定)绝境时赋予自动恢复体力(42)",
+      "category": "恢复体力",
+      "value_min": 42,
+      "value_max": 42
+    },
+    {
+      "effect_id": 225,
+      "value": 60,
+      "flags": 64,
+      "name": "(同名固定)体力恢复量(地狱) +6.0%",
+      "category": "恢复体力",
+      "value_min": 48,
+      "value_max": 60
+    },
+    {
+      "effect_id": 9434,
+      "value": 18,
+      "flags": 64,
+      "name": "(同名固定)以近距离攻击打倒敌人时恢复自己和我方体力 18",
+      "category": "恢复体力",
+      "value_min": 18,
+      "value_max": 18
+    },
+    {
+      "effect_id": 2499,
+      "value": 15,
+      "flags": 0,
+      "name": "箭弹命中可恢复体力 15",
+      "category": "恢复体力",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 60961,
+      "value": 30,
+      "flags": 0,
+      "name": "箭弹命中可恢复体力 30",
+      "category": "恢复体力",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 3082,
+      "value": 24,
+      "flags": 0,
+      "name": "箭弹命中可恢复体力 24",
+      "category": "恢复体力",
+      "value_min": 24,
+      "value_max": 24
+    },
+    {
+      "effect_id": 63819,
+      "value": 25,
+      "flags": 0,
+      "name": "体力 +25",
+      "category": "恢复体力",
+      "value_min": 25,
+      "value_max": 25
+    },
+    {
+      "effect_id": 2279,
+      "value": 50,
+      "flags": 0,
+      "name": "体力 +50",
+      "category": "恢复体力",
+      "value_min": 50,
+      "value_max": 50
+    },
+    {
+      "effect_id": 51633,
+      "value": 38,
+      "flags": 0,
+      "name": "体力 +38",
+      "category": "恢复体力",
+      "value_min": 38,
+      "value_max": 38
+    },
+    {
+      "effect_id": 46231,
+      "value": 38,
+      "flags": 4,
+      "name": "(星)体力 +38",
+      "category": "恢复体力",
+      "value_min": 38,
+      "value_max": 38
+    },
+    {
+      "effect_id": 11409,
+      "value": 75,
+      "flags": 4,
+      "name": "(星)体力 +75",
+      "category": "恢复体力",
+      "value_min": 75,
+      "value_max": 75
+    },
+    {
+      "effect_id": 34945,
+      "value": 23,
+      "flags": 0,
+      "name": "防御时精力恢复速度 +2.3%",
+      "category": "恢复精力",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 53247,
+      "value": 30,
+      "flags": 0,
+      "name": "防御时精力恢复速度 +3.0%",
+      "category": "恢复精力",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 28557,
+      "value": 23,
+      "flags": 0,
+      "name": "防御时精力恢复速度 +2.3%",
+      "category": "恢复精力",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 62490,
+      "value": 10,
+      "flags": 0,
+      "name": "残心精力恢复量 +1.0%",
+      "category": "恢复精力",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 62237,
+      "value": 13,
+      "flags": 0,
+      "name": "残心精力恢复量 +1.3%",
+      "category": "恢复精力",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 30819,
+      "value": 10,
+      "flags": 0,
+      "name": "残心精力恢复量 +1.0%",
+      "category": "恢复精力",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 58276,
+      "value": 15,
+      "flags": 4,
+      "name": "(星)残心精力恢复量 +1.5%",
+      "category": "恢复精力",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 1013,
+      "value": 23,
+      "flags": 0,
+      "name": "精力恢复速度 +2.3%",
+      "category": "恢复精力",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 5665,
+      "value": 30,
+      "flags": 0,
+      "name": "精力恢复速度 +3.0%",
+      "category": "恢复精力",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 35805,
+      "value": 23,
+      "flags": 0,
+      "name": "精力恢复速度 +2.3%",
+      "category": "恢复精力",
+      "value_min": 23,
+      "value_max": 23
+    },
+    {
+      "effect_id": 46673,
+      "value": 35,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +3.5%",
+      "category": "恢复精力",
+      "value_min": 35,
+      "value_max": 35
+    },
+    {
+      "effect_id": 25337,
+      "value": 45,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +4.5%",
+      "category": "恢复精力",
+      "value_min": 45,
+      "value_max": 45
+    },
+    {
+      "effect_id": 24956,
+      "value": 74,
+      "flags": 0,
+      "name": "绝境时赋予精力恢复速度增加(7.4%)",
+      "category": "恢复精力",
+      "value_min": 74,
+      "value_max": 74
+    },
+    {
+      "effect_id": 9486,
+      "value": 98,
+      "flags": 0,
+      "name": "绝境时赋予精力恢复速度增加(9.8%)",
+      "category": "恢复精力",
+      "value_min": 98,
+      "value_max": 98
+    },
+    {
+      "effect_id": 23816,
+      "value": 74,
+      "flags": 0,
+      "name": "绝境时赋予精力恢复速度增加(7.4%)",
+      "category": "恢复精力",
+      "value_min": 74,
+      "value_max": 74
+    },
+    {
+      "effect_id": 21309,
+      "value": 27,
+      "flags": 64,
+      "name": "(同名固定)精力恢复速度上升(无伤) +2.7%",
+      "category": "恢复精力",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 24969,
+      "value": 36,
+      "flags": 64,
+      "name": "(同名固定)精力恢复速度上升(无伤) +3.6%",
+      "category": "恢复精力",
+      "value_min": 36,
+      "value_max": 36
+    },
+    {
+      "effect_id": 47878,
+      "value": 27,
+      "flags": 64,
+      "name": "(同名固定)精力恢复速度上升(无伤) +2.7%",
+      "category": "恢复精力",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 55406,
+      "value": 27,
+      "flags": 0,
+      "name": "精力恢复速度上升(无伤) +2.7%",
+      "category": "恢复精力",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 1682,
+      "value": 36,
+      "flags": 0,
+      "name": "精力恢复速度上升(无伤) +3.6%",
+      "category": "恢复精力",
+      "value_min": 36,
+      "value_max": 36
+    },
+    {
+      "effect_id": 41833,
+      "value": 27,
+      "flags": 0,
+      "name": "精力恢复速度上升(无伤) +2.7%",
+      "category": "恢复精力",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 31255,
+      "value": 67,
+      "flags": 0,
+      "name": "精力恢复速度(绝境) +6.7%",
+      "category": "恢复精力",
+      "value_min": 67,
+      "value_max": 67
+    },
+    {
+      "effect_id": 2625,
+      "value": 89,
+      "flags": 0,
+      "name": "精力恢复速度(绝境) +8.9%",
+      "category": "恢复精力",
+      "value_min": 89,
+      "value_max": 89
+    },
+    {
+      "effect_id": 12671,
+      "value": 67,
+      "flags": 0,
+      "name": "精力恢复速度(绝境) +6.7%",
+      "category": "恢复精力",
+      "value_min": 67,
+      "value_max": 67
+    },
+    {
+      "effect_id": 18936,
+      "value": 9,
+      "flags": 0,
+      "name": "残心初始量 +9",
+      "category": "恢复精力",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 56467,
+      "value": 12,
+      "flags": 0,
+      "name": "残心初始量 +12",
+      "category": "恢复精力",
+      "value_min": 12,
+      "value_max": 12
+    },
+    {
+      "effect_id": 50127,
+      "value": 9,
+      "flags": 0,
+      "name": "残心初始量 +9",
+      "category": "恢复精力",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 8413,
+      "value": 14,
+      "flags": 4,
+      "name": "(星)残心初始量 +14",
+      "category": "恢复精力",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 64365,
+      "value": 4,
+      "flags": 64,
+      "name": "(同名固定)抗常世 +0.4",
+      "category": "恢复精力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 25348,
+      "value": 4,
+      "flags": 0,
+      "name": "抗常世 +0.4",
+      "category": "恢复精力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 8468,
+      "value": 5,
+      "flags": 0,
+      "name": "抗常世 +0.5",
+      "category": "恢复精力",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 4722,
+      "value": 4,
+      "flags": 0,
+      "name": "抗常世 +0.4",
+      "category": "恢复精力",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 24049,
+      "value": 3,
+      "flags": 0,
+      "name": "陷入异常状态时赋予昂灵(+0.3%)",
+      "category": "精华槽",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 39669,
+      "value": 6,
+      "flags": 0,
+      "name": "陷入异常状态时赋予昂灵(+0.6%)",
+      "category": "精华槽",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 2605,
+      "value": 4,
+      "flags": 0,
+      "name": "陷入异常状态时赋予昂灵(+0.4%)",
+      "category": "精华槽",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 18417,
+      "value": 3,
+      "flags": 0,
+      "name": "格挡成功时赋予昂灵(+0.3%)",
+      "category": "精华槽",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 15396,
+      "value": 6,
+      "flags": 0,
+      "name": "格挡成功时赋予昂灵(+0.6%)",
+      "category": "精华槽",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 10115,
+      "value": 4,
+      "flags": 0,
+      "name": "格挡成功时赋予昂灵(+0.4%)",
+      "category": "精华槽",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 45162,
+      "value": 3,
+      "flags": 0,
+      "name": "成功识破时昂灵(+0.3%)",
+      "category": "精华槽",
+      "value_min": 3,
+      "value_max": 3
+    },
+    {
+      "effect_id": 7161,
+      "value": 6,
+      "flags": 0,
+      "name": "成功识破时昂灵(+0.6%)",
+      "category": "精华槽",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 26473,
+      "value": 4,
+      "flags": 0,
+      "name": "成功识破时昂灵(+0.4%)",
+      "category": "精华槽",
+      "value_min": 4,
+      "value_max": 4
+    },
+    {
+      "effect_id": 25035,
+      "value": 5,
+      "flags": 0,
+      "name": "绝境时赋予昂灵(+0.5%)",
+      "category": "精华槽",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 21864,
+      "value": 10,
+      "flags": 0,
+      "name": "绝境时赋予昂灵(+1.0%)",
+      "category": "精华槽",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 45898,
+      "value": 6,
+      "flags": 0,
+      "name": "绝境时赋予昂灵(+0.6%)",
+      "category": "精华槽",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 46835,
+      "value": 5,
+      "flags": 0,
+      "name": "祓除常世赋予昂灵(+0.5%)",
+      "category": "精华槽",
+      "value_min": 5,
+      "value_max": 5
+    },
+    {
+      "effect_id": 40796,
+      "value": 10,
+      "flags": 0,
+      "name": "祓除常世赋予昂灵(+1.0%)",
+      "category": "精华槽",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 17285,
+      "value": 6,
+      "flags": 0,
+      "name": "祓除常世赋予昂灵(+0.6%)",
+      "category": "精华槽",
+      "value_min": 6,
+      "value_max": 6
+    },
+    {
+      "effect_id": 49985,
+      "value": 9,
+      "flags": 0,
+      "name": "吸收精华后赋予昂灵(+0.9%)",
+      "category": "精华槽",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 2143,
+      "value": 17,
+      "flags": 0,
+      "name": "吸收精华后赋予昂灵(+1.7%)",
+      "category": "精华槽",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 34788,
+      "value": 13,
+      "flags": 0,
+      "name": "吸收精华后赋予昂灵(+1.3%)",
+      "category": "精华槽",
+      "value_min": 13,
+      "value_max": 13
+    },
+    {
+      "effect_id": 62016,
+      "value": 7,
+      "flags": 0,
+      "name": "精华槽增加量 +0.7%",
+      "category": "精华槽",
+      "value_min": 7,
+      "value_max": 7
+    },
+    {
+      "effect_id": 3733,
+      "value": 14,
+      "flags": 0,
+      "name": "精华槽增加量 +1.4%",
+      "category": "精华槽",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 17684,
+      "value": 11,
+      "flags": 0,
+      "name": "精华槽增加量 +1.1%",
+      "category": "精华槽",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 13819,
+      "value": 11,
+      "flags": 4,
+      "name": "(星)精华槽增加量 +1.1%",
+      "category": "精华槽",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 34118,
+      "value": 17,
+      "flags": 4,
+      "name": "(星)精华槽增加量 +1.7%",
+      "category": "精华槽",
+      "value_min": 17,
+      "value_max": 17
+    },
+    {
+      "effect_id": 27200,
+      "value": 38,
+      "flags": 4,
+      "name": "(星)九十九化身持续时间延长 +3.8%",
+      "category": "精华槽",
+      "value_min": 38,
+      "value_max": 38
+    },
+    {
+      "effect_id": 10374,
+      "value": 30,
+      "flags": 0,
+      "name": "九十九化身持续时间延长 +3.0%",
+      "category": "精华槽",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 41625,
+      "value": 15,
+      "flags": 64,
+      "name": "(同名固定)忍术槽增加量 +1.5%",
+      "category": "忍术",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 60089,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)忍术槽增加量 +3.0%",
+      "category": "忍术",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 35521,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)忍术槽增加量 +2.0%",
+      "category": "忍术",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 44122,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)弓伤害 +2.0%",
+      "category": "远距离",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 32470,
+      "value": 40,
+      "flags": 64,
+      "name": "(同名固定)弓伤害 +4.0%",
+      "category": "远距离",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 16396,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)弓伤害 +3.0%",
+      "category": "远距离",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 55507,
+      "value": 2,
+      "flags": 64,
+      "name": "(同名固定)不易被敌人发现 D+",
+      "category": "远距离",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 9652,
+      "value": 2,
+      "flags": 64,
+      "name": "(同名固定)不易被敌人发现 D+",
+      "category": "远距离",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 33691,
+      "value": 2,
+      "flags": 64,
+      "name": "(同名固定)不易被敌人发现 D+",
+      "category": "远距离",
+      "value_min": 2,
+      "value_max": 2
+    },
+    {
+      "effect_id": 332,
+      "value": 0,
+      "flags": 64,
+      "name": "(同名固定)箭弹命中时召唤千千古",
+      "category": "远距离",
+      "value_min": 0,
+      "value_max": 0
+    },
+    {
+      "effect_id": 48906,
+      "value": 11,
+      "flags": 0,
+      "name": "格挡成功时赋予移动速度上升(1.1%)",
+      "category": "移动、闪避",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 45594,
+      "value": 22,
+      "flags": 0,
+      "name": "格挡成功时赋予移动速度上升(2.2%)",
+      "category": "移动、闪避",
+      "value_min": 22,
+      "value_max": 22
+    },
+    {
+      "effect_id": 2025,
+      "value": 33,
+      "flags": 0,
+      "name": "格挡成功时赋予移动速度上升(3.3%)",
+      "category": "移动、闪避",
+      "value_min": 33,
+      "value_max": 33
+    },
+    {
+      "effect_id": 11979,
+      "value": 11,
+      "flags": 0,
+      "name": "成功识破时移动速度上升(1.1%)",
+      "category": "移动、闪避",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 4097,
+      "value": 22,
+      "flags": 0,
+      "name": "成功识破时移动速度上升(2.2%)",
+      "category": "移动、闪避",
+      "value_min": 22,
+      "value_max": 22
+    },
+    {
+      "effect_id": 3210,
+      "value": 33,
+      "flags": 0,
+      "name": "成功识破时移动速度上升(3.3%)",
+      "category": "移动、闪避",
+      "value_min": 33,
+      "value_max": 33
+    },
+    {
+      "effect_id": 28667,
+      "value": 10,
+      "flags": 64,
+      "name": "(同名固定)闪避动作精力消耗降低 -1.0%",
+      "category": "移动、闪避",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 64233,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)闪避动作精力消耗降低 -2.0%",
+      "category": "移动、闪避",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 6271,
+      "value": 30,
+      "flags": 64,
+      "name": "(同名固定)闪避动作精力消耗降低 -3.0%",
+      "category": "移动、闪避",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 28297,
+      "value": 10,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低 -1.0%",
+      "category": "移动、闪避",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 30249,
+      "value": 20,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低 -2.0%",
+      "category": "移动、闪避",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 61336,
+      "value": 30,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低 -3.0%",
+      "category": "移动、闪避",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 59316,
+      "value": 30,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低 -3.0%",
+      "category": "移动、闪避",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 57781,
+      "value": 30,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低(绝境) -3.0%",
+      "category": "移动、闪避",
+      "value_min": 30,
+      "value_max": 30
+    },
+    {
+      "effect_id": 27465,
+      "value": 60,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低(绝境) -6.0%",
+      "category": "移动、闪避",
+      "value_min": 60,
+      "value_max": 60
+    },
+    {
+      "effect_id": 52835,
+      "value": 90,
+      "flags": 0,
+      "name": "闪避动作精力消耗降低(绝境) -9.0%",
+      "category": "移动、闪避",
+      "value_min": 90,
+      "value_max": 90
+    },
+    {
+      "effect_id": 28344,
+      "value": 33,
+      "flags": 0,
+      "name": "绝境赋予移动速度上升(3.3%)",
+      "category": "移动、闪避",
+      "value_min": 33,
+      "value_max": 33
+    },
+    {
+      "effect_id": 19708,
+      "value": 66,
+      "flags": 0,
+      "name": "绝境赋予移动速度上升(6.6%)",
+      "category": "移动、闪避",
+      "value_min": 66,
+      "value_max": 66
+    },
+    {
+      "effect_id": 38198,
+      "value": 99,
+      "flags": 0,
+      "name": "绝境赋予移动速度上升(9.9%)",
+      "category": "移动、闪避",
+      "value_min": 99,
+      "value_max": 99
+    },
+    {
+      "effect_id": 58332,
+      "value": 14,
+      "flags": 0,
+      "name": "打倒敌人时赋予移动速度上升(1.4%)",
+      "category": "移动、闪避",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 64058,
+      "value": 27,
+      "flags": 0,
+      "name": "打倒敌人时赋予移动速度上升(2.7%)",
+      "category": "移动、闪避",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 11099,
+      "value": 40,
+      "flags": 0,
+      "name": "打倒敌人时赋予移动速度上升(4.0%)",
+      "category": "移动、闪避",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 17349,
+      "value": 40,
+      "flags": 64,
+      "name": "(同名固定)冲刺精力消耗降低 -4.0%",
+      "category": "移动、闪避",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 63598,
+      "value": 80,
+      "flags": 64,
+      "name": "(同名固定)冲刺精力消耗降低 -8.0%",
+      "category": "移动、闪避",
+      "value_min": 80,
+      "value_max": 80
+    },
+    {
+      "effect_id": 6419,
+      "value": 50,
+      "flags": 64,
+      "name": "(同名固定)冲刺精力消耗降低 -5.0%",
+      "category": "移动、闪避",
+      "value_min": 50,
+      "value_max": 50
+    },
+    {
+      "effect_id": 20038,
+      "value": 15,
+      "flags": 0,
+      "name": "祓除常世赋予移动速度上升(1.5%)",
+      "category": "移动、闪避",
+      "value_min": 15,
+      "value_max": 15
+    },
+    {
+      "effect_id": 50595,
+      "value": 29,
+      "flags": 0,
+      "name": "祓除常世赋予移动速度上升(2.9%)",
+      "category": "移动、闪避",
+      "value_min": 29,
+      "value_max": 29
+    },
+    {
+      "effect_id": 24542,
+      "value": 43,
+      "flags": 0,
+      "name": "祓除常世赋予移动速度上升(4.3%)",
+      "category": "移动、闪避",
+      "value_min": 43,
+      "value_max": 43
+    },
+    {
+      "effect_id": 2183,
+      "value": 16,
+      "flags": 0,
+      "name": "陷入异常状态时赋予移动速度上升(1.6%)",
+      "category": "移动、闪避",
+      "value_min": 16,
+      "value_max": 16
+    },
+    {
+      "effect_id": 21062,
+      "value": 31,
+      "flags": 0,
+      "name": "陷入异常状态时赋予移动速度上升(3.1%)",
+      "category": "移动、闪避",
+      "value_min": 31,
+      "value_max": 31
+    },
+    {
+      "effect_id": 1775,
+      "value": 47,
+      "flags": 0,
+      "name": "陷入异常状态时赋予移动速度上升(4.7%)",
+      "category": "移动、闪避",
+      "value_min": 47,
+      "value_max": 47
+    },
+    {
+      "effect_id": 34724,
+      "value": 11,
+      "flags": 0,
+      "name": "吸收精华后赋予移动速度上升(1.1%)",
+      "category": "移动、闪避",
+      "value_min": 11,
+      "value_max": 11
+    },
+    {
+      "effect_id": 53195,
+      "value": 22,
+      "flags": 0,
+      "name": "吸收精华后赋予移动速度上升(2.2%)",
+      "category": "移动、闪避",
+      "value_min": 22,
+      "value_max": 22
+    },
+    {
+      "effect_id": 11726,
+      "value": 33,
+      "flags": 0,
+      "name": "吸收精华后赋予移动速度上升(3.3%)",
+      "category": "移动、闪避",
+      "value_min": 33,
+      "value_max": 33
+    },
+    {
+      "effect_id": 61607,
+      "value": 14,
+      "flags": 0,
+      "name": "精力受到攻击降至50%以下时赋予移动速度上升(1.4%)",
+      "category": "移动、闪避",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 3215,
+      "value": 28,
+      "flags": 0,
+      "name": "精力受到攻击降至50%以下时赋予移动速度上升(2.8%)",
+      "category": "移动、闪避",
+      "value_min": 28,
+      "value_max": 28
+    },
+    {
+      "effect_id": 52473,
+      "value": 42,
+      "flags": 0,
+      "name": "精力受到攻击降至50%以下时赋予移动速度上升(4.2%)",
+      "category": "移动、闪避",
+      "value_min": 42,
+      "value_max": 42
+    },
+    {
+      "effect_id": 39317,
+      "value": 14,
+      "flags": 0,
+      "name": "阴阳术命中赋予移动速度上升（1.4%）",
+      "category": "移动、闪避",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 32864,
+      "value": 27,
+      "flags": 0,
+      "name": "阴阳术命中赋予移动速度上升（2.7%）",
+      "category": "移动、闪避",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 56825,
+      "value": 40,
+      "flags": 0,
+      "name": "阴阳术命中赋予移动速度上升（4.0%）",
+      "category": "移动、闪避",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 17197,
+      "value": 14,
+      "flags": 0,
+      "name": "忍术命中赋予移动速度上升（1.4%）",
+      "category": "移动、闪避",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 34991,
+      "value": 27,
+      "flags": 0,
+      "name": "忍术命中赋予移动速度上升（2.7%）",
+      "category": "移动、闪避",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 34694,
+      "value": 40,
+      "flags": 0,
+      "name": "忍术命中赋予移动速度上升（4.0%）",
+      "category": "移动、闪避",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 56567,
+      "value": 14,
+      "flags": 0,
+      "name": "恢复体力赋予移动速度上升（1.4%）",
+      "category": "移动、闪避",
+      "value_min": 14,
+      "value_max": 14
+    },
+    {
+      "effect_id": 21140,
+      "value": 27,
+      "flags": 0,
+      "name": "恢复体力赋予移动速度上升（2.7%）",
+      "category": "移动、闪避",
+      "value_min": 27,
+      "value_max": 27
+    },
+    {
+      "effect_id": 30157,
+      "value": 40,
+      "flags": 0,
+      "name": "恢复体力赋予移动速度上升（4.0%）",
+      "category": "移动、闪避",
+      "value_min": 40,
+      "value_max": 40
+    },
+    {
+      "effect_id": 27835,
+      "value": 44,
+      "flags": 64,
+      "name": "(同名固定)火属性伤害 +4.4%",
+      "category": "造成异常状态",
+      "value_min": 44,
+      "value_max": 44
+    },
+    {
+      "effect_id": 37352,
+      "value": 35,
+      "flags": 64,
+      "name": "(同名固定)敌人的水状态累计 +3.5%",
+      "category": "造成异常状态",
+      "value_min": 35,
+      "value_max": 35
+    },
+    {
+      "effect_id": 22001,
+      "value": 20,
+      "flags": 64,
+      "name": "(同名固定)对处于毒状态敌人的近距离伤害 +2.0%",
+      "category": "造成异常状态",
+      "value_min": 20,
+      "value_max": 20
+    },
+    {
+      "effect_id": 13912,
+      "value": 148,
+      "flags": 4,
+      "name": "(星)九十九化身时造成的伤害增加 +13.5% ~ +14.8%",
+      "category": "造成伤害",
+      "value_min": 135,
+      "value_max": 148
+    },
+    {
+      "effect_id": 8729,
+      "value": 162,
+      "flags": 4,
+      "name": "(星)九十九化身时造成的伤害增加 +14.9% ~ +16.2%",
+      "category": "造成伤害",
+      "value_min": 149,
+      "value_max": 162
+    },
+    {
+      "effect_id": 18844,
+      "value": 175,
+      "flags": 4,
+      "name": "(星)九十九化身时造成的伤害增加 +16.2% ~ +17.5%",
+      "category": "造成伤害",
+      "value_min": 162,
+      "value_max": 175
+    },
+    {
+      "effect_id": 32858,
+      "value": 91,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害 +8.0% ~ +9.1%",
+      "category": "造成伤害",
+      "value_min": 80,
+      "value_max": 91
+    },
+    {
+      "effect_id": 56269,
+      "value": 102,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害 +9.1% ~ +10.2%",
+      "category": "造成伤害",
+      "value_min": 91,
+      "value_max": 102
+    },
+    {
+      "effect_id": 7372,
+      "value": 112,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害 +10.1% ~ +11.2%",
+      "category": "造成伤害",
+      "value_min": 101,
+      "value_max": 112
+    },
+    {
+      "effect_id": 48460,
+      "value": 157,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害(绝境) +14.5% ~ +15.7%",
+      "category": "造成伤害",
+      "value_min": 145,
+      "value_max": 157
+    },
+    {
+      "effect_id": 315,
+      "value": 169,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害(绝境) +15.7% ~ +16.9%",
+      "category": "造成伤害",
+      "value_min": 157,
+      "value_max": 169
+    },
+    {
+      "effect_id": 3476,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害(绝境) +16.8% ~ +18.0%",
+      "category": "造成伤害",
+      "value_min": 168,
+      "value_max": 180
+    },
+    {
+      "effect_id": 6354,
+      "value": 113,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害(无伤) +10.2% ~ +11.3%",
+      "category": "造成伤害",
+      "value_min": 102,
+      "value_max": 113
+    },
+    {
+      "effect_id": 52269,
+      "value": 124,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害(无伤) +11.3% ~ +12.4%",
+      "category": "造成伤害",
+      "value_min": 113,
+      "value_max": 124
+    },
+    {
+      "effect_id": 37473,
+      "value": 134,
+      "flags": 4,
+      "name": "(星)近距离攻击伤害(无伤) +12.3% ~ +13.4%",
+      "category": "造成伤害",
+      "value_min": 123,
+      "value_max": 134
+    },
+    {
+      "effect_id": 58322,
+      "value": 192,
+      "flags": 4,
+      "name": "(星)对精力耗尽敌人的近距离伤害 +17.5% ~ +19.2%",
+      "category": "造成伤害",
+      "value_min": 175,
+      "value_max": 192
+    },
+    {
+      "effect_id": 35905,
+      "value": 208,
+      "flags": 4,
+      "name": "(星)对精力耗尽敌人的近距离伤害 +19.1% ~ +20.8%",
+      "category": "造成伤害",
+      "value_min": 191,
+      "value_max": 208
+    },
+    {
+      "effect_id": 48574,
+      "value": 225,
+      "flags": 4,
+      "name": "(星)对精力耗尽敌人的近距离伤害 +20.8% ~ +22.5%",
+      "category": "造成伤害",
+      "value_min": 208,
+      "value_max": 225
+    },
+    {
+      "effect_id": 2685,
+      "value": 103,
+      "flags": 4,
+      "name": "(星)守护灵技的伤害 +9.2% ~ +10.3%",
+      "category": "造成伤害",
+      "value_min": 92,
+      "value_max": 103
+    },
+    {
+      "effect_id": 17716,
+      "value": 113,
+      "flags": 4,
+      "name": "(星)守护灵技的伤害 +10.2% ~ +11.3%",
+      "category": "造成伤害",
+      "value_min": 102,
+      "value_max": 113
+    },
+    {
+      "effect_id": 11841,
+      "value": 124,
+      "flags": 4,
+      "name": "(星)守护灵技的伤害 +11.3% ~ +12.4%",
+      "category": "造成伤害",
+      "value_min": 113,
+      "value_max": 124
+    },
+    {
+      "effect_id": 43309,
+      "value": 99,
+      "flags": 4,
+      "name": "(星)刺击伤害 +8.8% ~ +9.9%",
+      "category": "造成伤害",
+      "value_min": 88,
+      "value_max": 99
+    },
+    {
+      "effect_id": 32667,
+      "value": 110,
+      "flags": 4,
+      "name": "(星)刺击伤害 +9.9% ~ +11.0%",
+      "category": "造成伤害",
+      "value_min": 99,
+      "value_max": 110
+    },
+    {
+      "effect_id": 34860,
+      "value": 120,
+      "flags": 4,
+      "name": "(星)刺击伤害 +10.9% ~ +12.0%",
+      "category": "造成伤害",
+      "value_min": 109,
+      "value_max": 120
+    },
+    {
+      "effect_id": 34065,
+      "value": 70,
+      "flags": 4,
+      "name": "(星)阴阳术伤害 +6.0% ~ +7.0%",
+      "category": "造成伤害",
+      "value_min": 60,
+      "value_max": 70
+    },
+    {
+      "effect_id": 44582,
+      "value": 80,
+      "flags": 4,
+      "name": "(星)阴阳术伤害 +7.0% ~ +8.0%",
+      "category": "造成伤害",
+      "value_min": 70,
+      "value_max": 80
+    },
+    {
+      "effect_id": 42966,
+      "value": 90,
+      "flags": 4,
+      "name": "(星)阴阳术伤害 +8.0% ~ +9.0%",
+      "category": "造成伤害",
+      "value_min": 80,
+      "value_max": 90
+    },
+    {
+      "effect_id": 31528,
+      "value": 103,
+      "flags": 4,
+      "name": "(星)武技伤害 +9.2% ~ +10.3%",
+      "category": "造成伤害",
+      "value_min": 92,
+      "value_max": 103
+    },
+    {
+      "effect_id": 24781,
+      "value": 114,
+      "flags": 4,
+      "name": "(星)武技伤害 +10.3% ~ +11.4%",
+      "category": "造成伤害",
+      "value_min": 103,
+      "value_max": 114
+    },
+    {
+      "effect_id": 54237,
+      "value": 124,
+      "flags": 4,
+      "name": "(星)武技伤害 +11.3% ~ +12.4%",
+      "category": "造成伤害",
+      "value_min": 113,
+      "value_max": 124
+    },
+    {
+      "effect_id": 39578,
+      "value": 123,
+      "flags": 4,
+      "name": "(星)空中攻击伤害 +11.2% ~ +12.3%",
+      "category": "造成伤害",
+      "value_min": 112,
+      "value_max": 123
+    },
+    {
+      "effect_id": 53364,
+      "value": 134,
+      "flags": 4,
+      "name": "(星)空中攻击伤害 +12.3% ~ +13.4%",
+      "category": "造成伤害",
+      "value_min": 123,
+      "value_max": 134
+    },
+    {
+      "effect_id": 41952,
+      "value": 144,
+      "flags": 4,
+      "name": "(星)空中攻击伤害 +13.3% ~ +14.4%",
+      "category": "造成伤害",
+      "value_min": 133,
+      "value_max": 144
+    },
+    {
+      "effect_id": 32166,
+      "value": 185,
+      "flags": 4,
+      "name": "(星)追击和近身刺击伤害 +15.8% ~ +18.5%",
+      "category": "造成伤害",
+      "values": [
+        158,
+        159,
+        160,
+        162,
+        163,
+        164,
+        166,
+        167,
+        168,
+        170,
+        171,
+        172,
+        174,
+        175,
+        176,
+        178,
+        179,
+        180,
+        182,
+        183,
+        185
+      ],
+      "value_min": 158,
+      "value_max": 185
+    },
+    {
+      "effect_id": 50392,
+      "value": 211,
+      "flags": 4,
+      "name": "(星)追击和近身刺击伤害 +18.4% ~ +21.1%",
+      "category": "造成伤害",
+      "values": [
+        184,
+        185,
+        186,
+        188,
+        189,
+        190,
+        192,
+        193,
+        194,
+        196,
+        197,
+        198,
+        200,
+        201,
+        202,
+        204,
+        205,
+        206,
+        208,
+        209,
+        211
+      ],
+      "value_min": 184,
+      "value_max": 211
+    },
+    {
+      "effect_id": 38664,
+      "value": 238,
+      "flags": 4,
+      "name": "(星)追击和近身刺击伤害 +21.1% ~ +23.8%",
+      "category": "造成伤害",
+      "values": [
+        211,
+        212,
+        213,
+        215,
+        216,
+        217,
+        219,
+        220,
+        221,
+        223,
+        224,
+        225,
+        227,
+        228,
+        229,
+        231,
+        232,
+        233,
+        235,
+        236,
+        238
+      ],
+      "value_min": 211,
+      "value_max": 238
+    },
+    {
+      "effect_id": 44081,
+      "value": 123,
+      "flags": 4,
+      "name": "(星)背后攻击伤害 +11.2% ~ +12.3%",
+      "category": "造成伤害",
+      "value_min": 112,
+      "value_max": 123
+    },
+    {
+      "effect_id": 43045,
+      "value": 134,
+      "flags": 4,
+      "name": "(星)背后攻击伤害 +12.3% ~ +13.4%",
+      "category": "造成伤害",
+      "value_min": 123,
+      "value_max": 134
+    },
+    {
+      "effect_id": 57794,
+      "value": 144,
+      "flags": 4,
+      "name": "(星)背后攻击伤害 +13.3% ~ +14.4%",
+      "category": "造成伤害",
+      "value_min": 133,
+      "value_max": 144
+    },
+    {
+      "effect_id": 3009,
+      "value": 138,
+      "flags": 4,
+      "name": "(星)近距离攻击的精力消耗降低 -13.0% ~ -13.8%",
+      "category": "精力减少",
+      "value_min": 130,
+      "value_max": 138
+    },
+    {
+      "effect_id": 65347,
+      "value": 146,
+      "flags": 4,
+      "name": "(星)近距离攻击的精力消耗降低 -13.8% ~ -14.6%",
+      "category": "精力减少",
+      "value_min": 138,
+      "value_max": 146
+    },
+    {
+      "effect_id": 40290,
+      "value": 154,
+      "flags": 4,
+      "name": "(星)近距离攻击的精力消耗降低 -14.6% ~ -15.4%",
+      "category": "精力减少",
+      "value_min": 146,
+      "value_max": 154
+    },
+    {
+      "effect_id": 3273,
+      "value": 154,
+      "flags": 4,
+      "name": "(星)速攻击精力消耗降低 -13.2% ~ -15.4%",
+      "category": "精力减少",
+      "values": [
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        154
+      ],
+      "value_min": 132,
+      "value_max": 154
+    },
+    {
+      "effect_id": 53078,
+      "value": 176,
+      "flags": 4,
+      "name": "(星)速攻击精力消耗降低 -15.4% ~ -17.6%",
+      "category": "精力减少",
+      "values": [
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        176
+      ],
+      "value_min": 154,
+      "value_max": 176
+    },
+    {
+      "effect_id": 266,
+      "value": 198,
+      "flags": 4,
+      "name": "(星)速攻击精力消耗降低 -17.8% ~ -19.8%",
+      "category": "精力减少",
+      "values": [
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        195,
+        196,
+        198
+      ],
+      "value_min": 176,
+      "value_max": 198
+    },
+    {
+      "effect_id": 55046,
+      "value": 154,
+      "flags": 4,
+      "name": "(星)强攻击精力消耗降低 -13.2% ~ -15.4%",
+      "category": "精力减少",
+      "values": [
+        132,
+        133,
+        134,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        143,
+        144,
+        145,
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        154
+      ],
+      "value_min": 132,
+      "value_max": 154
+    },
+    {
+      "effect_id": 50577,
+      "value": 176,
+      "flags": 4,
+      "name": "(星)强攻击精力消耗降低 -14.5% ~ -17.6%",
+      "category": "精力减少",
+      "values": [
+        154,
+        155,
+        156,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        165,
+        166,
+        167,
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        176
+      ],
+      "value_min": 154,
+      "value_max": 176
+    },
+    {
+      "effect_id": 58426,
+      "value": 198,
+      "flags": 4,
+      "name": "(星)强攻击精力消耗降低 -17.6% ~ -19.8%",
+      "category": "精力减少",
+      "values": [
+        176,
+        177,
+        178,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        187,
+        188,
+        189,
+        190,
+        191,
+        192,
+        193,
+        194,
+        195,
+        196,
+        198
+      ],
+      "value_min": 176,
+      "value_max": 198
+    },
+    {
+      "effect_id": 18214,
+      "value": 143,
+      "flags": 4,
+      "name": "(星)武技精力消耗降低 -13.2% ~ -14.3%",
+      "category": "精力减少",
+      "value_min": 132,
+      "value_max": 143
+    },
+    {
+      "effect_id": 1096,
+      "value": 154,
+      "flags": 4,
+      "name": "(星)武技精力消耗降低 -14.3% ~ -15.4%",
+      "category": "精力减少",
+      "value_min": 143,
+      "value_max": 154
+    },
+    {
+      "effect_id": 4966,
+      "value": 164,
+      "flags": 4,
+      "name": "(星)武技精力消耗降低 -15.3% ~ -16.4%",
+      "category": "精力减少",
+      "value_min": 153,
+      "value_max": 164
+    },
+    {
+      "effect_id": 41934,
+      "value": 80,
+      "flags": 4,
+      "name": "(星)精力 +72 ~ +80",
+      "category": "精力减少",
+      "value_min": 72,
+      "value_max": 80
+    },
+    {
+      "effect_id": 60082,
+      "value": 88,
+      "flags": 4,
+      "name": "(星)精力 +80 ~ +88",
+      "category": "精力减少",
+      "value_min": 80,
+      "value_max": 88
+    },
+    {
+      "effect_id": 32903,
+      "value": 96,
+      "flags": 4,
+      "name": "(星)精力 +88 ~ +96",
+      "category": "精力减少",
+      "value_min": 88,
+      "value_max": 96
+    },
+    {
+      "effect_id": 25497,
+      "value": 188,
+      "flags": 4,
+      "name": "(星)近距离攻击精力消耗降低(绝境) -16.4% ~ -18.8%",
+      "category": "精力减少",
+      "values": [
+        164,
+        165,
+        166,
+        167,
+        168,
+        170,
+        171,
+        172,
+        173,
+        174,
+        176,
+        177,
+        178,
+        179,
+        180,
+        182,
+        183,
+        184,
+        185,
+        186,
+        188
+      ],
+      "value_min": 164,
+      "value_max": 188
+    },
+    {
+      "effect_id": 23944,
+      "value": 212,
+      "flags": 4,
+      "name": "(星)近距离攻击精力消耗降低(绝境) -18.8% ~ -21.2%",
+      "category": "精力减少",
+      "values": [
+        188,
+        189,
+        190,
+        191,
+        192,
+        194,
+        195,
+        196,
+        197,
+        198,
+        200,
+        201,
+        202,
+        203,
+        204,
+        206,
+        207,
+        208,
+        209,
+        210,
+        212
+      ],
+      "value_min": 188,
+      "value_max": 212
+    },
+    {
+      "effect_id": 25093,
+      "value": 236,
+      "flags": 4,
+      "name": "(星)近距离攻击精力消耗降低(绝境) -21.2% ~ -23.6%",
+      "category": "精力减少",
+      "values": [
+        212,
+        213,
+        214,
+        215,
+        216,
+        218,
+        219,
+        220,
+        221,
+        222,
+        224,
+        225,
+        226,
+        227,
+        228,
+        230,
+        231,
+        232,
+        233,
+        234,
+        236
+      ],
+      "value_min": 212,
+      "value_max": 236
+    },
+    {
+      "effect_id": 25859,
+      "value": 137,
+      "flags": 4,
+      "name": "(星)防御精力消耗降低 -12.2% ~ -13.7%",
+      "category": "精力减少",
+      "value_min": 122,
+      "value_max": 137
+    },
+    {
+      "effect_id": 6683,
+      "value": 152,
+      "flags": 4,
+      "name": "(星)防御精力消耗降低 -13.7% ~ -15.2%",
+      "category": "精力减少",
+      "value_min": 137,
+      "value_max": 152
+    },
+    {
+      "effect_id": 44035,
+      "value": 156,
+      "flags": 4,
+      "name": "(星)防御精力消耗降低 -14.1% ~ -15.6%",
+      "category": "精力减少",
+      "value_min": 141,
+      "value_max": 156
+    },
+    {
+      "effect_id": 27763,
+      "value": 21,
+      "flags": 4,
+      "name": "(星)属性攻击伤害降低 +18 ~ +21",
+      "category": "承受异常状态",
+      "value_min": 18,
+      "value_max": 21
+    },
+    {
+      "effect_id": 14439,
+      "value": 24,
+      "flags": 4,
+      "name": "(星)属性攻击伤害降低 +21 ~ +24",
+      "category": "承受异常状态",
+      "value_min": 21,
+      "value_max": 24
+    },
+    {
+      "effect_id": 1293,
+      "value": 27,
+      "flags": 4,
+      "name": "(星)属性攻击伤害降低 +24 ~ +27",
+      "category": "承受异常状态",
+      "value_min": 24,
+      "value_max": 27
+    },
+    {
+      "effect_id": 60794,
+      "value": 66,
+      "flags": 4,
+      "name": "(星)防御时的属性攻击伤害降低 +60 ~ +66",
+      "category": "承受异常状态",
+      "value_min": 60,
+      "value_max": 66
+    },
+    {
+      "effect_id": 38282,
+      "value": 73,
+      "flags": 4,
+      "name": "(星)防御时的属性攻击伤害降低 +67 ~ +73",
+      "category": "承受异常状态",
+      "value_min": 67,
+      "value_max": 73
+    },
+    {
+      "effect_id": 41124,
+      "value": 80,
+      "flags": 4,
+      "name": "(星)防御时的属性攻击伤害降低 +74 ~ +80",
+      "category": "承受异常状态",
+      "value_min": 74,
+      "value_max": 80
+    },
+    {
+      "effect_id": 52684,
+      "value": 240,
+      "flags": 4,
+      "name": "(星)获得金钱 +20.0% ~ +24.0%",
+      "category": "掉落",
+      "values": [
+        200,
+        202,
+        204,
+        206,
+        208,
+        210,
+        212,
+        214,
+        216,
+        218,
+        220,
+        222,
+        224,
+        226,
+        228,
+        230,
+        232,
+        234,
+        236,
+        238,
+        240
+      ],
+      "value_min": 200,
+      "value_max": 240
+    },
+    {
+      "effect_id": 30032,
+      "value": 270,
+      "flags": 4,
+      "name": "(星)获得金钱 +24.0% ~ +27.4%",
+      "category": "掉落",
+      "values": [
+        240,
+        241,
+        243,
+        244,
+        246,
+        247,
+        249,
+        250,
+        252,
+        253,
+        255,
+        256,
+        258,
+        259,
+        261,
+        262,
+        264,
+        265,
+        267,
+        268,
+        270
+      ],
+      "value_min": 240,
+      "value_max": 270
+    },
+    {
+      "effect_id": 35626,
+      "value": 300,
+      "flags": 4,
+      "name": "(星)获得金钱 +27.0% ~ +30.0%",
+      "category": "掉落",
+      "values": [
+        270,
+        271,
+        273,
+        274,
+        276,
+        277,
+        279,
+        280,
+        282,
+        283,
+        285,
+        286,
+        288,
+        289,
+        291,
+        292,
+        294,
+        295,
+        297,
+        298,
+        300
+      ],
+      "value_min": 270,
+      "value_max": 300
+    },
+    {
+      "effect_id": 4358,
+      "value": 162,
+      "flags": 4,
+      "name": "(星)装备品掉落率 +15.4% ~ +16.2%",
+      "category": "掉落",
+      "value_min": 154,
+      "value_max": 162
+    },
+    {
+      "effect_id": 62626,
+      "value": 172,
+      "flags": 4,
+      "name": "(星)装备品掉落率 +16.2% ~ +17.2%",
+      "category": "掉落",
+      "value_min": 162,
+      "value_max": 172
+    },
+    {
+      "effect_id": 3024,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)装备品掉落率 +17.2% ~ +18.0%",
+      "category": "掉落",
+      "value_min": 172,
+      "value_max": 180
+    },
+    {
+      "effect_id": 7259,
+      "value": 162,
+      "flags": 4,
+      "name": "(星)魂核掉落率 +15.4% ~ +16.2%",
+      "category": "掉落",
+      "value_min": 154,
+      "value_max": 162
+    },
+    {
+      "effect_id": 48739,
+      "value": 172,
+      "flags": 4,
+      "name": "(星)魂核掉落率 +16.2% ~ +17.2%",
+      "category": "掉落",
+      "value_min": 162,
+      "value_max": 172
+    },
+    {
+      "effect_id": 34530,
+      "value": 180,
+      "flags": 4,
+      "name": "(星)魂核掉落率 +17.2% ~ +18.0%",
+      "category": "掉落",
+      "value_min": 172,
+      "value_max": 180
+    },
+    {
+      "effect_id": 10564,
+      "value": 40,
+      "flags": 4,
+      "name": "(星)幸运 +35 ~ +40",
+      "category": "掉落",
+      "value_min": 35,
+      "value_max": 40
+    },
+    {
+      "effect_id": 59675,
+      "value": 45,
+      "flags": 4,
+      "name": "(星)幸运 +40 ~ +45",
+      "category": "掉落",
+      "value_min": 40,
+      "value_max": 45
+    },
+    {
+      "effect_id": 41527,
+      "value": 50,
+      "flags": 4,
+      "name": "(星)幸运 +45 ~ +50",
+      "category": "掉落",
+      "value_min": 45,
+      "value_max": 50
+    },
+    {
+      "effect_id": 52889,
+      "value": 85,
+      "flags": 4,
+      "name": "(星)灵力增加量 +7.7% ~ +8.5%",
+      "category": "灵力",
+      "value_min": 77,
+      "value_max": 85
+    },
+    {
+      "effect_id": 55967,
+      "value": 93,
+      "flags": 4,
+      "name": "(星)灵力增加量 +8.5% ~ +9.3%",
+      "category": "灵力",
+      "value_min": 85,
+      "value_max": 93
+    },
+    {
+      "effect_id": 6436,
+      "value": 134,
+      "flags": 4,
+      "name": "(星)灵力增加量 +12.3% ~ +13.4%",
+      "category": "灵力",
+      "value_min": 91,
+      "value_max": 99
+    },
+    {
+      "effect_id": 30478,
+      "value": 114,
+      "flags": 4,
+      "name": "(星)灵力增加量(无伤) +10.2% ~ +11.4%",
+      "category": "灵力",
+      "value_min": 102,
+      "value_max": 114
+    },
+    {
+      "effect_id": 28558,
+      "value": 126,
+      "flags": 4,
+      "name": "(星)灵力增加量(无伤) +11.4% ~ +12.6%",
+      "category": "灵力",
+      "value_min": 114,
+      "value_max": 126
+    },
+    {
+      "effect_id": 38965,
+      "value": 138,
+      "flags": 4,
+      "name": "(星)灵力增加量(无伤) +12.6% ~ +13.8%",
+      "category": "灵力",
+      "value_min": 126,
+      "value_max": 138
+    },
+    {
+      "effect_id": 30005,
+      "value": 16,
+      "flags": 4,
+      "name": "(星)识破可增加灵力 +15 ~ +16",
+      "category": "灵力",
+      "value_min": 15,
+      "value_max": 16
+    },
+    {
+      "effect_id": 56163,
+      "value": 18,
+      "flags": 4,
+      "name": "(星)识破可增加灵力 +17 ~ +18",
+      "category": "灵力",
+      "value_min": 17,
+      "value_max": 18
+    },
+    {
+      "effect_id": 56976,
+      "value": 19,
+      "flags": 4,
+      "name": "(星)识破可增加灵力 +18 ~ +19",
+      "category": "灵力",
+      "value_min": 18,
+      "value_max": 19
+    },
+    {
+      "effect_id": 1102,
+      "value": 16,
+      "flags": 4,
+      "name": "(星)格挡可增加灵力 +15 ~ +16",
+      "category": "灵力",
+      "value_min": 15,
+      "value_max": 16
+    },
+    {
+      "effect_id": 50315,
+      "value": 18,
+      "flags": 4,
+      "name": "(星)格挡可增加灵力 +17 ~ +18",
+      "category": "灵力",
+      "value_min": 17,
+      "value_max": 18
+    },
+    {
+      "effect_id": 33599,
+      "value": 19,
+      "flags": 4,
+      "name": "(星)格挡可增加灵力 +18 ~ +19",
+      "category": "灵力",
+      "value_min": 18,
+      "value_max": 19
+    },
+    {
+      "effect_id": 19566,
+      "value": 10,
+      "flags": 4,
+      "name": "(星)箭弹命中增加灵力 +8 ~ +10",
+      "category": "灵力",
+      "value_min": 8,
+      "value_max": 10
+    },
+    {
+      "effect_id": 45951,
+      "value": 11,
+      "flags": 4,
+      "name": "(星)箭弹命中增加灵力 +10 ~ +11",
+      "category": "灵力",
+      "value_min": 10,
+      "value_max": 11
+    },
+    {
+      "effect_id": 12215,
+      "value": 12,
+      "flags": 4,
+      "name": "(星)箭弹命中增加灵力 +10 ~ +12",
+      "category": "灵力",
+      "value_min": 10,
+      "value_max": 12
+    },
+    {
+      "effect_id": 3360,
+      "value": 24,
+      "flags": 4,
+      "name": "(星)防御性能 +20 ~ +24",
+      "category": "承受伤害",
+      "value_min": 20,
+      "value_max": 24
+    },
+    {
+      "effect_id": 61687,
+      "value": 29,
+      "flags": 4,
+      "name": "(星)防御性能 +25 ~ +29",
+      "category": "承受伤害",
+      "value_min": 25,
+      "value_max": 29
+    },
+    {
+      "effect_id": 11206,
+      "value": 30,
+      "flags": 4,
+      "name": "(星)防御性能 +26 ~ +30",
+      "category": "承受伤害",
+      "value_min": 26,
+      "value_max": 30
+    },
+    {
+      "effect_id": 8671,
+      "value": 97,
+      "flags": 4,
+      "name": "(星)九十九化身槽减少(攻击动作中) +8.0% ~ +9.7%",
+      "category": "承受伤害",
+      "value_min": 80,
+      "value_max": 97
+    },
+    {
+      "effect_id": 13295,
+      "value": 114,
+      "flags": 4,
+      "name": "(星)九十九化身槽减少(攻击动作中) +9.7% ~ +11.4%",
+      "category": "承受伤害",
+      "value_min": 97,
+      "value_max": 114
+    },
+    {
+      "effect_id": 47507,
+      "value": 130,
+      "flags": 4,
+      "name": "(星)九十九化身槽减少(攻击动作中) +11.3% ~ +13.0%",
+      "category": "承受伤害",
+      "value_min": 113,
+      "value_max": 130
+    },
+    {
+      "effect_id": 53543,
+      "value": 230,
+      "flags": 4,
+      "name": "(星)体力 +200 ~ +230",
+      "category": "恢复体力",
+      "values": [
+        200,
+        201,
+        203,
+        204,
+        206,
+        207,
+        209,
+        210,
+        212,
+        213,
+        215,
+        216,
+        218,
+        219,
+        221,
+        222,
+        224,
+        225,
+        227,
+        228,
+        230
+      ],
+      "value_min": 200,
+      "value_max": 230
+    },
+    {
+      "effect_id": 30800,
+      "value": 260,
+      "flags": 4,
+      "name": "(星)体力 +230 ~ +260",
+      "category": "恢复体力",
+      "values": [
+        230,
+        231,
+        233,
+        234,
+        236,
+        237,
+        239,
+        240,
+        242,
+        243,
+        245,
+        246,
+        248,
+        249,
+        251,
+        252,
+        254,
+        255,
+        257,
+        258,
+        260
+      ],
+      "value_min": 230,
+      "value_max": 260
+    },
+    {
+      "effect_id": 2254,
+      "value": 290,
+      "flags": 4,
+      "name": "(星)体力 +261 ~ +290",
+      "category": "恢复体力",
+      "values": [
+        260,
+        261,
+        263,
+        264,
+        266,
+        267,
+        269,
+        270,
+        272,
+        273,
+        275,
+        276,
+        278,
+        279,
+        281,
+        282,
+        284,
+        285,
+        287,
+        288,
+        290
+      ],
+      "value_min": 260,
+      "value_max": 290
+    },
+    {
+      "effect_id": 46522,
+      "value": 45,
+      "flags": 4,
+      "name": "(星)守护灵技命中可吸取体力 40 ~ 45",
+      "category": "恢复体力",
+      "value_min": 40,
+      "value_max": 45
+    },
+    {
+      "effect_id": 31775,
+      "value": 50,
+      "flags": 4,
+      "name": "(星)守护灵技命中可吸取体力 45 ~ 50",
+      "category": "恢复体力",
+      "value_min": 45,
+      "value_max": 50
+    },
+    {
+      "effect_id": 2393,
+      "value": 55,
+      "flags": 4,
+      "name": "(星)守护灵技命中可吸取体力 50 ~ 55",
+      "category": "恢复体力",
+      "value_min": 50,
+      "value_max": 55
+    },
+    {
+      "effect_id": 30008,
+      "value": 8,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 B+",
+      "category": "恢复体力",
+      "value_min": 8,
+      "value_max": 8
+    },
+    {
+      "effect_id": 57818,
+      "value": 9,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 A-",
+      "category": "恢复体力",
+      "value_min": 9,
+      "value_max": 9
+    },
+    {
+      "effect_id": 14130,
+      "value": 10,
+      "flags": 4,
+      "name": "(星)造成属性伤害时吸取体力 A",
+      "category": "恢复体力",
+      "value_min": 10,
+      "value_max": 10
+    },
+    {
+      "effect_id": 26835,
+      "value": 16,
+      "flags": 4,
+      "name": "(星)武技吸取体力 +14.0% ~ +16.0%",
+      "category": "恢复体力",
+      "value_min": 14,
+      "value_max": 16
+    },
+    {
+      "effect_id": 33441,
+      "value": 18,
+      "flags": 4,
+      "name": "(星)武技吸取体力 +16.0% ~ +18.0%",
+      "category": "恢复体力",
+      "value_min": 16,
+      "value_max": 18
+    },
+    {
+      "effect_id": 47240,
+      "value": 20,
+      "flags": 4,
+      "name": "(星)武技吸取体力 +18.0% ~ +12.0%",
+      "category": "恢复体力",
+      "value_min": 18,
+      "value_max": 20
+    },
+    {
+      "effect_id": 2780,
+      "value": 11,
+      "flags": 4,
+      "name": "(星)阴阳术伤害吸取体力 A- ~ A+",
+      "category": "恢复体力",
+      "value_min": 9,
+      "value_max": 11
+    },
+    {
+      "effect_id": 35838,
+      "value": 13,
+      "flags": 4,
+      "name": "(星)阴阳术伤害吸取体力 A+ ~ AA",
+      "category": "恢复体力",
+      "value_min": 11,
+      "value_max": 13
+    },
+    {
+      "effect_id": 60866,
+      "value": 14,
+      "flags": 4,
+      "name": "(星)阴阳术伤害吸取体力 AA- ~ AA+",
+      "category": "恢复体力",
+      "value_min": 12,
+      "value_max": 14
+    },
+    {
+      "effect_id": 38097,
+      "value": 82,
+      "flags": 4,
+      "name": "(星)残心精力恢复量 +7.5% ~ +8.2%",
+      "category": "恢复精力",
+      "value_min": 75,
+      "value_max": 82
+    },
+    {
+      "effect_id": 26765,
+      "value": 89,
+      "flags": 4,
+      "name": "(星)残心精力恢复量 +8.2% ~ +8.9%",
+      "category": "恢复精力",
+      "value_min": 82,
+      "value_max": 89
+    },
+    {
+      "effect_id": 32045,
+      "value": 95,
+      "flags": 4,
+      "name": "(星)残心精力恢复量 +8.8% ~ +9.5%",
+      "category": "恢复精力",
+      "value_min": 88,
+      "value_max": 95
+    },
+    {
+      "effect_id": 27275,
+      "value": 85,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +7.4% ~ +8.5%",
+      "category": "恢复精力",
+      "value_min": 74,
+      "value_max": 85
+    },
+    {
+      "effect_id": 58569,
+      "value": 96,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +8.5% ~ +9.6%",
+      "category": "恢复精力",
+      "value_min": 85,
+      "value_max": 96
+    },
+    {
+      "effect_id": 40908,
+      "value": 108,
+      "flags": 4,
+      "name": "(星)精力恢复速度 +9.7% ~ +10.8%",
+      "category": "恢复精力",
+      "value_min": 97,
+      "value_max": 108
+    },
+    {
+      "effect_id": 45312,
+      "value": 132,
+      "flags": 4,
+      "name": "(星)防御时精力恢复速度 +12.4% ~ +13.2%",
+      "category": "恢复精力",
+      "value_min": 124,
+      "value_max": 132
+    },
+    {
+      "effect_id": 43611,
+      "value": 140,
+      "flags": 4,
+      "name": "(星)防御时精力恢复速度 +13.2% ~ +14.0%",
+      "category": "恢复精力",
+      "value_min": 132,
+      "value_max": 140
+    },
+    {
+      "effect_id": 32771,
+      "value": 148,
+      "flags": 4,
+      "name": "(星)防御时精力恢复速度 +14.0% ~ +14.8%",
+      "category": "恢复精力",
+      "value_min": 140,
+      "value_max": 148
+    },
+    {
+      "effect_id": 34044,
+      "value": 146,
+      "flags": 4,
+      "name": "(星)精力恢复速度上升(无伤) +12.4% ~ +14.6%",
+      "category": "恢复精力",
+      "values": [
+        124,
+        125,
+        126,
+        127,
+        128,
+        129,
+        130,
+        131,
+        132,
+        133,
+        135,
+        136,
+        137,
+        138,
+        139,
+        140,
+        141,
+        142,
+        143,
+        144,
+        146
+      ],
+      "value_min": 124,
+      "value_max": 146
+    },
+    {
+      "effect_id": 62932,
+      "value": 168,
+      "flags": 4,
+      "name": "(星)精力恢复速度上升(无伤) +14.6% ~ +16.8%",
+      "category": "恢复精力",
+      "values": [
+        146,
+        147,
+        148,
+        149,
+        150,
+        151,
+        152,
+        153,
+        154,
+        155,
+        157,
+        158,
+        159,
+        160,
+        161,
+        162,
+        163,
+        164,
+        165,
+        166,
+        168
+      ],
+      "value_min": 146,
+      "value_max": 168
+    },
+    {
+      "effect_id": 10936,
+      "value": 190,
+      "flags": 4,
+      "name": "(星)精力恢复速度上升(无伤) +16.8% ~ +19.0%",
+      "category": "恢复精力",
+      "values": [
+        168,
+        169,
+        170,
+        171,
+        172,
+        173,
+        174,
+        175,
+        176,
+        177,
+        179,
+        180,
+        181,
+        182,
+        183,
+        184,
+        185,
+        186,
+        187,
+        188,
+        190
+      ],
+      "value_min": 168,
+      "value_max": 190
+    },
+    {
+      "effect_id": 54987,
+      "value": 115,
+      "flags": 4,
+      "name": "(星)九十九化身持续时间延长 +10.5% ~ +11.5%",
+      "category": "精华槽",
+      "value_min": 105,
+      "value_max": 115
+    },
+    {
+      "effect_id": 19922,
+      "value": 125,
+      "flags": 4,
+      "name": "(星)九十九化身持续时间延长 +11.5% ~ +12.5%",
+      "category": "精华槽",
+      "value_min": 115,
+      "value_max": 125
+    },
+    {
+      "effect_id": 41316,
+      "value": 135,
+      "flags": 4,
+      "name": "(星)九十九化身持续时间延长 +12.5% ~ +13.5%",
+      "category": "精华槽",
+      "value_min": 125,
+      "value_max": 135
+    },
+    {
+      "effect_id": 60086,
+      "value": 111,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低 -10.1% ~ -11.1%",
+      "category": "移动、闪避",
+      "value_min": 101,
+      "value_max": 111
+    },
+    {
+      "effect_id": 50436,
+      "value": 124,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低 -11.4% ~ -12.4%",
+      "category": "移动、闪避",
+      "value_min": 114,
+      "value_max": 124
+    },
+    {
+      "effect_id": 57553,
+      "value": 135,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低 -12.5% ~ -13.5%",
+      "category": "移动、闪避",
+      "value_min": 125,
+      "value_max": 135
+    },
+    {
+      "effect_id": 15247,
+      "value": 142,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低(绝境) -13.1% ~ -14.2%",
+      "category": "移动、闪避",
+      "value_min": 131,
+      "value_max": 142
+    },
+    {
+      "effect_id": 4086,
+      "value": 153,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低(绝境) -14.2% ~ -15.3%",
+      "category": "移动、闪避",
+      "value_min": 142,
+      "value_max": 153
+    },
+    {
+      "effect_id": 11936,
+      "value": 165,
+      "flags": 4,
+      "name": "(星)闪避动作精力消耗降低(绝境) -15.3% ~ -16.5%",
+      "category": "移动、闪避",
+      "value_min": 153,
+      "value_max": 165
+    }
+  ]
+}
