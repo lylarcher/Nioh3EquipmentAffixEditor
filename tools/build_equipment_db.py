@@ -4,7 +4,12 @@
 
 Writes, next to the existing 饰品/魂核 tables (nothing existing is touched):
 
-    data/weapon_affixes.json    近战词条 + 远程词条 + 绿色星号词条的武器行
+    data/melee_weapon_affixes.json   近战词条 + 绿色星号词条的「近战」行
+    data/ranged_weapon_affixes.json  远程词条 + 「远程 / 弓 / 火枪 / 大炮」行
+
+Every ★ row also keeps the workbook's own 装备种类 label (``equipment_tags``: id ->
+``近战/手臂`` …) — that label says *which equipment* the affix may appear on, and is
+never the affix's own 类别 (the 类别 column is).
     data/armor_affixes.json     防具词条 + 绿色星号词条的防具行
     data/equipment_items.json   物品总目录的全部大类（含 大类/中类/小类，供四个筛选轴）
 
@@ -22,32 +27,74 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nioh3_accessory_editor.affixdb import (  # noqa: E402
-    AffixEntry, save_catalog,
-)
+from nioh3_accessory_editor.affixdb import AffixEntry  # noqa: E402
 from nioh3_accessory_editor.equipmentdb import (  # noqa: E402
-    ARMOR_CATALOG_SCHEMA, EQUIPMENT_ITEM_SCHEMA, WEAPON_CATALOG_SCHEMA,
-    DEFAULT_ARMOR_CATALOG, DEFAULT_EQUIPMENT_ITEM_CATALOG, DEFAULT_WEAPON_CATALOG,
+    ARMOR_CATALOG_SCHEMA, EQUIPMENT_ITEM_SCHEMA, MELEE_WEAPON_CATALOG_SCHEMA,
+    RANGED_WEAPON_CATALOG_SCHEMA, DEFAULT_ARMOR_CATALOG, DEFAULT_EQUIPMENT_ITEM_CATALOG,
+    DEFAULT_MELEE_WEAPON_CATALOG, DEFAULT_RANGED_WEAPON_CATALOG,
 )
 
 import build_affix_db as workbook  # noqa: E402  (same directory)
 
-#: Affix sheets per pool: sheet -> (first data row index, 类别 column, 代码 column, 名称 column).
-WEAPON_SHEETS = {"近战词条": (0, 1, 2), "远程词条": (0, 1, 2)}
+
+def _entry_document(entry: AffixEntry) -> dict:
+    """One affix in the same JSON shape the other catalogues use.
+
+    ``values`` (the workbook's 数值集合) is only written when the row actually has one —
+    a missing set must stay missing instead of turning into an invented one.
+    """
+    document = {
+        "effect_id": entry.effect_id,
+        "value": entry.value,
+        "flags": entry.flags,
+        "name": entry.name,
+        "category": entry.category,
+        "value_min": entry.value_min,
+        "value_max": entry.value_max,
+    }
+    if entry.values:
+        document["values"] = list(entry.values)
+    return document
+
+
+def write_catalog(entries: list[AffixEntry], tags: dict[int, str], path: Path, *,
+                  schema: str, source: str) -> None:
+    """Write an affix table plus the workbook's 装备种类 label per id.
+
+    The label is evidence for *which equipment* an affix may appear on; the affix's own
+    类别 stays in ``category`` and is what the 种类码 table keys on.  Both are kept.
+    """
+    payload = {
+        "schema": schema,
+        "count": len(entries),
+        "source": source,
+        "conflicts": [],
+        "equipment_tags": {f"{key:#06x}": value for key, value in sorted(tags.items())
+                           if value},
+        "affixes": [_entry_document(entry) for entry in entries],
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                    encoding="utf-8", newline="\n")
+
+#: Affix sheets per pool: sheet -> (类别 column, 代码 column, 名称 column).
+#: 【近战】只出现在武器上且不含远程武器，因此近战 / 远程各有自己的表。
 #: 防具词条 多一列 所属部位，所以 类别/代码/名称 都是后移一位。
 ARMOR_SHEETS = {"防具词条": (1, 2, 3)}
 #: 绿色星号词条 装备种类 tokens that belong to each pool.
-WEAPON_GREEN_TOKENS = frozenset(("近战", "远程", "弓", "火枪", "大炮"))
+#: 【近战】= 武器，但**不含远程武器（弓 / 火枪 / 大炮）**，所以近战与远程分成两个池。
+MELEE_GREEN_TOKENS = frozenset(("近战",))
+RANGED_GREEN_TOKENS = frozenset(("远程", "弓", "火枪", "大炮"))
 ARMOR_GREEN_TOKENS = frozenset(("头部", "身体", "手臂", "腿部", "足部"))
 
 CODE_PATTERN = re.compile(r"([0-9A-Fa-f]{2} ){11}[0-9A-Fa-f]{2}")
 
 
 def _collect_sheet(source: Path, sheet: str, category_column: int,
-                   code_column: int, name_column: int) -> tuple[list[AffixEntry], int]:
-    """Parse one 4/5-column affix sheet into entries (dedup by id, keep the first)."""
+                   code_column: int, name_column: int, tag: str) -> tuple[list[AffixEntry], dict[int, str], int]:
+    """Parse one 4/5-column affix sheet (dedup by id) plus its 装备种类 label."""
     rows = workbook._rows_from_xlsx(source, sheet)
     entries: list[AffixEntry] = []
+    tags: dict[int, str] = {}
     seen: set[int] = set()
     skipped = 0
     for row in rows[1:]:
@@ -69,22 +116,29 @@ def _collect_sheet(source: Path, sheet: str, category_column: int,
             skipped += 1
             continue
         seen.add(effect_id)
+        # 防具表的「所属部位」列（[手臂]）就是这个池子里的装备种类标签。
+        row_tag = tag
+        if category_column == 1 and row[0].strip():
+            row_tag = row[0].strip().strip("[]").strip() or tag
+        tags[effect_id] = row_tag
         entries.append(AffixEntry(effect_id=effect_id, value=value, flags=flags,
                                   name=name, category=category))
-    return entries, skipped
+    return entries, tags, skipped
 
 
-def _collect_green(source: Path, tokens: frozenset[str]) -> tuple[list[AffixEntry], int]:
+def _collect_green(source: Path, tokens: frozenset[str]) -> tuple[list[AffixEntry], dict[int, str], int]:
     """★ rows of 绿色星号词条 whose 装备种类 mentions one of ``tokens``."""
     rows = workbook._rows_from_xlsx(source, workbook.GREEN_SHEET)
     entries: list[AffixEntry] = []
+    tags: dict[int, str] = {}
     seen: set[int] = set()
     skipped = 0
     for row in rows[1:]:
         if len(row) < 6:
             skipped += 1
             continue
-        kinds = [part.strip() for part in row[0].strip().strip("[]").split("/")]
+        tag = row[0].strip().strip("[]").strip()
+        kinds = [part.strip() for part in tag.split("/")]
         if not any(token in kinds for token in tokens):
             skipped += 1
             continue
@@ -108,10 +162,11 @@ def _collect_green(source: Path, tokens: frozenset[str]) -> tuple[list[AffixEntr
             value = min(span, key=lambda item: abs(item - value))
         elif not span and not low_i <= value <= high_i:
             value = min(max(value, low_i), high_i)
+        tags[effect_id] = tag
         entries.append(AffixEntry(effect_id=effect_id, value=value, flags=flags,
                                   name=name, category=category, value_min=low_i,
                                   value_max=high_i, values=span))
-    return entries, skipped
+    return entries, tags, skipped
 
 
 def _with_spans(entries: list[AffixEntry], spans: dict[int, tuple[int, int]]) -> tuple[list[AffixEntry], int]:
@@ -175,9 +230,12 @@ def main() -> int:
 
     report = []
     pools = {
-        "武器": (dict(WEAPON_SHEETS), WEAPON_GREEN_TOKENS, DEFAULT_WEAPON_CATALOG,
-                 WEAPON_CATALOG_SCHEMA,
-                 "仁王3词条装备库v2.21.xlsx / 近战词条 + 远程词条 + 绿色星号词条（武器）"),
+        "近战": ({"近战词条": (0, 1, 2)}, MELEE_GREEN_TOKENS,
+                     DEFAULT_MELEE_WEAPON_CATALOG, MELEE_WEAPON_CATALOG_SCHEMA,
+                     "仁王3词条装备库v2.21.xlsx / 近战词条 + 绿色星号词条（近战）"),
+        "远程": ({"远程词条": (0, 1, 2)}, RANGED_GREEN_TOKENS,
+                     DEFAULT_RANGED_WEAPON_CATALOG, RANGED_WEAPON_CATALOG_SCHEMA,
+                     "仁王3词条装备库v2.21.xlsx / 远程词条 + 绿色星号词条（远程 / 弓 / 火枪 / 大炮）"),
         "防具": (dict(ARMOR_SHEETS), ARMOR_GREEN_TOKENS, DEFAULT_ARMOR_CATALOG,
                  ARMOR_CATALOG_SCHEMA,
                  "仁王3词条装备库v2.21.xlsx / 防具词条 + 绿色星号词条（防具）"),
@@ -187,16 +245,19 @@ def main() -> int:
         entries: list[AffixEntry] = []
         seen: set[int] = set()
         skipped = 0
+        tags: dict[int, str] = {}
         for sheet, (category_column, code_column, name_column) in sheets.items():
-            batch, batch_skipped = _collect_sheet(source, sheet, category_column,
-                                                  code_column, name_column)
+            batch, batch_tags, batch_skipped = _collect_sheet(
+                source, sheet, category_column, code_column, name_column, pool)
             skipped += batch_skipped
             for entry in batch:
                 if entry.effect_id in seen:
                     continue
                 seen.add(entry.effect_id)
                 entries.append(entry)
-        green, green_skipped = _collect_green(source, tokens)
+                if entry.effect_id in batch_tags:
+                    tags[entry.effect_id] = batch_tags[entry.effect_id]
+        green, green_tags, green_skipped = _collect_green(source, tokens)
         skipped += green_skipped
         added_green = 0
         for entry in green:
@@ -204,6 +265,7 @@ def main() -> int:
                 continue
             seen.add(entry.effect_id)
             entries.append(entry)
+            tags[entry.effect_id] = green_tags.get(entry.effect_id, "")
             added_green += 1
         before = len(entries)
         entries, span_hits = _with_spans(entries, spans)
@@ -214,9 +276,10 @@ def main() -> int:
         report.append(line)
         print("  " + line)
         if not dry_run:
-            save_catalog(entries, path, schema=schema, source="", conflicts=[],
-                         default_source=provenance)
+            write_catalog(entries, tags, path, schema=schema, source=provenance)
             written.append(str(path))
+        tagged = sum(1 for entry in entries if tags.get(entry.effect_id))
+        report.append(f"{pool} 装备种类标签 {tagged}/{len(entries)}")
 
     items, conflicts = collect_items(source)
     from collections import Counter

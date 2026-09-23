@@ -12,8 +12,11 @@ from pathlib import Path
 
 from .affixdb import AffixDb, AffixError, ItemDb, resource_root
 
-#: 武器词条表（近战词条 + 远程词条 + 绿色星号词条的武器行）。
-DEFAULT_WEAPON_CATALOG = resource_root() / "data" / "weapon_affixes.json"
+#: 近战武器词条表（近战词条 + 绿色星号词条的「近战」行）——
+#: 用户规则：【近战】只出现在武器上，且**不含远程武器（弓 / 火枪 / 大炮）**。
+DEFAULT_MELEE_WEAPON_CATALOG = resource_root() / "data" / "melee_weapon_affixes.json"
+#: 远程武器词条表（远程词条 + 绿色星号词条的「远程 / 弓 / 火枪 / 大炮」行）。
+DEFAULT_RANGED_WEAPON_CATALOG = resource_root() / "data" / "ranged_weapon_affixes.json"
 #: 防具词条表（防具词条 + 绿色星号词条的防具行）。
 DEFAULT_ARMOR_CATALOG = resource_root() / "data" / "armor_affixes.json"
 #: 物品总目录（全部大类：武器 / 防具 / 饰品 / 魂核 / …）。
@@ -21,7 +24,8 @@ DEFAULT_EQUIPMENT_ITEM_CATALOG = resource_root() / "data" / "equipment_items.jso
 #: 按类别收集的字段范围（等级 / +値 / 词条槽数），来自参考存档的实测。
 DEFAULT_EQUIPMENT_RANGES = resource_root() / "data" / "equipment_ranges.json"
 
-WEAPON_CATALOG_SCHEMA = "nioh3-weapon-affixes/v1"
+MELEE_WEAPON_CATALOG_SCHEMA = "nioh3-melee-weapon-affixes/v1"
+RANGED_WEAPON_CATALOG_SCHEMA = "nioh3-ranged-weapon-affixes/v1"
 ARMOR_CATALOG_SCHEMA = "nioh3-armor-affixes/v1"
 EQUIPMENT_ITEM_SCHEMA = "nioh3-equipment-items/v1"
 EQUIPMENT_RANGES_SCHEMA = "nioh3-equipment-ranges/v1"
@@ -159,10 +163,43 @@ def load_equipment_item_db(path: Path | None = None) -> EquipmentItemDb:
         return EquipmentItemDb(catalog_path=target, error=str(error))
 
 
-def load_weapon_db(path: Path | None = None) -> AffixDb:
-    """Load the 武器 affix table."""
-    target = DEFAULT_WEAPON_CATALOG if path is None else path
+#: 远程武器的「类型」（小类）；其余武器类型都按近战处理。
+RANGED_WEAPON_SMALLS = ("弓", "火枪", "大炮")
+
+
+def pool_of_item(item: "EquipmentItem | None", small: str = "",
+                 category: str = "") -> str:
+    """这件武器属于近战还是远程：以物品总目录的 中类/小类 为准。
+
+    ``远程武器`` 中类，或 弓 / 火枪 / 大炮 这三种小类 -> ``"ranged"``；
+    其余武器 -> ``"melee"``。
+    """
+    if item is not None:
+        category = item.category or category
+        small = item.small or small
+    if category == "远程武器" or small in RANGED_WEAPON_SMALLS:
+        return "ranged"
+    return "melee"
+
+
+def load_melee_weapon_db(path: Path | None = None) -> AffixDb:
+    """Load the 近战武器 affix table."""
+    target = DEFAULT_MELEE_WEAPON_CATALOG if path is None else path
     return AffixDb.from_file(target)
+
+
+def load_ranged_weapon_db(path: Path | None = None) -> AffixDb:
+    """Load the 远程武器 affix table."""
+    target = DEFAULT_RANGED_WEAPON_CATALOG if path is None else path
+    return AffixDb.from_file(target)
+
+
+def weapon_db_for(item: "EquipmentItem | None", *, melee: AffixDb | None = None,
+                  ranged: AffixDb | None = None) -> AffixDb:
+    """Pick the right weapon affix table for an item (远程 -> ranged)."""
+    if pool_of_item(item) == "ranged":
+        return ranged if ranged is not None else load_ranged_weapon_db()
+    return melee if melee is not None else load_melee_weapon_db()
 
 
 def load_armor_db(path: Path | None = None) -> AffixDb:
