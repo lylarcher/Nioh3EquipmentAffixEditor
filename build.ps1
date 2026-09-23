@@ -563,8 +563,8 @@ function Invoke-Build {
                 'data\grace_affixes.json', 'data\accessory_items.json',
                 'data\soul_affixes.json', 'data\soul_items.json',
                 'assets\app.ico', 'assets\logo-32.png', 'assets\logo.png',
-                'bin\Nioh_Savefile_decrypt.exe', 'README.md', 'README.zh-CN.md',
-                'CHANGELOG.md',
+                'bin\Nioh_Savefile_decrypt.exe', 'readme.txt', 'README.md',
+                'README.zh-CN.md', 'CHANGELOG.md',
                 'third_party\source-data')) {
             if (-not (Test-Path -LiteralPath (Join-Path $smokeRoot $relative))) {
                 throw "exe 未在自身目录解压: $relative"
@@ -595,10 +595,18 @@ function Invoke-Build {
             if (Test-Path -LiteralPath $script:ZipPath) {
                 Remove-Item -LiteralPath $script:ZipPath -Force
             }
-            Compress-Archive -LiteralPath $script:ExePath -DestinationPath $script:ZipPath `
+            # 用户先看到 readme.txt，再看到 exe；数据文件仍由 exe 首次运行自解压。
+            $script:ReadmePath = Join-Path $projectRoot 'readme.txt'
+            $zipItems = @($script:ExePath)
+            if (Test-Path -LiteralPath $script:ReadmePath) {
+                $zipItems += $script:ReadmePath
+            } else {
+                throw '缺少 readme.txt：用户压缩包里必须带使用说明'
+            }
+            Compress-Archive -LiteralPath $zipItems -DestinationPath $script:ZipPath `
                 -CompressionLevel Optimal
             $zipSize = [math]::Round((Get-Item -LiteralPath $script:ZipPath).Length / 1MB, 2)
-            Write-Note "压缩包: $zipSize MB（内含单个 exe，其余文件首次运行时自解压）"
+            Write-Note "压缩包: $zipSize MB（内含 exe + readme.txt，其余文件首次运行时自解压）"
         }
     }
 

@@ -412,6 +412,14 @@ class AccessoryEditorApp(tk.Tk):
         self.grace_filter_combo.pack(side=tk.LEFT, padx=2)
         ttk.Button(filter_row, text="清除筛选",
                    command=self.clear_filters).pack(side=tk.LEFT, padx=2)
+        ttk.Label(filter_row, text="武士/忍者:").pack(side=tk.LEFT)
+        self.school_filter_var = tk.StringVar(value=self.ALL_FILTER)
+        self.school_filter_combo = ttk.Combobox(
+            filter_row, state="readonly", width=12, textvariable=self.school_filter_var,
+            values=(self.ALL_FILTER,) + self._school_filter_values())
+        self.school_filter_combo.pack(side=tk.LEFT, padx=2)
+        self.school_filter_combo.bind("<<ComboboxSelected>>",
+                                      lambda _event: self._refresh_accessory_tree())
         self.kind_filter_combo.bind("<<ComboboxSelected>>",
                                     lambda _event: self._refresh_accessory_tree())
         self.grace_filter_combo.bind("<<ComboboxSelected>>",
@@ -628,10 +636,36 @@ class AccessoryEditorApp(tk.Tk):
 
     # ------------------------------------------------- 筛选 / 关键词 / 新建
     def clear_filters(self) -> None:
-        """需求(3): drop both filters and show every accessory again."""
+        """需求(3): drop every filter and show all accessories again."""
         self.kind_filter_var.set(self.ALL_FILTER)
         self.grace_filter_var.set(self.ALL_FILTER)
+        self.school_filter_var.set(self.ALL_FILTER)
         self._refresh_accessory_tree()
+
+    #: 「武士 / 忍者」在物品总目录里的类别是 武士饰品 / 忍者饰品。
+    _SCHOOL_SUFFIX = "饰品"
+
+    def _school_of(self, view: AccessoryView) -> str:
+        """该记录属于武士还是忍者（取自物品总目录的类别）。"""
+        entry = self.item_db.lookup(view.record_type)
+        category = (getattr(entry, "category", "") or "") if entry is not None else ""
+        return category.replace(self._SCHOOL_SUFFIX, "").strip()
+
+    def _school_filter_values(self) -> tuple[str, ...]:
+        """筛选下拉的取值：物品总目录里出现过的类别（武士 / 忍者 …）。"""
+        values: list[str] = []
+        for entry in self.item_db.all():
+            label = (getattr(entry, "category", "") or "").replace(
+                self._SCHOOL_SUFFIX, "").strip()
+            if label and label not in values:
+                values.append(label)
+        return tuple(values)
+
+    def _school_filter_passes(self, view: AccessoryView) -> bool:
+        choice = self.school_filter_var.get()
+        if choice in ("", self.ALL_FILTER):
+            return True
+        return self._school_of(view) == choice
 
     def _kind_filter_passes(self, view: AccessoryView) -> bool:
         choice = self.kind_filter_var.get()
@@ -665,20 +699,26 @@ class AccessoryEditorApp(tk.Tk):
         )
 
     def _cascade_filter_values(self) -> None:
-        """需求(3): each filter offers only what the *other* one still allows.
+        """需求(3): each filter offers only what the *other two* still allow.
 
         With 种类 = 八尺琼勾玉[武士] picked, the 恩宠/套装 list shrinks to the graces
-        those records actually carry (and vice versa), so a combination that cannot
-        exist is not offered in the first place.  A current choice that is no longer
+        those records actually carry and 武士/忍者 shrinks to what is left (and every
+        other pair behaves the same way), so a combination that cannot exist is not
+        offered in the first place.  A current choice that is no longer
         offered is kept in the list and left selected, so an empty result is explained
         by the filter the user set instead of being silently reset.
         """
         if not hasattr(self, "kind_filter_combo") or not self.accessory_views:
             return
         kind_pool = [view for view in self.accessory_views
-                     if self._grace_filter_passes(view)]
+                     if self._grace_filter_passes(view)
+                     and self._school_filter_passes(view)]
         grace_pool = [view for view in self.accessory_views
-                      if self._kind_filter_passes(view)]
+                      if self._kind_filter_passes(view)
+                      and self._school_filter_passes(view)]
+        school_pool = [view for view in self.accessory_views
+                       if self._kind_filter_passes(view)
+                       and self._grace_filter_passes(view)]
         kinds = {view.record_type for view in kind_pool}
         graces = {effect.effect_id for view in grace_pool
                   for effect in view.occupied_effects}
@@ -687,6 +727,9 @@ class AccessoryEditorApp(tk.Tk):
         grace_values = [self.ALL_FILTER] + [
             name for name, entry in self.grace_choices.items()
             if entry.effect_id in graces]
+        schools = {self._school_of(view) for view in school_pool}
+        school_values = [self.ALL_FILTER] + [
+            label for label in self._school_filter_values() if label in schools]
         choice = self.kind_filter_var.get()
         if choice and choice != self.ALL_FILTER and choice not in kind_values:
             kind_values.append(f"{choice}（当前无记录）")
@@ -695,12 +738,17 @@ class AccessoryEditorApp(tk.Tk):
         if choice and choice != self.ALL_FILTER and choice not in grace_values:
             grace_values.append(f"{choice}（当前无记录）")
         self.grace_filter_combo.configure(values=grace_values)
+        choice = self.school_filter_var.get()
+        if choice and choice != self.ALL_FILTER and choice not in school_values:
+            school_values.append(f"{choice}（当前无记录）")
+        self.school_filter_combo.configure(values=school_values)
 
     def _refresh_accessory_tree(self) -> None:
         """Re-fill the tree from ``self.accessory_views`` honouring the filters."""
         self.tree.delete(*self.tree.get_children())
         shown = [view for view in self.accessory_views
-                 if self._kind_filter_passes(view) and self._grace_filter_passes(view)]
+                 if self._kind_filter_passes(view) and self._grace_filter_passes(view)
+                 and self._school_filter_passes(view)]
         self._cascade_filter_values()
         for view in shown:
             # 种类 = the item this record is, named from 物品总目录 when available

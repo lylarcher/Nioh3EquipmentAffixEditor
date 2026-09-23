@@ -97,8 +97,12 @@ class ScriptContractTests(unittest.TestCase):
         self.assertIn("*.py", self.source)
         self.assertIn("发行目录出现 Python 源文件", self.source)
 
-    def test_ships_only_the_executable_in_the_zip(self) -> None:
-        self.assertIn("Compress-Archive -LiteralPath $script:ExePath", self.source)
+    def test_ships_the_executable_and_the_user_readme_in_the_zip(self) -> None:
+        """压缩包里只有 exe + readme.txt：其余文件由 exe 首次运行自解压。"""
+        self.assertIn("$zipItems = @($script:ExePath)", self.source)
+        self.assertIn("$zipItems += $script:ReadmePath", self.source)
+        self.assertIn("Compress-Archive -LiteralPath $zipItems", self.source)
+        self.assertNotIn("Compress-Archive -LiteralPath $script:ExePath", self.source)
 
     def test_declares_the_documented_parameters(self) -> None:
         for parameter in ("$Python", "$Configuration", "$OutputDirectory",
@@ -191,8 +195,20 @@ class BilingualDocsTests(unittest.TestCase):
 
     def test_the_payload_ships_both_readmes(self) -> None:
         source = (PROJECT_ROOT / "tools" / "make_payload.py").read_text(encoding="utf-8")
-        self.assertIn('PAYLOAD_FILES = ("README.md", "README.zh-CN.md", '
-                      '"CHANGELOG.md")', source)
+        self.assertIn('PAYLOAD_FILES = ("readme.txt", "README.md", '
+                      '"README.zh-CN.md", "CHANGELOG.md")', source)
+
+    def test_the_package_carries_the_user_readme(self) -> None:
+        """readme.txt 是给使用者的操作说明：进载荷、进冒烟校验、进压缩包。"""
+        payload = (PROJECT_ROOT / "tools" / "make_payload.py").read_text(encoding="utf-8")
+        script = (PROJECT_ROOT / "build.ps1").read_text(encoding="utf-8")
+        self.assertTrue((PROJECT_ROOT / "readme.txt").is_file())
+        self.assertIn("readme.txt", payload)
+        self.assertIn("'readme.txt'", script)
+        user_readme = (PROJECT_ROOT / "readme.txt").read_text(encoding="utf-8")
+        self.assertIn("仅供测试学习用，不要用于联机影响游戏平衡", user_readme)
+        for marker in ("读取数据", "应用修改", "写入副本"):
+            self.assertIn(marker, user_readme)
 
     def test_the_two_readmes_cross_link_on_the_first_line(self) -> None:
         self.assertIn("[简体中文](README.zh-CN.md)", self.english.splitlines()[0])
