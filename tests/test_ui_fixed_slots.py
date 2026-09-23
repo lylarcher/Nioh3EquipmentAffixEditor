@@ -31,7 +31,7 @@ class _View:
         self.unidentified = False
         self.occupied_effects: list[object] = []
 
-    def slot_is_fixed(self, index: int, affix_db=None) -> bool:
+    def slot_is_fixed(self, index: int, affix_db=None, grace_db=None) -> bool:
         return index in self._fixed
 
     def grace_slots(self, affix_db=None) -> set[int]:

@@ -148,26 +148,30 @@ class AccessoryView:
             return "饰品词条"
         return "恩宠/套装词条"
 
-    def slot_is_fixed(self, slot_index: int, affix_db: AffixDb) -> bool:
+    def slot_is_fixed(self, slot_index: int, affix_db: AffixDb,
+                      grace_db: GraceDb | None = None) -> bool:
         """Whether this slot holds the item's 同名固定 affix (never editable).
 
-        Evidence, and why the metadata bit alone is *not* enough:
+        Two independent pieces of evidence, in the save's own words (the user's
+        rule: *the workbook is not the authority — anything whose metadata carries
+        the 固定 attribute is a 同名固定 affix*):
 
-        * the catalog marks the id ``(同名固定)`` (byte 9 bit 6 of the affix code
-          template, measured against the workbook's own 同名固定 rows), and
-        * the slot's metadata byte 9 has bit ``0x40`` set.
+        * the catalog marks the id ``(同名固定)`` (the workbook's own rows), and
+        * the slot's metadata byte 9 has bit ``0x40`` set (``0x4000``).
 
-        On the 795 catalogued slots of the reference save the two agreed
-        with zero exceptions.  The bit is *not* consulted for ids outside the
-        catalog, because there it is set for other reasons too — 恩宠 slots
-        (byte 9 = 0x4C = 0x40|0x0C) and 套装 slots all carry it, and 恩宠 must stay
-        editable through the 恩宠 path.  So: catalog-fixed, or (in-catalog and bit
-        set), and nothing else.
+        Every catalogued fixed affix of the reference save carries the bit, but the
+        bit also covers fixed affixes the workbook never listed — e.g. 830 slots of
+        the item array and 27 魂核 slots, names like ``0xd0c5 (同名固定)造成雷属性
+        伤害时吸取体力``.  Out-of-catalog ids therefore count as fixed too, with one
+        exception: an id the 恩宠/套装 table knows is *not* fixed (those slots are
+        rewritten through the 恩宠 path, and its metadata 0x0C code shares byte 9).
+        Pass ``grace_db`` to get that exclusion; without it, an out-of-catalog id is
+        only reported fixed when the bit is set **and** nothing identifies it as 恩宠.
 
         An item's fixed affix is part of *what the item is*: changing it (or
-        changing a normal slot into one) would describe an accessory that cannot
-        drop.  The only code allowed to rewrite it is the 种类 swap, which copies
-        the target kind's own fixed affix from a real sample.
+        changing a normal slot into one) would describe an item that cannot drop.
+        The only code allowed to rewrite it is the 种类 swap, which copies the
+        target kind's own fixed affix from a real sample.
         """
         if not 0 <= slot_index < len(self.effects):
             return False
@@ -175,11 +179,20 @@ class AccessoryView:
         if effect.is_empty:
             return False
         entry = affix_db.lookup(effect.effect_id)
-        if entry is None:
+        if entry is not None:
+            if entry.is_fixed:
+                return True
+            return records.effect_metadata_is_fixed(effect.metadata)
+        if not records.effect_metadata_is_fixed(effect.metadata):
             return False
-        if entry.is_fixed:
-            return True
-        return records.effect_metadata_is_fixed(effect.metadata)
+        if grace_db is not None:
+            # 恩宠/套装槽同样带这个位，但它由【恩宠】栏负责，不算固定。
+            return not grace_db.describe(effect.effect_id)
+        return not self._in_grace_slots(slot_index, affix_db)
+
+    def _in_grace_slots(self, slot_index: int, affix_db: AffixDb) -> bool:
+        """恩宠/套装槽的启发式判断（没有恩宠表时的兜底）。"""
+        return slot_index in self.grace_slots(affix_db)
 
     def fixed_slots(self, affix_db: AffixDb) -> frozenset[int]:
         """Indices of the record's occupied 同名固定 slots (usually just one)."""
@@ -712,10 +725,9 @@ class SoulCoreView:
         if effect.is_empty:
             return False
         entry = soul_db.lookup(effect.effect_id)
-        if entry is None:
-            return False
-        if entry.is_fixed:
+        if entry is not None and entry.is_fixed:
             return True
+        # 表外 id 也按存档自己的「固定」位判定（魂核没有恩宠/套装槽，无需例外）。
         return records.effect_metadata_is_fixed(effect.metadata)
 
     def fixed_slots(self, soul_db: AffixDb) -> frozenset[int]:
@@ -1035,8 +1047,11 @@ def _slot_is_star(slot: records.EffectSlot, db: AffixDb) -> bool:
 
 
 def _slot_is_fixed(slot: records.EffectSlot, db: AffixDb) -> bool:
+    """固定词条的同一个口径：目录标记或存档 metadata 的固定位。"""
     entry = db.lookup(slot.effect_id)
-    return bool(entry is not None and entry.is_fixed)
+    if entry is not None and entry.is_fixed:
+        return True
+    return records.effect_metadata_is_fixed(slot.metadata)
 
 
 def assert_single_affix_per_category(plans: tuple[EditPlan, ...], db: AffixDb,
@@ -1159,7 +1174,7 @@ def plan_edits(
         view = known.get(record_index)
         if view is None or not 0 <= slot_index < records.EFFECT_COUNT:
             continue
-        if view.slot_is_fixed(slot_index, affix_db):
+        if view.slot_is_fixed(slot_index, affix_db, grace_db=grace_db):
             entry = affix_db.lookup(view.effects[slot_index].effect_id)
             fixed_refusals.append(
                 f"#{record_index} 槽{slot_index}"
@@ -1182,7 +1197,7 @@ def plan_edits(
     fixed_refusals = []
     for edit in normalized:
         view = known[edit["record_index"]]
-        if view.slot_is_fixed(edit["slot_index"], affix_db):
+        if view.slot_is_fixed(edit["slot_index"], affix_db, grace_db=grace_db):
             entry = affix_db.lookup(view.effects[edit["slot_index"]].effect_id)
     by_record: dict[int, list[dict[str, int]]] = {}
     for edit in normalized:

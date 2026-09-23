@@ -1872,7 +1872,7 @@ class AccessoryEditorApp(tk.Tk):
                 self.slot_combos[index].state(["!disabled"])
                 continue
             entry = self.affix_db.lookup(effect.effect_id)
-            if view.slot_is_fixed(index, self.affix_db):
+            if view.slot_is_fixed(index, self.affix_db, grace_db=self.grace_db):
                 # 同名固定词条: shown, but neither the affix nor its 数值 is
                 # editable — it is part of what the item is (and follows 种类
                 # automatically when 种类 changes).  The 数值 box keeps showing the
@@ -2076,7 +2076,7 @@ class AccessoryEditorApp(tk.Tk):
         edits: list[dict[str, int]] = []
         grace_slots = self._grace_slot_indexes(view)
         for index in range(EFFECT_COUNT):
-            if view.slot_is_fixed(index, self.affix_db) or index in grace_slots:
+            if view.slot_is_fixed(index, self.affix_db, grace_db=self.grace_db) or index in grace_slots:
                 # 固定词条 is part of what the item is, and an 恩宠/套装 slot is named
                 # from 词条总目录: neither is an affix choice, so neither is a pending
                 # edit here (the 恩宠 combo is how a grace gets replaced).
