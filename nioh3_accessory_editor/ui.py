@@ -31,6 +31,9 @@ from .affixdb import (
 from .bootstrap import ensure_once, last_report
 from .config import ConfigError, EditorConfig, load_config
 from .editor import (
+    apply_equipment_grace_edit,
+    equipment_grace_availability,
+    plan_equipment_grace_edit,
     AccessoryView,
     CreationError,
     EditorError,
@@ -107,8 +110,9 @@ WRITE_REQUIREMENT_SHORT = (
     "写入存档前请先退出游戏，或退回到游戏标题界面；在游戏内写入会被游戏下次保存覆盖。"
 )
 
-TITLE = "仁王3 饰品词条修改器（仅供测试学习用）"
-SUBTITLE = "词条取自《仁王3词条装备库v2.21》 · 修改结果直接写回存档"
+TITLE = "仁王3 装备词条修改器（仅供测试学习用）"
+SUBTITLE = ("武器 / 防具 / 饰品 / 魂核 词条 · 取自《仁王3词条装备库v2.21》"
+            " · 修改结果直接写回存档")
 EMPTY_LABEL = "(空)"
 #: Sentinel for "no filter" in the 种类 / 恩宠 filter comboboxes (需求 3).
 ALL_FILTER = "(全部)"
@@ -170,7 +174,8 @@ class EquipmentTab(ttk.Frame):
     * 候选词条来自这件装备自己的词条池（远程武器 = 远程表，其余武器 = 近战表，
       防具 = 防具表），并且只列出「装备种类」标签相容的词条 —— 判定直接调用引擎的
       :func:`editor.equipment_affix_allowed`，界面里不重写一套规则；
-    * 固定词条（目录标着同名固定，或存档标识带 0x4000）与恩宠/套装槽都只读；
+    * 固定词条（目录标着同名固定，或存档标识带 0x4000）只读；恩宠/套装不在这排槽里改，
+  用右下角的【恩宠 / 套装】栏替换；
     * 等级 / +值 的上限取自 :func:`editor.class_limits_for_record`（等级 180、
       +值按大类），不再写死。
 
@@ -312,7 +317,8 @@ class EquipmentTab(ttk.Frame):
             "其余武器只看近战词条表，防具看防具词条表；并且只列出源表标着"
             "「装备种类」相容的词条 —— 例如只标「近战」的词条不会出现在弓的列表里。\n"
             "同名固定词条是该件装备固有的一部分，**禁止修改**（显示为「固定，不可修改」）；"
-            "★（星号）词条可以改。恩宠/套装词条只显示、不在本页替换。\n"
+            "★（星号）词条可以改。恩宠/套装词条不在这排槽里改 —— "
+            "选中记录后用右下角的【恩宠 / 套装】栏替换。\n"
             "等级上限 180；+值上限按大类（武器 / 防具都是 0..30），上限数值来自"
             "按类别收集的实测范围表。\n"
             "仅供测试学习用，不要用于联机影响游戏平衡。"
@@ -359,13 +365,31 @@ class EquipmentTab(ttk.Frame):
         self._set_plus_enabled(False)
 
     def _build_grace(self, right: ttk.Frame) -> None:
-        self.grace_frame = ttk.LabelFrame(right, text="恩宠 / 套装（只读）", padding=(6, 4))
+        self.grace_frame = ttk.LabelFrame(right, text="恩宠 / 套装（可替换）",
+                                          padding=(6, 4))
         self.grace_frame.pack(fill=tk.X, pady=(6, 0))
+        row = ttk.Frame(self.grace_frame)
+        row.pack(fill=tk.X)
+        ttk.Label(row, text="改成:").pack(side=tk.LEFT)
+        self.grace_var = tk.StringVar(value="")
+        # 全部 77 条（恩宠 + 上位恩宠 + 武士套装 + 忍者套装），与 all() 同序：
+        # GraceDb.labels() 只给 21 条恩宠，装备上实测也有套装。
+        self.grace_values = tuple(
+            f"{entry.effect_id:#06x} {entry.name}（{entry.category}）"
+            for entry in self.app.grace_db.all())
+        self.grace_combo = ttk.Combobox(row, state="readonly", width=40,
+                                        textvariable=self.grace_var,
+                                        values=self.grace_values)
+        self.grace_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
+        self.grace_button = ttk.Button(row, text="应用恩宠/套装",
+                                       command=self.apply_grace)
+        self.grace_button.pack(side=tk.LEFT, padx=2)
         self.grace_status_var = tk.StringVar(
             value=f"选择一条{self.title}记录后，这里会显示它带的恩宠/套装词条。")
         ttk.Label(self.grace_frame, textvariable=self.grace_status_var,
                   foreground="#666666", wraplength=520,
-                  justify=tk.LEFT).pack(anchor=tk.W)
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        self._set_grace_enabled(False)
 
     def _build_create(self, right: ttk.Frame) -> None:
         self.create_frame = ttk.LabelFrame(
@@ -737,12 +761,12 @@ class EquipmentTab(ttk.Frame):
             if index == grace:
                 named = self.app.grace_db.describe(effect.effect_id)
                 combo.configure(values=(f"{effect.effect_id:#06x} {named}",))
-                combo.set(f"{effect.effect_id:#06x} {named}（只读）")
+                combo.set(f"{effect.effect_id:#06x} {named}（用下方恩宠/套装栏替换）")
                 combo.state(["disabled"])
                 self.value_vars[index].set(str(effect.value))
                 self.value_entries[index].state(["disabled"])
                 self.slot_labels[index].set(
-                    f"数值={effect.value} ← 恩宠/套装词条：本页只显示，不替换")
+                    f"数值={effect.value} ← 恩宠/套装词条：用下方【恩宠 / 套装】栏替换")
                 continue
             if entry is not None:
                 combo.state(["!disabled"])
@@ -777,14 +801,7 @@ class EquipmentTab(ttk.Frame):
                 f"当前 +{view.plus_value}（字段 +0x0A，只写这两个字节）")
         self._set_level_enabled(True)
         self._set_plus_enabled(True)
-        name = self.grace_name(view)
-        if name:
-            self.grace_status_var.set(
-                f"当前：{view.effects[grace].effect_id:#06x} {name}（槽{grace + 1}）。"
-                "恩宠/套装词条不在武器的词条表里，本工具在本阶段不会改写它 —— "
-                "所以这一栏只显示；一件装备只能有一个恩宠/套装。")
-        else:
-            self.grace_status_var.set("这条记录没有恩宠/套装词条。")
+        self._refresh_grace_state(view)
         self.detail_var.set("")
 
     # ------------------------------------------------------- 收 集 / 应 用
@@ -983,6 +1000,82 @@ class EquipmentTab(ttk.Frame):
             return
         self.detail_var.set(f"{plan.describe()}（内存中，尚未写入存档）")
         self.app._status(f"{self.title}记录 #{view.slot_index} 的 +值改为 {plan.new_value}")
+        self.reload()
+
+    # --------------------------------------------------------- 恩 宠 / 套 装
+    def _set_grace_enabled(self, enabled: bool) -> None:
+        state = ["!disabled"] if enabled else ["disabled"]
+        self.grace_combo.state(state)
+        self.grace_button.state(state)
+
+    def _refresh_grace_state(self, view: EquipmentView) -> None:
+        availability = equipment_grace_availability(
+            view, grace_db=self.app.grace_db, pool=self.pool_for(view))
+        self.grace_availability = availability
+        if not availability.allowed:
+            self.grace_status_var.set(f"不可改：{availability.reason}")
+            self.grace_combo.set("")
+            self._set_grace_enabled(False)
+            return
+        self.grace_status_var.set(
+            f"当前：{availability.describe_current()}"
+            f"（槽{int(availability.slot_index) + 1}）。可换成名表里的其它恩宠/套装；"
+            "一件装备只能有一个，写入只改这一槽的词条 id 与数值。")
+        self._set_grace_enabled(True)
+        for index, entry in enumerate(self.app.grace_db.all()):
+            if entry.effect_id == availability.current_id:
+                self.grace_combo.current(index)
+                break
+
+    def apply_grace(self) -> None:
+        view = self._selected_view()
+        if view is None or self.app.decrypted is None:
+            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+            return
+        text_value = self.grace_combo.get().strip()
+        if not text_value:
+            messagebox.showwarning("提示", "请先在下拉里选择要换成的恩宠/套装")
+            return
+        try:
+            try:
+                grace_id = int(text_value.split(" ", 1)[0], 16)
+            except ValueError as error:
+                raise GraceEditError(
+                    f"下拉里的值不是恩宠/套装 id：{text_value}") from error
+            if self.app.grace_db.lookup(grace_id) is None:
+                raise GraceEditError(
+                    f"{text_value.split(' ', 1)[0]} 不在恩宠/套装名表里")
+            availability = equipment_grace_availability(
+                view, grace_db=self.app.grace_db, pool=self.pool_for(view))
+            if not availability.allowed:
+                raise GraceEditError(availability.reason)
+        except (GraceEditError, EditorError) as error:
+            messagebox.showerror("错误", str(error))
+            return
+        name = self.app.grace_db.describe(grace_id)
+        if not messagebox.askokcancel(
+            "确认修改恩宠 / 套装",
+            f"把{self.title}记录 #{view.slot_index} 的恩宠/套装换成 {name}？\n\n"
+            "· 只写这一槽的词条 id 与数值，槽里的其它标识（种类码、固定/★、byte 11）"
+            "原样保留；\n"
+            "· 一件装备只能有一个恩宠/套装；\n"
+            "· 存档写入前会自动备份，出问题可以用「恢复备份」恢复。",
+            icon="warning",
+        ):
+            return
+        try:
+            self.app.decrypted = apply_equipment_grace_edit(
+                self.app.decrypted, view.slot_index, grace_id,
+                grace_db=self.app.grace_db, item_db=self.item_db,
+                pools=self.app.equipment_pools, known_ids=self.app.known_ids,
+                layout=self.app.layout)
+        except Exception as error:  # noqa: BLE001 - 通过对话框反馈
+            messagebox.showerror("错误", str(error))
+            return
+        self.detail_var.set(
+            f"记录 #{view.slot_index} 槽{int(availability.slot_index) + 1} 的"
+            f"恩宠/套装改为 {name}（内存中，尚未写入存档）")
+        self.app._status(f"{self.title}记录 #{view.slot_index} 的恩宠/套装改为 {name}")
         self.reload()
 
     def _chosen_effects(self) -> list[dict[str, int]]:

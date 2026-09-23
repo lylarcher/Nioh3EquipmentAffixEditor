@@ -908,7 +908,7 @@ def cmd_version(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="launch_editor.py",
-        description="仁王3 饰品词条修改器（仅供测试学习用）",
+        description="仁王3 装备词条修改器（仅供测试学习用）",
     )
     parser.add_argument("--version", action=_VersionAction,
                         help="显示版本信息（commit 后8位、来源、构建时间、语言）")

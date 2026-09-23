@@ -1,6 +1,6 @@
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-# Nioh3AccessoryEditor
+# Nioh3AccessoryEditor（仁王3 装备词条修改器）
 
 A Python accessory (饰品) affix editor for **Nioh 3 (PC)** that writes edits
 **directly into the save file** so they persist across sessions — not a
@@ -19,7 +19,7 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 
 ## Features
 
-* **Two tabs: 饰品 and 魂核** — the 魂核 (soul core) tab edits cores through their
+* **Four tabs: 饰品, 魂核, 武器 and 防具** — the 魂核 (soul core) tab edits cores through their
   *own* tables, because a 魂核 has no 恩宠/套装 affix and its own affix pool:
 287 ids from the workbook's `绘卷-魂核词条` sheet plus 51 ★ ids from
   绿色星号词条
@@ -93,7 +93,7 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
 `仁王3词条装备库v2.21.xlsx` 饰品词条 sheet plus the 饰品 rows of the
   绿色星号词条 sheet (→ 308 unique effect ids: 276 + 32 ★); any affix
   outside the table is rejected (fail closed).
-* **Legal 恩宠 editing (恩宠 → 恩宠 only)** — an accessory's last slot can be
+* **恩宠 editing (accessories: 恩宠 → 恩宠 only)** — an accessory's last slot can be
   changed to another `xxx的恩宠` (the 21 rows the workbook marks 恩宠 or 上位恩宠),
   from the GUI's 恩宠 row or `edit --grace`. Item-specific 套装/专属套装 effects
   (e.g. 怨恨盖世) and plain 词条 are refused, as are non-trailing slots and
@@ -103,6 +103,24 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   value change; the family/sub-kind bytes and the unexplained byte 11 are kept
   exactly as the game wrote them. Measured on a copy of a real save: a whole
   9.4 MB save changes in 5 bytes — the 2 id bytes and 3 checksum bytes.
+* **A weapon / armour 恩宠/套装 can be replaced** — the 恩宠 / 套装 row of the
+  武器 / 防具 tabs is no longer a read-only display: it is a drop-down plus an
+  【应用恩宠/套装】 button listing **all 77 rows** of the grace table (恩宠 10,
+  上位恩宠 11, 武士套装 34, 忍者套装 22), so that slot can go from an 恩宠 to a
+  套装. The rule is replace-only: it rewrites the 恩宠/套装 slot the record
+  **already** has and never adds one — measured on the reference save, 497/497
+  weapons and 614/614 armour carry **exactly one** each, always in slot 5, and a
+  record with no grace slot is refused with the reason (there is no real metadata
+  shape to copy, and inventing one would be guessing). One piece of equipment can
+  carry only one 恩宠/套装. A write changes only that slot's effect id and value;
+  the rest of the slot — the kind code `0x0C00` (「其他」), the fixed bit
+  `0x4000`, the ★ bit and byte 11 — is kept exactly as it was. A 恩宠/套装 slot
+  **never counts as a fixed affix** (the fixed bit does not affect it), the value
+  may only be the grace table's own catalog value, and an id outside the table is
+  still refused (fail closed). **The CLI did not change**: `edit --grace` still
+  applies to accessory records only, so replacing a weapon / armour grace is a GUI
+  path. **Unverified**: whether the game accepts the swap afterwards has not been
+  confirmed in game yet — try it on a copy and keep the automatic backup.
 * **Dual crypto backend** — the bundled reference executable
   (`bin/Nioh_Savefile_decrypt.exe`, ~0.4 s per pass) by default; a
   bit-exact pure-Python port of the custom Nioh AES as a zero-dependency
@@ -256,7 +274,7 @@ design, so you can read and edit them):
 | `config/editor.json` | parameter file: save root, account/slot filter, crypto backend, backup root, GUI defaults |
 | `assets/` | program icon (`app.ico`) and logos (`logo.png`, `logo-64.png`, `logo-32.png`) |
 | `data/accessory_affixes.json` | the legal affix catalogue the editor validates against |
-| `data/grace_affixes.json` | 恩宠/套装组合 name table — labels an accessory's last slot, never used to allow an edit |
+| `data/grace_affixes.json` | 恩宠/套装组合 name table — names and validates an accessory's or a weapon / armour's 恩宠/套装 slot, never used to let an off-table id through |
 | `bin/Nioh_Savefile_decrypt.exe` | bundled crypto helper (fast path; pure Python is the fallback) |
 | `third_party/source-data/` | the original `.xlsx` / `.CT` inputs (regenerate the catalogue yourself) |
 | `README.md`, `CHANGELOG.md` | documentation, copied for offline reading |
@@ -476,7 +494,7 @@ build artifacts: a fresh checkout reports live git information
 ## Tests
 
 ```powershell
-# Whole suite (1049 tests, ~11 min; needs bin/Nioh_Savefile_decrypt.exe)
+# Whole suite (1075 tests, ~11 min; needs bin/Nioh_Savefile_decrypt.exe)
 python tools/run_tests.py
 
 # Verbose / single module / keyword filter
@@ -495,6 +513,9 @@ backup + rollback, the editor/CLI pipelines, a full CLI write against a
 synthetic save on disk, the 恩宠 legality gate (a 恩宠 slot is writable; a
 专属套装 effect such as 怨恨盖世, a plain 词条 in the last slot, an unknown family
 byte and an unlisted id are all refused, and the write moves only the id bytes),
+the weapon / armour 恩宠/套装 replacement (it rewrites only the slot the record
+already has, the value comes from the name table's own catalog value, a grace slot
+never counts as fixed, and an id outside the table is still refused),
 the display-only item table (including that an item id can never become an
 editable affix, and that the committed JSON still matches the workbook),
 and the backup/restore path — including a real
@@ -537,14 +558,18 @@ Two tables come out of one workbook, deliberately kept apart:
   of the 绿色星号词条 sheet that may roll on 饰品** (308 ids in total)
   the editor accepts as an edit; anything else fails closed.
 * **`data/grace_affixes.json`** — the 恩宠/套装组合 rows of 词条总目录 (77 ids:
-  恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22). It names the last effect slot of
-  an accessory (`0x71f6 不动明王的恩宠（上位恩宠）`) instead of showing an unknown
-  id, and the 21 恩宠/上位恩宠 rows are also the allowed **targets** of a 恩宠
-  change (`edit --grace`, the GUI 恩宠 row). The 56 套装 rows are never writable:
-  they stay display-only, because armour carries 套装 codes too, so those ids are
-  not accessory-affix evidence — and the editor additionally requires the slot
-  being replaced to carry the 恩宠 family byte (0x0C), which a 专属套装 effect
-  (e.g. 怨恨盖世, 0x4C) never does.
+  恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22). It names and validates the
+  恩宠/套装 slot of an accessory and of a weapon / armour
+  (`0x71f6 不动明王的恩宠（上位恩宠）`) instead of showing an unknown id; the table
+  only names and validates, and it is never what lets an off-table id through — an
+  id outside it is refused (fail closed). An accessory's 恩宠 path (the GUI 恩宠
+  row, `edit --grace`) allows 恩宠 → 恩宠 only, so for accessories those 21
+  恩宠/上位恩宠 rows are the allowed **targets** and the 56 套装 rows are not
+  writable there: the editor requires the slot being replaced to carry the 恩宠
+  family byte (0x0C), which a 专属套装 effect (e.g. 怨恨盖世, 0x4C) never does.
+  **A weapon / armour is not limited by that**: its 恩宠 / 套装 row lists all 77
+  rows, so its grace slot can become a 套装 (see
+  [the 武器 / 防具 tabs](#the-武器--防具-tabs-weapons-and-armour)).
 * **`data/accessory_items.json`** — the 饰品 rows of 物品总目录 (89 rows → 88 ids:
   武士饰品 46, 忍者饰品 42; one id, `0x1521`, is listed twice — 八咫镜[武士] and
   [忍者] — which is recorded in the table's `conflicts` field instead of being
@@ -647,6 +672,11 @@ nothing.
 > in-game item list refreshes cleanly after such a swap (only load the save and
 > look). If the swapper shows something odd, restore the automatic backup.
 >
+> The weapon / armour 恩宠/套装 replacement shares these unverified boundaries
+> (metadata is kept from the slot being replaced, and whether 上位恩宠 is gated in
+> game by level/difficulty is equally unchecked), and **whether the game accepts it
+> is not confirmed in game yet either**.
+>
 > **饰品种类 (which accessory it is) and 等级 are writable, with the limits
 > below.** The field is known — the record header's per-item id at `+0x00`, with a
 > mirror at `+0x02` (equal on all 213 records), resolving to
@@ -733,10 +763,11 @@ that tab's code and its copy gate).
 * **Per-slot search** — every slot owns its dropdown; typing narrows only that slot,
   a space means AND, Enter takes an unambiguous hit, and 2 or more matches must be
   picked from that slot's list.
-* **恩宠 / 套装 is shown, not rewritten** — those ids are not in the weapon / armour
-  tables, so the engine refuses to write them (that is the same 一件一个恩宠 rule that
-  applies to accessories). The tab displays the current one and the 恩宠·套装 filter
-  axis finds records by it.
+* **恩宠 / 套装 can be replaced (GUI)** — the 恩宠 / 套装 row is no longer a read-only
+  display but a drop-down plus an 【应用恩宠/套装】 button listing all 77 rows of the
+  grace table (恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22), so that slot can go
+  from an 恩宠 to a 套装; the rules and the measurements are in
+  [Features](#features). The 恩宠·套装 filter axis still finds records by it.
 * **等级 / +値** — 180 and 30 for both tabs, taken from `class_limits_for_record`; the
   per-class observed maxima in `data/equipment_ranges.json` stay evidence and are never
   used as a cap.

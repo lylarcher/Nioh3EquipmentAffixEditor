@@ -70,6 +70,7 @@ __all__ = [
     "apply_creations",
     "apply_edits",
     "apply_equipment_edits",
+    "apply_equipment_grace_edit",
     "apply_kind_swaps",
     "apply_level_edits",
     "apply_plus_edits",
@@ -80,6 +81,7 @@ __all__ = [
     "default_equipment_item_db",
     "discover_saves",
     "equipment_affix_allowed",
+    "equipment_grace_availability",
     "find_free_slots",
     "identify_soul_cores",
     "list_accessories",
@@ -93,6 +95,7 @@ __all__ = [
     "plan_creation",
     "plan_edits",
     "plan_equipment_edits",
+    "plan_equipment_grace_edit",
     "plan_kind_swap",
     "plan_level_edit",
     "plan_plus_edit",
@@ -1106,26 +1109,54 @@ class EquipmentView:
             return False
         return slot_is_star_affix(effect, self.slot_affix_db(pool))
 
-    def slot_is_fixed(self, slot_index: int, pool: EquipmentPool | None = None) -> bool:
-        """Whether this slot is a 固定词条 (目录「同名固定」或存档固定位, ★ 除外)。"""
+    def grace_slot(self, grace_db: GraceDb) -> int | None:
+        """恩宠/套装所在槽（该槽当前的 id 在恩宠名表里）；没有就返回 ``None``。
+
+        参考存档实测：497/497 武器、614/614 防具各恰好一个恩宠/套装，都在第 5 槽。
+        """
+        for effect in self.occupied_effects:
+            if grace_db.describe(effect.effect_id):
+                return effect.slot_index
+        return None
+
+    def slot_is_grace(self, slot_index: int, grace_db: GraceDb | None) -> bool:
+        if grace_db is None or not 0 <= slot_index < len(self.effects):
+            return False
+        effect = self.effects[slot_index]
+        if effect.is_empty:
+            return False
+        return bool(grace_db.describe(effect.effect_id))
+
+    def slot_is_fixed(self, slot_index: int, pool: EquipmentPool | None = None,
+                      grace_db: GraceDb | None = None) -> bool:
+        """Whether this slot is a 固定词条 (目录「同名固定」或存档固定位, ★ 除外)。
+
+        恩宠/套装槽**从来不算固定词条**：写不写它都不受固定位影响（用户规则）。
+        """
         if not 0 <= slot_index < len(self.effects):
             return False
         effect = self.effects[slot_index]
         if effect.is_empty:
             return False
+        if self.slot_is_grace(slot_index, grace_db):
+            return False
         return _catalog_slot_is_fixed(effect, self.slot_affix_db(pool), self.record_type)
 
-    def fixed_slots(self, pool: EquipmentPool | None = None) -> frozenset[int]:
+    def fixed_slots(self, pool: EquipmentPool | None = None,
+                    grace_db: GraceDb | None = None) -> frozenset[int]:
         return frozenset(effect.slot_index for effect in self.occupied_effects
-                         if self.slot_is_fixed(effect.slot_index, pool))
+                         if self.slot_is_fixed(effect.slot_index, pool, grace_db))
 
-    def slot_role(self, slot_index: int, pool: EquipmentPool | None = None) -> str:
-        """``空`` / ``不在武器/防具词条库内`` / ``固定词条`` / ``近战武器词条`` …"""
+    def slot_role(self, slot_index: int, pool: EquipmentPool | None = None,
+                  grace_db: GraceDb | None = None) -> str:
+        """``空`` / ``恩宠/套装`` / ``固定词条`` / ``近战武器词条`` …"""
         if not 0 <= slot_index < len(self.effects):
             return "越界"
         effect = self.effects[slot_index]
         if effect.is_empty:
             return "空"
+        if self.slot_is_grace(slot_index, grace_db):
+            return "恩宠/套装"
         db = self.slot_affix_db(pool)
         if db.lookup(effect.effect_id) is None:
             return "不在武器/防具词条库内"
@@ -1133,8 +1164,9 @@ class EquipmentView:
             return "固定词条"
         return f"{self.pool_label}词条"
 
-    def slots(self, pool: EquipmentPool | None = None) -> tuple[EquipmentSlotView, ...]:
-        """每个词条槽的 effect_id / 名称 / 固定 / ★ / 类别 / 数值。"""
+    def slots(self, pool: EquipmentPool | None = None,
+              grace_db: GraceDb | None = None) -> tuple[EquipmentSlotView, ...]:
+        """每个词条槽的 effect_id / 名称 / 固定 / ★ / 类别 / 数值（恩宠槽按名表命名）。"""
         resolved = pool if pool is not None else equipmentdb.pool_for_item(self.item)
         views: list[EquipmentSlotView] = []
         for effect in self.effects:
@@ -1147,16 +1179,19 @@ class EquipmentView:
                 ))
                 continue
             entry = resolved.db.lookup(effect.effect_id)
+            is_grace = self.slot_is_grace(effect.slot_index, grace_db)
+            grace_name = grace_db.describe(effect.effect_id) if is_grace else None
             views.append(EquipmentSlotView(
                 slot_index=effect.slot_index,
                 effect_id=effect.effect_id,
                 name=entry.name if entry is not None
-                else f"未知词条 {effect.effect_id:#010x}",
-                category=entry.category if entry is not None else "",
+                else (grace_name or f"未知词条 {effect.effect_id:#010x}"),
+                category=entry.category if entry is not None
+                else ("恩宠/套装" if is_grace else ""),
                 value=effect.value,
                 metadata=effect.metadata,
                 is_empty=False,
-                is_fixed=self.slot_is_fixed(effect.slot_index, resolved),
+                is_fixed=self.slot_is_fixed(effect.slot_index, resolved, grace_db),
                 is_star=self.slot_is_star(effect.slot_index, resolved),
                 equipment_tags=resolved.tags_of(effect.effect_id),
             ))
@@ -2078,7 +2113,7 @@ def plan_equipment_edits(
             continue  # 形状不对的编辑交给 _validate_edit 报
         if not 0 <= slot_index < records.EFFECT_COUNT:
             continue
-        if view.slot_is_fixed(slot_index, resolved[index]):
+        if view.slot_is_fixed(slot_index, resolved[index], grace_db):
             entry = resolved[index].db.lookup(view.effects[slot_index].effect_id)
             fixed_refusals.append(
                 f"#{index} 槽{slot_index}"
@@ -2088,11 +2123,17 @@ def plan_equipment_edits(
         raise EditorError("固定词条不能修改：" + "、".join(fixed_refusals))
 
     # 规则 1 + 既有字段校验。规则 1 只看这个 edit 新写的 effect_id，历史状态不参与。
+    # 恩宠/套装是唯一的例外：它们的 id 不在武器/防具词条池里，所以走单独的闸门
+    # （只替换本记录已有的恩宠槽，值与 metadata 照饰品的恩宠路径处理）。
     normalized: list[dict[str, int]] = []
     for index, edit in targets:
         pool = resolved[index]
         effect_id = edit.get("effect_id")
         if isinstance(effect_id, int) and not isinstance(effect_id, bool):
+            if grace_db is not None and _grace_entry(grace_db, effect_id) is not None:
+                normalized.append(_validate_equipment_grace_edit(
+                    dict(edit), known[index], grace_db, record_index=index))
+                continue
             _assert_equipment_affix_allowed(pool, known[index].item, effect_id,
                                             record_index=index)
         normalized.append(_validate_edit(dict(edit), pool.db))
@@ -2131,8 +2172,7 @@ def plan_equipment_edits(
     for key, group in sorted(by_pool.items()):
         assert_single_affix_per_category(tuple(group), _equipment_pool(key, pools).db)
     if grace_db is not None:
-        # 恩宠 id 不在武器/防具词条池里，所以规则 1 已经会把它们挡在外面；这里
-        # 仍然照饰品的口径查一遍，等 P3 把恩宠/套装的写入路径接上来时规则已经在了。
+        # 一件武器/防具只能有一个恩宠/套装：这条与饰品同口径，不因为是恩宠就放松。
         assert_single_grace(tuple(plans), grace_db)
     return tuple(plans)
 
@@ -2434,6 +2474,151 @@ def apply_grace_edit(
     if applied != plan.after:
         raise GraceEditError(f"记录 #{record_index} 的恩宠修改未能正确写入，已中止")
     return bytes(output)
+
+
+# --------------------------------------------------------------------------
+# 武器 / 防具的恩宠 / 套装替换
+# --------------------------------------------------------------------------
+
+def _grace_entry(grace_db: GraceDb, effect_id: object) -> AffixEntry | None:
+    """恩宠名表里的条目；不是恩宠/套装（或不是整数）就返回 ``None``。"""
+    if not isinstance(effect_id, int) or isinstance(effect_id, bool):
+        return None
+    return grace_db.lookup(effect_id)
+
+
+def _validate_equipment_grace_edit(
+    edit: dict[str, int],
+    view: EquipmentView,
+    grace_db: GraceDb,
+    *,
+    record_index: int,
+) -> dict[str, int]:
+    """恩宠/套装写入的闸门：只替换本记录已有的那个恩宠槽，值取名表的目录值。
+
+    与 :func:`plan_grace_edit` 同一套语义（饰品路径）：**只写 effect_id 与 value**，
+    metadata 原样保留（实测同一恩宠在不同件上 byte10 不同，猜不得）。
+    """
+    entry = grace_db.lookup(edit.get("effect_id"))
+    slot_index = edit.get("slot_index")
+    if entry is None:
+        raise EditorError(
+            f"记录 #{record_index}：{edit.get('effect_id')!r} 不在恩宠/套装名表里，"
+            "不能作为恩宠写入"
+        )
+    if not isinstance(slot_index, int) or isinstance(slot_index, bool):
+        raise EditorError("编辑缺少效果槽索引 (slot_index)")
+    grace_slot = view.grace_slot(grace_db)
+    if grace_slot is None:
+        raise EditorError(
+            f"记录 #{record_index}（{view.item_label}）没有恩宠/套装词条槽："
+            "本工具只在已有的恩宠/套装槽上替换，不会凭空给一个槽位安上恩宠"
+        )
+    if slot_index != grace_slot:
+        current = view.effects[grace_slot].effect_id
+        raise EditorError(
+            f"记录 #{record_index}（{view.item_label}）的恩宠/套装只能写在槽"
+            f"{grace_slot + 1}（当前是 {grace_db.describe(current)}），"
+            f"不能写到槽{slot_index + 1}"
+        )
+    requested = edit.get("value")
+    if requested is not None and requested != entry.value:
+        raise EditorError(
+            f"恩宠/套装「{entry.name}」只允许写它自己的目录值 {entry.value}，"
+            f"不能改成 {requested}"
+        )
+    applied = dict(edit, value=entry.value)
+    stripped = {key: value for key, value in applied.items() if key != "record_index"}
+    records.patch_effect_slots(bytes(records.SCROLL_RECORD_SIZE), [stripped])
+    return applied
+
+
+def equipment_grace_availability(
+    view: EquipmentView,
+    *,
+    grace_db: GraceDb,
+    pool: EquipmentPool | None = None,
+) -> GraceAvailability:
+    """这条武器/防具的恩宠/套装槽能不能换（与饰品同一个返回类型）。"""
+    if not view.occupied_effects:
+        return GraceAvailability(False, "这条记录没有任何占用中的词条槽")
+    slot_index = view.grace_slot(grace_db)
+    if slot_index is None:
+        return GraceAvailability(
+            False,
+            "这条记录没有恩宠/套装词条槽；本工具只替换已有的恩宠/套装，"
+            "不会凭空给一个槽位安上恩宠（缺少可参照的 metadata）",
+        )
+    effect = view.effects[slot_index]
+    entry = grace_db.lookup(effect.effect_id)
+    return GraceAvailability(
+        True, "", slot_index=slot_index, current_id=effect.effect_id,
+        current_name=entry.name if entry is not None else "",
+        kind=entry.category if entry is not None else "",
+    )
+
+
+def plan_equipment_grace_edit(
+    decrypted: bytes,
+    record_index: int,
+    grace_id: int,
+    *,
+    grace_db: GraceDb,
+    item_db: EquipmentItemDb | None = None,
+    pools: Mapping[str, EquipmentPool] | None = None,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> EditPlan:
+    """校验一件武器/防具的恩宠 -> 恩宠(或套装) 改动，返回计划（不写字节）。"""
+    target = grace_db.lookup(grace_id)
+    if target is None:
+        raise GraceEditError(f"恩宠/套装 id {grace_id:#06x} 不在恩宠名表里")
+    views = {view.slot_index: view
+             for view in list_equipment(decrypted, item_db=item_db, layout=layout,
+                                        known_ids=known_ids)}
+    view = views.get(record_index)
+    if view is None:
+        raise GraceEditError(f"记录 #{record_index} 不在当前存档的武器/防具记录中")
+    availability = equipment_grace_availability(view, grace_db=grace_db)
+    if not availability.allowed:
+        raise GraceEditError(availability.reason)
+    if availability.current_id == grace_id:
+        raise GraceEditError(f"槽{int(availability.slot_index) + 1}已经是 "
+                             f"{target.name}，无需修改")
+    plans = plan_equipment_edits(
+        decrypted,
+        [{"record_index": record_index,
+          "slot_index": int(availability.slot_index),
+          "effect_id": grace_id,
+          "value": int(target.value)}],
+        item_db=item_db, pools=pools, known_ids=known_ids, layout=layout,
+        grace_db=grace_db,
+    )
+    return plans[0]
+
+
+def apply_equipment_grace_edit(
+    decrypted: bytes,
+    record_index: int,
+    grace_id: int,
+    *,
+    grace_db: GraceDb,
+    item_db: EquipmentItemDb | None = None,
+    pools: Mapping[str, EquipmentPool] | None = None,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> bytes:
+    """返回把一件武器/防具的恩宠/套装换掉之后的新存档字节。"""
+    plan = plan_equipment_grace_edit(
+        decrypted, record_index, grace_id, grace_db=grace_db, item_db=item_db,
+        pools=pools, known_ids=known_ids, layout=layout,
+    )
+    return apply_equipment_edits(
+        decrypted,
+        [dict(plan.edits[0], record_index=record_index)],
+        item_db=item_db, pools=pools, known_ids=known_ids, layout=layout,
+        grace_db=grace_db,
+    )
 
 
 # --------------------------------------------------------------------------

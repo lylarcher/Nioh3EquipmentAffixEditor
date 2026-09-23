@@ -227,7 +227,7 @@ class EquipmentTabTestCase(UiTestCase):
         tab._on_slot_typed(0)
         narrowed = tab.slot_combos[0]["values"]
         self.assertLess(len(narrowed), full)
-        # 别的**可编辑**槽（3）候选不变；恩宠槽本来就只有一个只读标签。
+        # 别的**可编辑**槽（3）候选不变；恩宠槽走下方【恩宠 / 套装】栏，不在这排里。
         self.assertEqual(len(tab.slot_combos[3]["values"]), full)
         self.assertIn("槽1", tab.search_status_var.get())
 
@@ -315,16 +315,18 @@ class EquipmentTabTestCase(UiTestCase):
             next(v for v in tab.views if v.slot_index == 3), 0))
         self.assertIn("★ 词条（可改）", tab.slot_labels[0].get())
 
-    def test_the_grace_slot_is_read_only_and_explained(self) -> None:
+    def test_the_grace_slot_is_changed_from_the_grace_row_only(self) -> None:
+        """P5：恩宠槽仍然不在这排槽里改，但它不再是只读 —— 改用下方【恩宠 / 套装】栏。"""
         self._load_standard()
         tab = self.select("武器", 3)
         index = tab.grace_slot(next(v for v in tab.views if v.slot_index == 3))
         self.assertEqual(index, 2)
         self.assertIn("disabled", tab.slot_combos[index].state())
-        self.assertIn("只读", tab.slot_combos[index].get())
-        self.assertIn("只显示", tab.grace_status_var.get())
-        self.assertIn("只能有一个恩宠/套装", tab.grace_status_var.get())
+        self.assertIn("用下方恩宠/套装栏替换", tab.slot_combos[index].get())
+        self.assertIn("可换成名表里的其它恩宠/套装", tab.grace_status_var.get())
+        self.assertIn("一件装备只能有一个", tab.grace_status_var.get())
         self.assertNotIn(index, [edit["slot_index"] for edit in tab.current_edits()])
+        self.assertTrue(tab.grace_button.instate(["!disabled"]))
 
     def test_an_out_of_pool_affix_is_reported_and_can_be_replaced(self) -> None:
         """占着槽位但不在本池词条表里的词条：如实说明，换掉它仍然可以。"""
@@ -560,6 +562,84 @@ class EquipmentTabTestCase(UiTestCase):
         self.assertEqual(len(self.app.scroll_columns), 2)
         for tab in self.app.equipment_tabs:
             self.assertIsInstance(tab.winfo_children()[0], ui.ttk.Panedwindow)
+
+    # ------------------------------------------------- P5：恩宠 / 套装可替换
+    def _select_katana(self):
+        """#3 太刀：普通词条 + 固定词条 + 恩宠（第 3 槽）。"""
+        self._load_standard()
+        return self.select("武器", 3)
+
+    def test_the_row_lists_every_grace_and_set(self) -> None:
+        tab = self.tab("武器")
+        self.assertIn("可替换", tab.grace_frame.cget("text"))
+        self.assertEqual(tuple(tab.grace_combo.cget("values")), tab.grace_values)
+        # 装备上实测既有恩宠也有套装，所以下拉必须是全部 77 条，不是只有 21 条恩宠。
+        self.assertEqual(len(tab.grace_values), len(self.grace_db.all()))
+        kinds = {label.rsplit("（", 1)[-1].rstrip("）") for label in tab.grace_values}
+        self.assertIn("恩宠", kinds)
+        self.assertIn("武士套装", kinds)
+        self.assertIn("忍者套装", kinds)
+
+    def test_selecting_a_record_with_a_grace_enables_the_row(self) -> None:
+        tab = self._select_katana()
+        self.assertTrue(tab.grace_button.instate(["!disabled"]))
+        self.assertIn(self.grace.name, tab.grace_status_var.get())
+        self.assertTrue(tab.grace_combo.get()
+                        .startswith(f"{self.grace.effect_id:#06x} "))
+
+    def test_selecting_a_record_without_a_grace_disables_the_row(self) -> None:
+        self._load_standard()
+        tab = self.select("武器", 4)  # 弓：只有一个普通词条
+        self.assertFalse(tab.grace_button.instate(["!disabled"]))
+        self.assertTrue(tab.grace_status_var.get().startswith("不可改："))
+        self.assertIn("没有恩宠/套装词条槽", tab.grace_status_var.get())
+        self.assertEqual(tab.grace_combo.get(), "")
+
+    def test_the_grace_slot_is_not_offered_as_a_normal_slot(self) -> None:
+        tab = self._select_katana()
+        view = tab._selected_view()
+        self.assertIsNotNone(view)
+        self.assertEqual(view.grace_slot(self.grace_db), 2)
+        self.assertNotIn(2, tab._editable_slots(view))
+
+    def test_applying_writes_exactly_what_the_engine_plans(self) -> None:
+        data, layout = self._load_standard()
+        tab = self.select("武器", 3)
+        target = next(label for label in tab.grace_values
+                      if not label.startswith(f"{self.grace.effect_id:#06x} "))
+        target_id = int(target.split(" ", 1)[0], 16)
+        tab.grace_combo.set(target)
+        with mock.patch.object(ui.messagebox, "askokcancel", return_value=True):
+            tab.apply_grace()
+        expected = editor.apply_equipment_grace_edit(
+            data, 3, target_id, grace_db=self.grace_db, item_db=tab.item_db,
+            pools=self.app.equipment_pools, known_ids=self.app.known_ids,
+            layout=layout)
+        self.assertEqual(self.app.decrypted, expected)
+
+    def test_a_refused_change_shows_a_reason_and_writes_nothing(self) -> None:
+        data, _layout = self._load_standard()
+        tab = self.select("武器", 4)  # 没有恩宠槽：只替换，不凭空新增
+        tab.grace_combo.set(tab.grace_values[0])  # 真实界面里这一栏是禁用的
+        with mock.patch.object(ui.messagebox, "showerror") as shown:
+            tab.apply_grace()
+        self.assertTrue(shown.called)
+        self.assertIn("没有恩宠/套装词条槽", shown.call_args[0][1])
+        self.assertEqual(self.app.decrypted, data)
+
+    def test_cancelling_the_dialog_writes_nothing(self) -> None:
+        data, _layout = self._load_standard()
+        tab = self.select("武器", 3)
+        target = next(label for label in tab.grace_values
+                      if not label.startswith(f"{self.grace.effect_id:#06x} "))
+        tab.grace_combo.set(target)
+        with mock.patch.object(ui.messagebox, "askokcancel", return_value=False):
+            tab.apply_grace()
+        self.assertEqual(self.app.decrypted, data)
+
+    def test_the_app_name_is_the_equipment_editor_now(self) -> None:
+        self.assertIn("装备词条修改器", ui.TITLE)
+        self.assertNotIn("饰品词条修改器", ui.TITLE)
 
 
 if __name__ == "__main__":  # pragma: no cover

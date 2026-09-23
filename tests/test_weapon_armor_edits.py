@@ -521,8 +521,13 @@ class ExistingRulesOnEquipmentTests(ListingTestCase):
                            before=slots([]), after=slots([graces[0]]))
         editor.assert_single_grace((allowed,), grace_db)
 
-    def test_a_grace_id_cannot_be_written_to_a_weapon(self) -> None:
-        """恩宠 id 不在武器/防具词条池里，所以本阶段武器/防具上写不了恩宠。"""
+    def test_a_grace_id_is_only_accepted_on_the_records_own_grace_slot(self) -> None:
+        """P5 反转的旧口径：恩宠/套装 id 现在能写进武器/防具 —— 但只能写在**该记录已有
+        的那个恩宠槽**上（正例见 ``tests/test_equipment_grace.py``）。
+
+        这条记录没有恩宠槽，所以「凭空给一个槽安上恩宠」仍然被拒：拒绝原因从
+        「不在词条表」变成「没有恩宠/套装词条槽」，fail closed 没有放松。
+        """
         grace_db = support.load_grace_table()
         grace_id = grace_db.grace_entries()[0].effect_id
         with self.assertRaises(EditorError) as caught:
@@ -530,6 +535,13 @@ class ExistingRulesOnEquipmentTests(ListingTestCase):
                 self.save, [{"record_index": 3, "slot_index": 1,
                              "effect_id": grace_id, "value": 0}],
                 layout=self.layout, grace_db=grace_db)
+        self.assertIn("没有恩宠/套装词条槽", str(caught.exception))
+        # 不给恩宠名表时口径与 P2 完全一致（表外 id 一律拒绝），老调用方不受影响。
+        with self.assertRaises(EditorError) as caught:
+            plan_equipment_edits(
+                self.save, [{"record_index": 3, "slot_index": 1,
+                             "effect_id": grace_id, "value": 0}],
+                layout=self.layout)
         self.assertIn("不能写到", str(caught.exception))
         self.assertIn("词条表", str(caught.exception))
 
