@@ -320,6 +320,61 @@ def cmd_create(args: argparse.Namespace) -> int:
     return 0
 
 
+#: ``list --kind`` 认这四个大类；**其余值仍是原来的"按物品名称/id 过滤"**。
+LIST_BIG_KINDS = ("武器", "防具", "饰品", "魂核")
+
+
+def _print_equipment_slots(view) -> None:
+    """一件武器/防具的一行摘要 + 每个槽一行（空槽也列出来）。"""
+    print(f"记录 #{view.slot_index} @ {view.offset:#x}  {view.item_label}  "
+          f"[{view.category}/{view.small}]  Lv{view.level} +{view.plus_value}  "
+          f"{view.rarity_name}  池 {view.pool_label}")
+    for slot in view.slots():
+        mark = " [固定]" if slot.is_fixed else (" [★]" if slot.is_star else "")
+        tags = "/".join(slot.equipment_tags) or "-"
+        if slot.is_empty:
+            print(f"    槽{slot.slot_index + 1} （空）")
+            continue
+        print(f"    槽{slot.slot_index + 1} {slot.name}  数值 {slot.value}  "
+              f"种类 {slot.category or '-'}  装备种类 {tags}{mark}")
+    print()
+
+
+def _list_big_records(args: argparse.Namespace, data: bytes, layout, big: str) -> int:
+    """按大类列出记录（list --kind 武器 / 防具 / 魂核）。"""
+    from .editor import list_equipment  # 只在走大类分支时才用得到
+
+    print(DISCLAIMER)
+    print()
+    if args.grace:
+        print("（--grace 只对饰品有效，这里按大类列出，已忽略该筛选）\n")
+    if big == "魂核":
+        soul_db = AffixDb(load_soul_catalog())
+        views = list_soul_cores(data, layout=layout)
+        print(f"记录表内 {layout.slot_count} 槽，其中魂核记录 {len(views)} 条\n")
+        for view in views:
+            print(f"记录 #{view.slot_index} @ {view.offset:#x}  "
+                  f"Lv{getattr(view, 'level', '?')}  {view.describe_item()}")
+            for effect in view.effects:
+                if effect.is_empty:
+                    continue
+                entry = soul_db.lookup(effect.effect_id)
+                print(f"    槽{effect.slot_index + 1} "
+                      f"{entry.name if entry else f'{effect.effect_id:#010x}'}")
+            print()
+        if not views:
+            print("该存档里没有魂核记录。")
+        return 0
+
+    views = list_equipment(data, big=big, layout=layout)
+    print(f"记录表内 {layout.slot_count} 槽，其中{big}记录 {len(views)} 条\n")
+    for view in views:
+        _print_equipment_slots(view)
+    if not views:
+        print(f"该存档里没有{big}记录。")
+    return 0
+
+
 def cmd_list(args: argparse.Namespace) -> int:
     affix_db = AffixDb()
     grace_db = GraceDb.best_effort()
@@ -338,21 +393,30 @@ def cmd_list(args: argparse.Namespace) -> int:
         print("请运行 scan 命令查看诊断，并把输出反馈给作者。")
         return 1
     print(f"记录表: {layout.describe()}")
+    wanted_big = (args.kind or "").strip()
+    if wanted_big in LIST_BIG_KINDS and wanted_big != "饰品":
+        return _list_big_records(args, data, layout, wanted_big)
+    # list 本来就是饰品范围：--kind 饰品 等于不加名字过滤（其余值含义不变）。
+    kind_filter = args.kind
+    if wanted_big == "饰品":
+        kind_filter = ""
+        print(DISCLAIMER)
+        print()
     views = list_accessories(data, layout=layout, known_ids=known_ids)
     accessories = [view for view in views if view.is_accessory is not False]
     total = len(accessories)
-    if args.kind:
+    if kind_filter:
         accessories = [view for view in accessories
-                       if _matches_kind_filter(item_db, view.record_type, args.kind)]
+                       if _matches_kind_filter(item_db, view.record_type, kind_filter)]
     if args.grace:
         needle = args.grace.strip().lower()
         accessories = [view for view in accessories
                        if needle in _grace_name_of(view, grace_db).lower()
                        or needle in f"{view.record_type:#x}"]
-    if args.kind or args.grace:
+    if kind_filter or args.grace:
         filters = []
-        if args.kind:
-            filters.append(f"种类含「{args.kind}」")
+        if kind_filter:
+            filters.append(f"种类含「{kind_filter}」")
         if args.grace:
             filters.append(f"恩宠/套装含「{args.grace}」")
         print(f"\n筛选（{'，'.join(filters)}）：{total} 件中 {len(accessories)} 件")

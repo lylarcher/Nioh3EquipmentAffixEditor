@@ -16,6 +16,8 @@ after) anything is modified.
 
 from __future__ import annotations
 
+import types
+
 from collections.abc import Mapping
 
 from dataclasses import dataclass
@@ -98,6 +100,13 @@ __all__ = [
     "resolve_item_id",
     "restore_backup",
     "soul_catalog_ids",
+    "DONOR_SAME_KIND",
+    "DONOR_SAME_TYPE",
+    "EquipmentCreationError",
+    "EquipmentCreationPlan",
+    "apply_equipment_creations",
+    "find_equipment_donor",
+    "plan_create_equipment",
 ]
 
 
@@ -2696,6 +2705,365 @@ def apply_creations(
         if written != plan.record:
             raise CreationError(f"新建 #{plan.slot_index} 未能正确写入，已中止")
     return bytes(output)
+
+
+# --------------------------------------------------------------------------
+# 无中生有（武器 / 防具）: create a weapon / armor in a free slot
+# --------------------------------------------------------------------------
+
+#: 新建时模板的两种来源（``donor_reason`` 里说的就是这两个词）。
+DONOR_SAME_KIND = "同种类样本"
+DONOR_SAME_TYPE = "同类型样本"
+
+
+def _read_rarity(record: bytes) -> int:
+    """稀有度 = ``+0x30`` 的低 4 位（与 ``support.build_record`` 的写法一致）。"""
+    return record[records.RECORD_RARITY_OFFSET] & 0x0F
+
+
+def _read_count(record: bytes) -> int:
+    return struct.unpack_from("<H", record, records.RECORD_ITEM_COUNT_OFFSET)[0]
+
+
+def _patch_rarity(record: bytes, rarity: int) -> bytes:
+    """只改 ``+0x30`` 的低 4 位，高 4 位原样保留。"""
+    data = bytearray(record)
+    offset = records.RECORD_RARITY_OFFSET
+    data[offset] = (data[offset] & 0xF0) | (rarity & 0x0F)
+    return bytes(data)
+
+
+def _patch_count(record: bytes, count: int) -> bytes:
+    """只改 ``+0x04`` 的数量字段。"""
+    data = bytearray(record)
+    struct.pack_into("<H", data, records.RECORD_ITEM_COUNT_OFFSET, count & 0xFFFF)
+    return bytes(data)
+
+
+@dataclass(frozen=True, slots=True)
+class EquipmentCreationPlan:
+    """一件新建的武器 / 防具：模板优先，只改我们验证过的字段。
+
+    改动的字段清单（其余字节一律照抄模板）：种类 id（``+0x00`` 与镜像 ``+0x02``）、
+    等级（``+0x06`` 与镜像 ``+0x08``）、+値（``+0x0a``）、数量（``+0x04``）、稀有度
+    （``+0x30`` 的低 4 位）、以及词条槽里的 ``effect_id`` / ``value`` / ``metadata``；
+    词条的 ``metadata`` 只重写种类码（``0x1F00``）与 ★ 位（``0x040000``），其余位原样
+    保留。``cleared_slots`` 记录模板带来、但按新物品的规则被清空的槽。
+    """
+
+    slot_index: int
+    offset: int
+    item: EquipmentItem
+    level: int
+    plus_value: int
+    rarity: int
+    count: int
+    donor_slot: int
+    donor_offset: int
+    donor_reason: str
+    record: bytes
+    effects: tuple[records.EffectSlot, ...]
+    free_before: int
+    cleared_slots: tuple[int, ...] = ()
+
+    @property
+    def record_type(self) -> int:
+        return self.item.item_id
+
+    @property
+    def big(self) -> str:
+        return self.item.big
+
+    @property
+    def rarity_name(self) -> str:
+        if 0 <= self.rarity < len(records.RARITY_NAMES):
+            return records.RARITY_NAMES[self.rarity]
+        return f"稀有度 {self.rarity}"
+
+    def describe(self) -> str:
+        text = (f"新建 #{self.slot_index} {self.item.label} "
+                f"[{self.item.category}/{self.item.small}] Lv{self.level} "
+                f"+{self.plus_value} {self.rarity_name}"
+                f"（模板 #{self.donor_slot}，{self.donor_reason}）")
+        if self.cleared_slots:
+            text += ("；模板带入的槽 "
+                     + "、".join(f"槽{index + 1}" for index in self.cleared_slots)
+                     + " 与新物品不符，已清空")
+        return text
+
+
+class EquipmentCreationError(CreationError):
+    """武器 / 防具无法合法新建（拒绝信息要说清哪一步不行、依据是什么）。"""
+
+
+def find_equipment_donor(
+    views: tuple[EquipmentView, ...] | list[EquipmentView],
+    item: EquipmentItem,
+) -> tuple[EquipmentView, str]:
+    """Pick the creation template: same 种类 first, then the same 小类 (类型).
+
+    A new record is copied from a real record because the header carries fields this
+    tool has not decoded.  Same-种类 is preferred: its 同名固定 slots belong to exactly
+    the item being created.  With no same-种类 sample the closest thing is a record of
+    the same 类型 (小类) — the reason is reported, and the slots that cannot belong to
+    the new item are cleared instead of being copied over.
+    """
+    for view in views:
+        if view.record_type == item.item_id:
+            return view, DONOR_SAME_KIND
+    for view in views:
+        if item.small and view.small == item.small:
+            return view, DONOR_SAME_TYPE
+    raise EquipmentCreationError(
+        f"存档里既没有「{item.label}」的样本，也没有同类型（{item.small}）的样本，"
+        "无法生成：新记录的固定词条与逐件字段必须从真实样本复制，"
+        "本工具不会凭空构造整条记录。请先在游戏里获得一件同类装备。"
+    )
+
+
+def _grace_name(effect_id: int, grace_db: GraceDb | None) -> str:
+    if grace_db is None or effect_id == records.EMPTY_EFFECT_ID:
+        return ""
+    return grace_db.describe(effect_id) or ""
+
+
+#: 存档 metadata 的固定位（与 ``AccessoryView.slot_is_fixed`` 同一口径）。
+CREATION_FIXED_BIT = 0x4000
+
+
+def _carried_affix_allowed(pool: EquipmentPool, item: EquipmentItem,
+                           effect: records.EffectSlot, *,
+                           grace_db: GraceDb | None) -> bool:
+    """模板带过来的词条能不能留在这件新装备上（固定词条与恩宠单独放行）。"""
+    if effect.is_empty:
+        return True
+    if effect.metadata & CREATION_FIXED_BIT:
+        return True
+    if _grace_name(effect.effect_id, grace_db):
+        return True
+    return equipment_affix_allowed(pool, item, effect.effect_id)
+
+
+def plan_create_equipment(
+    decrypted: bytes,
+    *,
+    record_type: int,
+    level: int,
+    effects: tuple[dict[str, int], ...] | list[dict[str, int]] = (),
+    plus: int = 0,
+    rarity: int | None = None,
+    count: int | None = None,
+    slot_index: int | None = None,
+    item_db: EquipmentItemDb | None = None,
+    pools: Mapping[str, EquipmentPool] | None = None,
+    grace_db: GraceDb | None = None,
+    codes: Mapping[str, int] | None = None,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> EquipmentCreationPlan:
+    """Plan a new 武器 / 防具 in a free slot, or refuse with a readable reason.
+
+    ``effects`` lists the wanted slots as ``{"slot_index": i, "effect_id": id,
+    "value": v}`` (``metadata`` may also be given; by default the slot's current
+    metadata is kept with only the 种类码 and ★ bits rewritten).  Everything else comes
+    from the template, and the same legality rules as the edit path apply:
+    装备种类标签必须匹配、固定词条不能新增、同一个种类只能有一个词条（``其他`` 与
+    「★ + 同名固定」例外）、一件只能有一个恩宠/套装、等级 0..180、+値 武器/防具 0..30。
+    """
+    if item_db is None:
+        item_db = default_equipment_item_db()
+    item = item_db.lookup(record_type)
+    if item is None:
+        raise EquipmentCreationError(
+            f"{record_type:#06x} 不在随包的物品总目录（data/equipment_items.json）里，"
+            "无法生成：本工具只生成目录里有的种类"
+        )
+    if item.big not in EQUIPMENT_EDIT_BIGS:
+        raise EquipmentCreationError(
+            f"{item.label} 的大类是「{item.big}」，不是武器 / 防具："
+            "这个入口只做武器与防具（饰品 / 魂核请用各自的入口）"
+        )
+    if not isinstance(level, int) or isinstance(level, bool):
+        raise EquipmentCreationError("等级必须是整数")
+    if not records.MIN_ITEM_LEVEL <= level <= records.MAX_ITEM_LEVEL:
+        raise EquipmentCreationError(
+            f"等级必须在 {records.MIN_ITEM_LEVEL}..{records.MAX_ITEM_LEVEL} 之内，"
+            f"{level} 超出范围"
+        )
+    if not isinstance(plus, int) or isinstance(plus, bool):
+        raise EquipmentCreationError("+値 必须是整数")
+    plus_cap = equipmentdb.plus_cap_for_big(item.big)
+    if not 0 <= plus <= plus_cap:
+        raise EquipmentCreationError(
+            f"+値 必须在 0..{plus_cap} 之内（按大类「{item.big}」的上限），"
+            f"{plus} 超出范围"
+        )
+    if rarity is not None:
+        if not isinstance(rarity, int) or isinstance(rarity, bool):
+            raise EquipmentCreationError("稀有度必须是整数")
+        if not 0 <= rarity < len(records.RARITY_NAMES):
+            raise EquipmentCreationError(
+                f"稀有度必须在 0..{len(records.RARITY_NAMES) - 1} 之内，{rarity} 超出范围"
+            )
+    if count is not None:
+        if not isinstance(count, int) or isinstance(count, bool):
+            raise EquipmentCreationError("数量必须是整数")
+        if not 0 <= count <= 0xFFFF:
+            raise EquipmentCreationError(f"数量必须在 0..65535 之内，{count} 超出范围")
+
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    views = [view for view in list_equipment(decrypted, layout=layout, item_db=item_db)
+             if view.catalog_hits]
+    donor, donor_reason = find_equipment_donor(views, item)
+    pool = _equipment_pool(equipmentdb.pool_name_for(item), pools)
+
+    report = find_free_slots(decrypted, layout=layout)
+    if report.is_full:
+        raise EquipmentCreationError(report.describe())
+    target = report.free_slots[0] if slot_index is None else slot_index
+    if target not in report.free_slots:
+        raise EquipmentCreationError(
+            f"槽位 #{target} 不是空位（只有 type==0 的槽位可以新建）；"
+            f"{report.describe()}"
+        )
+
+    donor_record = bytes(decrypted[donor.offset:
+                                   donor.offset + records.SCROLL_RECORD_SIZE])
+    record = records.patch_record_item_id(donor_record, item.item_id)
+    record = records.patch_record_level(record, level)
+    record = records.patch_record_plus(record, plus)
+    if rarity is not None:
+        record = _patch_rarity(record, rarity)
+    if count is not None:
+        record = _patch_count(record, count)
+
+    before = {effect.slot_index: effect for effect in donor.effects}
+    donor_fixed = donor.fixed_slots(pool)
+    same_kind = donor_reason == DONOR_SAME_KIND
+    cleared: list[int] = []
+    for slot, effect in sorted(before.items()):
+        if effect.is_empty:
+            continue
+        if same_kind and slot not in donor_fixed:
+            continue
+        if same_kind:
+            continue  # 同种类：模板自带的固定词条与其余词条都原样保留
+        if slot in donor_fixed or not _carried_affix_allowed(pool, item, effect,
+                                                             grace_db=grace_db):
+            record = records.patch_effect_slots(record, [{
+                "slot_index": slot, "effect_id": records.EMPTY_EFFECT_ID,
+                "value": 0, "metadata": 0}])
+            cleared.append(slot)
+
+    current = {effect.slot_index: effect for effect in records.read_effect_slots(record)}
+    for edit in effects:
+        slot = edit.get("slot_index")
+        if not isinstance(slot, int) or isinstance(slot, bool):
+            raise EquipmentCreationError("新建词条缺少 slot_index")
+        if not 0 <= slot < records.EFFECT_COUNT:
+            raise EquipmentCreationError(
+                f"效果槽索引必须位于 0..{records.EFFECT_COUNT - 1}")
+        if same_kind and slot in donor_fixed:
+            entry = pool.db.lookup(before[slot].effect_id)
+            raise EquipmentCreationError(
+                f"槽{slot + 1} 是 {item.label} 的同名固定词条"
+                f"（{entry.name if entry else '未收录'}），新建时不能改动；"
+                "它会按模板自动带入"
+            )
+        effect_id = edit.get("effect_id")
+        if effect_id is None:
+            raise EquipmentCreationError(f"槽{slot + 1} 的新建词条缺少 effect_id")
+        if effect_id == records.EMPTY_EFFECT_ID:
+            value, metadata = 0, 0
+            entry = None
+        else:
+            entry = None
+            if not _grace_name(effect_id, grace_db):
+                _assert_equipment_affix_allowed(pool, item, effect_id,
+                                                record_index=target)
+                entry = pool.db.lookup(effect_id)
+                if entry is None:
+                    raise EquipmentCreationError(
+                        f"槽{slot + 1}：词条 {effect_id:#010x} 不在「{pool.label}」"
+                        f"词条表（{pool.path.name}）里，无法写入"
+                    )
+                if entry.is_fixed:
+                    raise EquipmentCreationError(
+                        f"词条 {effect_id:#010x}「{entry.name}」是同名固定词条，"
+                        "只能由模板带入，不能新增固定词条"
+                    )
+            value = edit.get("value", entry.value if entry is not None else 0)
+            if not isinstance(value, int) or isinstance(value, bool):
+                raise EquipmentCreationError(f"槽{slot + 1} 的数值必须是整数")
+            if entry is not None and value != entry.value:
+                if not entry.has_value_range:
+                    raise EquipmentCreationError(
+                        f"词条「{entry.name}」在原始表里没有数值区间，"
+                        f"只能写目录值 {entry.value}"
+                    )
+                if not entry.allows_value(value):
+                    raise EquipmentCreationError(
+                        f"词条「{entry.name}」的数值必须在 "
+                        f"{entry.describe_value_range()} 之内，{value} 超出范围"
+                    )
+            metadata = edit.get("metadata")
+            if metadata is None:
+                base = current[slot].metadata if slot in current else 0
+                metadata = affix_metadata(base, entry, codes)
+            elif not isinstance(metadata, int) or isinstance(metadata, bool):
+                raise EquipmentCreationError(f"槽{slot + 1} 的标识必须是整数")
+        try:
+            record = records.patch_effect_slots(record, [{
+                "slot_index": slot, "effect_id": effect_id,
+                "value": value, "metadata": metadata}])
+        except RecordError as error:
+            raise EquipmentCreationError(f"槽{slot + 1} 无法写入：{error}") from error
+
+    parsed = records.read_effect_slots(record)
+    if same_kind:
+        for slot in donor_fixed:
+            if parsed[slot].effect_id != before[slot].effect_id:
+                raise EquipmentCreationError(f"槽{slot + 1} 的固定词条未能保留，已中止")
+    shim = types.SimpleNamespace(record_index=target,
+                                 before=tuple(before.values()), after=parsed)
+    assert_single_affix_per_category((shim,), pool.db, codes)
+    if grace_db is not None:
+        assert_single_grace((shim,), grace_db)
+    for slot, effect in enumerate(parsed):
+        if effect.is_empty or effect.metadata & CREATION_FIXED_BIT:
+            continue
+        if not _carried_affix_allowed(pool, item, effect, grace_db=grace_db):
+            raise EquipmentCreationError(
+                f"槽{slot + 1} 的词条 {effect.effect_id:#010x} 不能出现在 "
+                f"{item.label} 上，已中止（请把该存档反馈给作者）"
+            )
+    if records.record_is_empty(record) or not records.looks_like_item_record(record):
+        raise EquipmentCreationError("生成的新记录头不合法，已中止（请把该存档反馈给作者）")
+    return EquipmentCreationPlan(
+        slot_index=target,
+        offset=layout.offset(target),
+        item=item,
+        level=records.read_record_level(record),
+        plus_value=records.read_record_plus(record),
+        rarity=_read_rarity(record),
+        count=_read_count(record),
+        donor_slot=donor.slot_index,
+        donor_offset=donor.offset,
+        donor_reason=donor_reason,
+        record=bytes(record),
+        effects=parsed,
+        free_before=report.free_count,
+        cleared_slots=tuple(sorted(cleared)),
+    )
+
+
+def apply_equipment_creations(
+    decrypted: bytes,
+    plans: tuple[EquipmentCreationPlan, ...] | list[EquipmentCreationPlan],
+) -> bytes:
+    """写入新建的武器 / 防具（写入后逐条复核，复用饰品那套写入器）。"""
+    return apply_creations(decrypted, plans)
 
 
 # --------------------------------------------------------------------------
