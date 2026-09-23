@@ -6,9 +6,13 @@ token 集合，与这件装备可接受的 token 集合（大类名 ``武器``/`
 归属）取交集 —— **有交集才允许**，完全没交集就拒绝（fail closed）。判定只作用于
 这次真的要写入的 ``effect_id``，存档里本来就有的历史状态不会拦住无关改动。
 
-**规则 2「等级 / +値 上限按类别取」**：上限来自 ``data/equipment_ranges.json`` 里该
-类别实测的最大值（魂核 +値 只到 15，武器/防具是各种类自己的 22..30），类别不在表里
-就退回文档值 180 / 30。适用大类是 武器 / 防具 / 魂核，**饰品保持原样**（0..30）。
+**规则 2「等级 / +値 上限」**：两条口径都是用户口径，**观测值不等于游戏上限** ——
+等级上限一律是文档值 180（``editor.LEVEL_CAP_BY_CLASS = False`` 是默认值，所以观测到
+170 / 172 / 174 的 弓 / 大太刀 / 忍者防具足部 也照样能写 180，181 仍被拒）；``+値``
+上限按**大类**查固定小表 ``equipmentdb.PLUS_CAP_BY_BIG``（武器 30、防具 30、饰品 30、
+魂核 15），完全不看实测值 —— 忍刀这类观测到 25 的武器类别也能写 30。
+``data/equipment_ranges.json`` 退到证据的位置（``ClassLimits.describe()`` 仍引用它的
+样本数与出处，文件本身没动）。适用大类是 武器 / 防具 / 魂核，**饰品保持原样**（0..30）。
 
 样本存档用 ``tests/support.py`` 的 ``build_plain_save`` / ``build_record`` 合成，
 物品种类与词条都从随包的 P1 数据里查出来，不写死 id。
@@ -57,6 +61,19 @@ def item_of(small: str, big: str = "武器") -> equipmentdb.EquipmentItem:
     raise AssertionError(f"物品总目录里没有 {big}/{small}")
 
 
+def item_of_class_key(big: str, category: str, small: str) -> equipmentdb.EquipmentItem:
+    """类别键恰好是 ``大类/中类/小类`` 的一个种类（小类重名时用它点名到具体类别）。
+
+    例如「足部」在 武士防具（观测到 170）与 忍者防具（观测到 174）各有一类、
+    「手臂」在两边也各有一类，:func:`item_of` 只能拿到目录里排在前面的那一个。
+    """
+    for entry in ITEM_DB.all():
+        if (entry.big == big and entry.category == category and entry.small == small
+                and entry.item_id not in records.SCROLL_TYPES):
+            return entry
+    raise AssertionError(f"物品总目录里没有 {big}/{category}/{small}")
+
+
 def affix_tagged(pool: equipmentdb.EquipmentPool, *tokens: str, star: bool | None = None):
     """标签恰好等于 ``tokens`` 的一条词条（可要求 ★ / 非 ★），id 排序保证稳定。"""
     found = [entry for entry in pool.db.all()
@@ -88,6 +105,13 @@ NINJA_BLADE = item_of("忍刀")
 ARM_PART = item_of("手臂", "防具")
 LEG_PART = item_of("腿部", "防具")
 SOUL_CORE = item_of("魂核", "魂核")
+#: 观测上限低于 30 的类别（忍刀 +値 观测 25、忍者防具/手臂 观测 23）：用来证明
+#: 「观测值不是上限」—— 它们照样能写 30。
+NINJA_ARMOR_ARM = item_of_class_key("防具", "忍者防具", "手臂")
+#: 观测等级低于 180 的类别（忍者防具/足部 观测 174，武士防具/足部 观测 170）。
+NINJA_ARMOR_FOOT = item_of_class_key("防具", "忍者防具", "足部")
+#: 观测等级低于 180 的三个类别：弓 观测 170、大太刀 观测 172、忍者防具/足部 观测 174。
+LOW_OBSERVED_LEVEL_ITEMS = (BOW, GREAT_KATANA, NINJA_ARMOR_FOOT)
 
 
 def save_with(slots: dict[int, bytes]) -> bytes:
@@ -526,7 +550,7 @@ class ExistingRulesOnEquipmentTests(ListingTestCase):
 
 
 class ClassCapTests(unittest.TestCase):
-    """规则 2：等级 / +値 上限按类别取，饰品保持原样。"""
+    """规则 2：+値 上限按大类固定表、等级默认 180，饰品保持原样。"""
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -539,7 +563,10 @@ class ClassCapTests(unittest.TestCase):
     def test_weapon_and_armor_plus_30_is_allowed_and_31_refused(self) -> None:
         for item in (KATANA, ARM_PART, LEG_PART):
             with self.subTest(item=item.name):
-                self.assertEqual(equipmentdb.equipment_caps(item)[1], 30)
+                self.assertEqual(equipmentdb.plus_cap_for_big(item.big), 30)
+                limits = editor.class_limits_for_record(item.item_id)
+                self.assertEqual(limits.max_plus, 30)
+                self.assertTrue(limits.plus_by_big_table)
                 save, layout = self._save(item)
                 plan = plan_plus_edit(save, 3, 30, affix_db=self.affix_db, layout=layout)
                 self.assertEqual(plan.new_value, 30)
@@ -548,21 +575,44 @@ class ClassCapTests(unittest.TestCase):
                 self.assertIn("+值必须在", str(caught.exception))
                 self.assertIn("30", str(caught.exception))
 
-    def test_a_class_below_30_uses_its_own_measured_cap(self) -> None:
-        """忍者武器的实测上限比 30 低：按类别取就应该是它自己的数。"""
-        cap = equipmentdb.equipment_caps(NINJA_BLADE)[1]
-        self.assertLess(cap, 30)
+    def test_a_class_observed_below_30_can_still_be_written_to_30(self) -> None:
+        """观测值不是上限：忍刀观测到 25、忍者防具/手臂 23，照样能写 30（31 才拒）。"""
+        for item in (NINJA_BLADE, NINJA_ARMOR_ARM):
+            with self.subTest(item=item.name):
+                self.assertLess(equipmentdb.equipment_caps(item)[1], 30,
+                                "这个类别的观测值本来就低于 30（这正是本条要证明的）")
+                limits = editor.class_limits_for_record(item.item_id)
+                self.assertEqual(limits.max_plus, 30)
+                self.assertTrue(limits.plus_by_big_table)
+                save, layout = self._save(item)
+                plan = plan_plus_edit(save, 3, 30, affix_db=self.affix_db, layout=layout)
+                self.assertEqual(plan.new_value, 30)
+                with self.assertRaises(EditorError) as caught:
+                    plan_plus_edit(save, 3, 31, affix_db=self.affix_db, layout=layout)
+                self.assertIn("+值必须在", str(caught.exception))
+                self.assertIn("30", str(caught.exception))
+
+    def test_the_plus_gate_itself_stops_at_the_big_table_value(self) -> None:
+        """把扁平上限临时抬高，类别闸门本身就露出来了：忍刀封在 30（不是观测的 25）。
+
+        否则武器 / 防具的 31 总是被扁平的 0..30 先拒掉，看不出类别闸门还在不在。
+        """
         save, layout = self._save(NINJA_BLADE)
-        plan = plan_plus_edit(save, 3, cap, affix_db=self.affix_db, layout=layout)
-        self.assertEqual(plan.new_value, cap)
-        with self.assertRaises(EditorError) as caught:
-            plan_plus_edit(save, 3, cap + 1, affix_db=self.affix_db, layout=layout)
+        with mock.patch.object(records, "MAX_RECORD_PLUS", 40):
+            plan = plan_plus_edit(save, 3, 30, affix_db=self.affix_db, layout=layout)
+            self.assertEqual(plan.new_value, 30)
+            with self.assertRaises(EditorError) as caught:
+                plan_plus_edit(save, 3, 31, affix_db=self.affix_db, layout=layout)
         message = str(caught.exception)
-        self.assertIn("超过该类别的实测上限", message)
+        self.assertIn("+值必须在 0..30 之间", message)
+        self.assertIn("超过该大类的 +値 上限 30", message)
         self.assertIn(equipmentdb.equipment_class_key(NINJA_BLADE), message)
 
     def test_a_soul_core_plus_15_is_allowed_and_16_refused(self) -> None:
-        self.assertEqual(equipmentdb.equipment_caps(SOUL_CORE)[1], 15)
+        self.assertEqual(equipmentdb.plus_cap_for_big("魂核"), 15)
+        limits = editor.class_limits_for_record(SOUL_CORE.item_id)
+        self.assertEqual(limits.max_plus, 15)
+        self.assertTrue(limits.plus_by_big_table)
         save, layout = self._save(SOUL_CORE)
         plan = plan_plus_edit(save, 3, 15, affix_db=self.affix_db, layout=layout)
         self.assertEqual(plan.new_value, 15)
@@ -571,6 +621,9 @@ class ClassCapTests(unittest.TestCase):
         message = str(caught.exception)
         self.assertIn("+值必须在 0..15 之间", message)
         self.assertIn("魂核", message)
+        self.assertIn("超过该大类的 +値 上限", message)
+        # 拒绝信息里的依据仍然指向那份实测范围表（它只是证据，不再是上限）。
+        self.assertIn("equipment_ranges.json", message)
 
     def test_an_accessory_keeps_the_flat_cap(self) -> None:
         save, layout = self._save(ITEM_DB.lookup(ACCESSORY_ID))
@@ -588,27 +641,45 @@ class ClassCapTests(unittest.TestCase):
         self.assertEqual(plan.new_value, 30)
         self.assertIsNone(editor.class_limits_for_record(0x4001, item_db=ITEM_DB))
 
-    def test_the_level_cap_follows_the_class(self) -> None:
-        """实测不到 180 的类别就封在它自己的数上（弓 170、大太刀 172 这类）。"""
-        for item in (BOW, GREAT_KATANA):
-            cap = equipmentdb.equipment_caps(item)[0]
+    def test_the_level_cap_is_180_even_where_the_observation_is_lower(self) -> None:
+        """默认口径：等级上限就是文档值 180（弓 / 大太刀 / 忍者防具足部 可 180、181 拒）。"""
+        for item in LOW_OBSERVED_LEVEL_ITEMS:
             with self.subTest(item=item.name):
-                self.assertLess(cap, records.MAX_ITEM_LEVEL)
+                self.assertLess(equipmentdb.equipment_caps(item)[0],
+                                records.MAX_ITEM_LEVEL,
+                                "这个类别的观测等级本来就低于 180")
+                limits = editor.class_limits_for_record(item.item_id)
+                self.assertEqual(limits.max_level, records.MAX_ITEM_LEVEL)
+                self.assertFalse(limits.level_by_class)
                 save, layout = self._save(item)
-                plan = plan_level_edit(save, 3, cap, affix_db=self.affix_db,
-                                       layout=layout)
-                self.assertEqual(plan.new_level, cap)
+                plan = plan_level_edit(save, 3, records.MAX_ITEM_LEVEL,
+                                       affix_db=self.affix_db, layout=layout)
+                self.assertEqual(plan.new_level, records.MAX_ITEM_LEVEL)
                 with self.assertRaises(LevelEditError) as caught:
-                    plan_level_edit(save, 3, cap + 1, affix_db=self.affix_db,
-                                    layout=layout)
+                    plan_level_edit(save, 3, records.MAX_ITEM_LEVEL + 1,
+                                    affix_db=self.affix_db, layout=layout)
+                self.assertIn(str(records.MAX_ITEM_LEVEL), str(caught.exception))
+
+    def test_turning_the_flag_on_uses_the_observed_level_cap(self) -> None:
+        """只有显式把 LEVEL_CAP_BY_CLASS 设为 True，等级才按类别观测值封顶。"""
+        for item in LOW_OBSERVED_LEVEL_ITEMS:
+            observed = equipmentdb.equipment_caps(item)[0]
+            with self.subTest(item=item.name):
+                self.assertLess(observed, records.MAX_ITEM_LEVEL)
+                with mock.patch.object(editor, "LEVEL_CAP_BY_CLASS", True):
+                    limits = editor.class_limits_for_record(item.item_id)
+                    self.assertEqual(limits.max_level, observed)
+                    self.assertTrue(limits.level_by_class)
+                    save, layout = self._save(item)
+                    plan = plan_level_edit(save, 3, observed, affix_db=self.affix_db,
+                                           layout=layout)
+                    self.assertEqual(plan.new_level, observed)
+                    with self.assertRaises(LevelEditError) as caught:
+                        plan_level_edit(save, 3, observed + 1, affix_db=self.affix_db,
+                                        layout=layout)
                 message = str(caught.exception)
-                self.assertIn(str(cap), message)
+                self.assertIn(str(observed), message)
                 self.assertIn("超过该类别的实测上限", message)
-        # 刀这类实测到 180 的类别照旧可以写满。
-        self.assertEqual(equipmentdb.equipment_caps(KATANA)[0], records.MAX_ITEM_LEVEL)
-        save, layout = self._save(KATANA, level=170)
-        self.assertEqual(plan_level_edit(save, 3, 180, affix_db=self.affix_db,
-                                         layout=layout).new_level, 180)
 
     def test_a_view_reports_the_caps_of_its_own_class(self) -> None:
         save, layout = self._save(KATANA)
@@ -624,14 +695,6 @@ class ClassCapTests(unittest.TestCase):
         self.assertEqual(list_equipment(save, layout=layout), ())
         self.assertEqual(editor.class_limits_for_record(SOUL_CORE.item_id).max_plus, 15)
 
-    def test_the_documented_level_cap_can_be_restored_with_one_flag(self) -> None:
-        save, layout = self._save(BOW)
-        with self.assertRaises(LevelEditError):
-            plan_level_edit(save, 3, 180, affix_db=self.affix_db, layout=layout)
-        with mock.patch.object(editor, "LEVEL_CAP_BY_CLASS", False):
-            plan = plan_level_edit(save, 3, 180, affix_db=self.affix_db, layout=layout)
-        self.assertEqual(plan.new_level, 180)
-
     def test_the_global_level_cap_still_applies(self) -> None:
         save, layout = self._save(KATANA, level=170)
         with self.assertRaises(LevelEditError) as caught:
@@ -639,24 +702,49 @@ class ClassCapTests(unittest.TestCase):
                             affix_db=self.affix_db, layout=layout)
         self.assertIn(str(records.MAX_ITEM_LEVEL), str(caught.exception))
 
+    def test_the_observed_ranges_stay_evidence_only(self) -> None:
+        """观测值低的两类都不再被当成上限：等级 180、+値 30，观测值只作证据。"""
+        for item in (NINJA_BLADE, NINJA_ARMOR_FOOT):
+            with self.subTest(item=item.name):
+                observed_level, observed_plus = equipmentdb.equipment_caps(item)
+                limits = editor.class_limits_for_record(item.item_id)
+                self.assertGreaterEqual(limits.max_level, observed_level)
+                self.assertGreaterEqual(limits.max_plus, observed_plus)
+                self.assertEqual(limits.max_level, records.MAX_ITEM_LEVEL)
+                self.assertEqual(limits.max_plus, records.MAX_RECORD_PLUS)
+
     def test_the_limits_say_where_the_number_came_from(self) -> None:
         limits = editor.class_limits_for_record(NINJA_BLADE.item_id)
         self.assertTrue(limits.measured)
         self.assertGreater(limits.samples, 0)
         self.assertEqual(limits.key, equipmentdb.equipment_class_key(NINJA_BLADE))
-        self.assertIn("equipment_ranges.json", limits.describe())
+        text = limits.describe()
+        # 证据：那张实测范围表（样本数 + 出处）还在拒绝信息里。
+        self.assertIn("equipment_ranges.json", text)
+        # 上限来源：等级 = 文档值 180，+値 = 大类固定表。
+        self.assertIn("文档值", text)
+        self.assertIn("equipmentdb.PLUS_CAP_BY_BIG", text)
+        self.assertFalse(limits.level_by_class)
+        self.assertTrue(limits.plus_by_big_table)
 
     def test_a_class_missing_from_the_range_table_falls_back_to_the_docs(self) -> None:
-        """类别不在实测范围表里就退回文档值 180 / 30，绝不猜。"""
+        """类别不在实测范围表里就退回文档值 180 / 30，绝不猜；+値 仍按大类固定表。"""
         empty = {"classes": {}}
         limits = editor.class_limits_for_record(KATANA.item_id, ranges=empty)
         self.assertFalse(limits.measured)
         self.assertEqual((limits.max_level, limits.max_plus),
                          (records.MAX_ITEM_LEVEL, records.MAX_RECORD_PLUS))
+        self.assertFalse(limits.level_by_class)
+        self.assertTrue(limits.plus_by_big_table)
         save, layout = self._save(KATANA)
         plan = plan_plus_edit(save, 3, 30, affix_db=self.affix_db, layout=layout,
                               ranges=empty)
         self.assertEqual(plan.new_value, 30)
+        # 魂核的 15 来自大类固定表，与那张范围表在不在无关。
+        soul = editor.class_limits_for_record(SOUL_CORE.item_id, ranges=empty)
+        self.assertFalse(soul.measured)
+        self.assertEqual((soul.max_level, soul.max_plus),
+                         (records.MAX_ITEM_LEVEL, 15))
 
 
 if __name__ == "__main__":  # pragma: no cover - manual runs only

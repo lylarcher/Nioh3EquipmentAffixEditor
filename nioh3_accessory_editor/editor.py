@@ -557,10 +557,12 @@ def plan_level_edit(
     ``min(record +0x06, 180)`` and the reference save tops out at exactly
     180, so anything above it is not something the game would ever serialise.
 
-    武器/防具/魂核 再加一道**按类别取**的上限（P2 规则 2）：上限来自
-    ``data/equipment_ranges.json`` 里该类别的实测最大值，类别查不到就退回文档值
-    180（``CLASS_CAPPED_BIGS``）。饰品不设这道闸门，行为与以前完全一样；比的是
-    **新值**，所以存档里已有的越界历史值不会拦住其它改动。
+    武器/防具/魂核 再加一道**按类别取**的上限（P2 规则 2）：默认就是文档值 180
+    （``LEVEL_CAP_BY_CLASS = False``），只有把那个开关显式打开才改用
+    ``data/equipment_ranges.json`` 里该类别的实测最大值。理由是用户口径：武器 / 防具的
+    等级上限就是 180，实测值只说明"这份参考存档里没出现过更高的"，不是游戏上限；类别
+    查不到时同样退回文档值 180（``CLASS_CAPPED_BIGS``）。饰品不设这道闸门，行为与以前
+    完全一样；比的是**新值**，所以存档里已有的越界历史值不会拦住其它改动。
 
     Only the level fields change.  Measured on the reference save: the
     *stored* affix values of a kind are identical at every level (e.g. every
@@ -660,13 +662,19 @@ def plan_plus_edit(
     item_db: EquipmentItemDb | None = None,
     ranges: Mapping | None = None,
 ) -> PlusPlan:
-    """Validate one +値 change (0..30 by the workbook, tighter per 类别).
+    """Validate one +値 change (0..30 by the workbook, 魂核 tighter at 15).
 
-    The flat span is what the reference save actually uses for 饰品, so 饰品 behaves
-    exactly as before.  武器 / 防具 / 魂核 再按**类别**取上限（P2 规则 2）：上限来自
-    ``data/equipment_ranges.json`` 里该类别的实测最大值 —— 魂核因此只到 15，武器 /
-    防具是各种类自己的 22..30；类别查不到就退回文档值 30（``CLASS_CAPPED_BIGS``）。
-    比的是**新值**，存档里已有的越界历史值不会拦住其它改动。
+    两种大类的上限不同，都是**用户口径**，不再拿实测最大值当上限：
+
+    * 饰品走扁平的 0..30（与以前完全一样，不查类别）；
+    * 武器 / 防具 / 魂核 按**大类**查固定小表 ``equipmentdb.PLUS_CAP_BY_BIG``
+      （武器 30、防具 30、魂核 15，见 ``CLASS_CAPPED_BIGS``）；表里没有的大类退回
+      文档值 30。
+
+    为什么不看 ``data/equipment_ranges.json`` 里的实测最大值：那只是"这份参考存档观测到
+    多少"，不是游戏上限 —— 忍刀观测到 25、忍者防具/手臂 23，但武器 / 防具的 ``+値``
+    上限就是 30，所以这些类别照样能写 30。那张表继续作证据：``limits.describe()`` 会
+    带上它的样本数与出处。比的是**新值**，存档里已有的越界历史值不会拦住其它改动。
     """
     if not isinstance(value, int) or isinstance(value, bool):
         raise EditorError("+值 必须是整数")
@@ -694,7 +702,7 @@ def plan_plus_edit(
     if limits is not None and value > limits.max_plus:
         raise EditorError(
             f"+值必须在 0..{limits.max_plus} 之间：记录 #{record_index} 属于 "
-            f"{limits.describe()}，{value} 超过该类别的实测上限 {limits.max_plus}"
+            f"{limits.describe()}，{value} 超过该大类的 +値 上限 {limits.max_plus}"
         )
     current = records.read_record_plus(record.record)
     if current == value:
@@ -1257,17 +1265,24 @@ def list_armor(decrypted: bytes, **kwargs) -> tuple[EquipmentView, ...]:
 
 
 # --------------------------------------------------------------------------
-# 规则 1 / 规则 2（P2）：装备种类标签必须匹配、等级/+値 上限按类别取
+# 规则 1 / 规则 2（P2）：装备种类标签必须匹配、等级/+値 上限（等级默认 180、
+# +値 按大类固定表；等级可以改用类别观测值，见 LEVEL_CAP_BY_CLASS）
 # --------------------------------------------------------------------------
 
 #: 「等级 / +値 上限按类别取」适用的大类。饰品**不在**此列：它的现有行为必须原样
-#: 保留（仍是文档值 0..30 的扁平上限），魂核按实测上限 15。
+#: 保留（仍是文档值 0..30 的扁平上限）。
 CLASS_CAPPED_BIGS = ("武器", "防具", "魂核")
 
-#: 等级上限是否也按类别取：True = 用该类别实测上限（例如弓 170、大太刀 172），
-#: False = 一律用文档值 180。做成开关是因为实测上限只说明"参考存档里没出现过更高
-#: 的"，比游戏真实上限保守；想放宽时改这一行即可（行为有测试卡住）。
-LEVEL_CAP_BY_CLASS = True
+#: 等级上限是否改用「类别实测值」：True = 用 ``data/equipment_ranges.json`` 里该类别
+#: 观测到的最大值（弓 170、大太刀 172、忍者防具/足部 174 …），False = 一律用文档值
+#: 180（**默认**）。
+#:
+#: 默认 False 是用户口径：那份 JSON 里的数只是**这份参考存档观测到的**等级，不是游戏
+#: 上限 —— 武器 / 防具的等级上限就是 180，所以观测值偏低的类别（弓、大太刀、足部 …）
+#: 也照样能写到 180。数据本身继续作为证据保留在 :meth:`ClassLimits.describe()` 给出的
+#: 拒绝信息里。想把口径改成「按类别实测值封顶」时，把这一行改成 True 即可（两种行为都
+#: 有测试卡住）。
+LEVEL_CAP_BY_CLASS = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -1277,15 +1292,27 @@ class ClassLimits:
     key: str
     max_level: int
     max_plus: int
+    #: 类别在实测范围表里的样本数（0 = 那张表里没有这个类别）。
     samples: int = 0
+    #: 类别在 ``data/equipment_ranges.json`` 里查到了。注意它只是**证据**：
+    #: 上限不一定取它的值（见下面两个来源标志）。
     measured: bool = True
+    #: 等级上限是否取自该类别实测值：只有 ``LEVEL_CAP_BY_CLASS`` 打开时才是，
+    #: 默认这个上限就是文档值 180。
+    level_by_class: bool = False
+    #: +値 上限是否取自大类固定表 ``equipmentdb.PLUS_CAP_BY_BIG``（否则是文档值 30）。
+    plus_by_big_table: bool = False
 
     def describe(self) -> str:
+        level = (f"等级上限 {self.max_level} = 类别实测值" if self.level_by_class
+                 else f"等级上限 {self.max_level} = 文档值")
+        plus_source = ("大类固定表 equipmentdb.PLUS_CAP_BY_BIG"
+                       if self.plus_by_big_table else "文档值")
+        origin = f"{level}；+値 上限 {self.max_plus} = {plus_source}"
         if not self.measured:
-            return (f"{self.key}（该类别不在实测范围表里，用文档值 等级 "
-                    f"{self.max_level} / +値 {self.max_plus}）")
-        return (f"{self.key}（参考存档实测 {self.samples} 条样本，见 "
-                "data/equipment_ranges.json）")
+            return f"{self.key}（该类别不在实测范围表里，{origin}）"
+        return (f"{self.key}（{origin}；该类别在参考存档实测 {self.samples} "
+                "条样本，见 data/equipment_ranges.json）")
 
 
 def class_limits_for_record(
@@ -1299,6 +1326,17 @@ def class_limits_for_record(
     不适用有两种情况：记录的物品 id 不在物品总目录里（例如合成件、饰品页签之外
     的未知 id），或者它的大类不需要按类别设限（饰品）。这样"没查到"绝不会变成
     "查到了 0"，也就不会把存档里已有的东西误判成越界。
+
+    两条上限的来源不同（都是用户口径，**观测值不等于游戏上限**）：
+
+    * **等级**：默认就是文档值 180（``LEVEL_CAP_BY_CLASS = False``）；只有显式打开那个
+      开关，才改用 ``data/equipment_ranges.json`` 里该类别的实测最大值。
+    * **+値**：按**大类**查固定小表 ``equipmentdb.PLUS_CAP_BY_BIG``（武器 30、防具 30、
+      魂核 15），完全不看实测值 —— 所以忍刀这类观测到 25 的武器类别也能写 30。表里没有
+      的大类退回文档值 30。
+
+    ``data/equipment_ranges.json`` 继续作为证据：类别在表里时 ``samples`` 记下它的样本
+    数，``describe()`` 会把这份出处写进拒绝信息。
     """
     db = default_equipment_item_db() if item_db is None else item_db
     item = db.lookup(record_type)
@@ -1306,19 +1344,25 @@ def class_limits_for_record(
         return None
     table = default_equipment_ranges() if ranges is None else ranges
     bucket = equipmentdb.equipment_class_range(item, table)
+    key = equipmentdb.equipment_class_key(item)
+    big_cap = equipmentdb.plus_cap_for_big(item.big)
+    max_plus = records.MAX_RECORD_PLUS if big_cap is None else big_cap
+    plus_by_big_table = big_cap is not None
     if bucket is None:
-        max_level, max_plus = (records.MAX_ITEM_LEVEL, records.MAX_RECORD_PLUS)
-        return ClassLimits(key=equipmentdb.equipment_class_key(item),
-                           max_level=max_level, max_plus=max_plus,
-                           samples=0, measured=False)
-    max_level, max_plus = equipmentdb.equipment_caps(item, table)
-    if not LEVEL_CAP_BY_CLASS:
-        max_level = records.MAX_ITEM_LEVEL
+        # 类别不在实测范围表里：等级退回文档值；+値 仍按大类固定表（它与那张表无关）。
+        return ClassLimits(key=key, max_level=records.MAX_ITEM_LEVEL,
+                           max_plus=max_plus, samples=0, measured=False,
+                           level_by_class=False,
+                           plus_by_big_table=plus_by_big_table)
+    max_level = (equipmentdb.equipment_caps(item, table)[0] if LEVEL_CAP_BY_CLASS
+                 else records.MAX_ITEM_LEVEL)
     return ClassLimits(
-        key=equipmentdb.equipment_class_key(item),
+        key=key,
         max_level=max_level,
         max_plus=max_plus,
         samples=int(bucket.get("samples", 0) or 0),
+        level_by_class=LEVEL_CAP_BY_CLASS,
+        plus_by_big_table=plus_by_big_table,
     )
 
 

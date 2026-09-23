@@ -2,9 +2,9 @@
 按类别收集的字段范围。
 
 本模块只提供**判定所需的数据**与纯粹的查表函数（词条池、装备种类标签 token、
-按类别的实测上限）：最终「能不能写」一律由 :mod:`editor` 的合法规则决定，本模块
-自己不写任何东西。本模块对现有饰品/魂核路径毫无影响（它们继续用自己的 JSON 与
-:class:`AffixDb`)。
+按类别的实测范围、``+値`` 的大类固定上限表）：最终「能不能写」一律由 :mod:`editor`
+的合法规则决定，本模块自己不写任何东西。本模块对现有饰品/魂核路径毫无影响（它们继续
+用自己的 JSON 与 :class:`AffixDb`)。
 """
 
 from __future__ import annotations
@@ -375,6 +375,26 @@ def acceptable_equipment_tokens(item: "EquipmentItem") -> frozenset[str]:
 DOCUMENTED_MAX_LEVEL = MAX_ITEM_LEVEL
 DOCUMENTED_MAX_PLUS = MAX_RECORD_PLUS
 
+#: ``+値`` 上限的**大类固定表**（用户口径，不是实测值）：武器 / 防具 / 饰品 30、
+#: 魂核 15。
+#:
+#: ``data/equipment_ranges.json`` 里的 ``plus`` 是"这份参考存档观测到的最大值"
+#: （忍刀 25、忍者防具/手臂 23 …），**观测值不等于游戏上限**：武器 / 防具 / 饰品的
+#: ``+値`` 上限就是 30，只有魂核收紧到 15。所以写入上限只查这张表，实测范围表退到
+#: 证据的位置（:meth:`editor.ClassLimits.describe` 引用它的样本数）。饰品这一行是口径
+#: 记录：饰品不走按类别的闸门，仍用扁平的 0..30（同一个数，行为不变）。
+PLUS_CAP_BY_BIG: dict[str, int] = {
+    "武器": MAX_RECORD_PLUS,
+    "防具": MAX_RECORD_PLUS,
+    "饰品": MAX_RECORD_PLUS,
+    "魂核": 15,
+}
+
+
+def plus_cap_for_big(big: str) -> int | None:
+    """这个大类的 ``+値`` 上限；表里没有的大类返回 ``None``（调用方退回文档值）。"""
+    return PLUS_CAP_BY_BIG.get(big)
+
 
 def equipment_class_key(item: "EquipmentItem") -> str:
     """范围表里的类别键，与 ``tools/measure_equipment_ranges.py`` 写入的键一致。"""
@@ -398,10 +418,11 @@ def equipment_caps(item: "EquipmentItem",
                    ranges: Mapping | None = None) -> tuple[int, int]:
     """``(等级上限, +値上限)``：该物品所在类别的**实测**上限，取不到就退回文档值。
 
-    实测值来自 ``data/equipment_ranges.json``（每个类别都带样本数）。武器 / 防具的
-    +値 上限各种类并不相同（实测 22..30），魂核只到 15；等级上限多数类别是 180，
-    少数类别低一些（例如弓 170、大太刀 172）。数据本身不决定要不要设限，那由
-    :mod:`editor` 决定。
+    **这是观测数据，不是写入上限**：能不能写由 :mod:`editor` 决定 —— 等级默认用文档值
+    180，``+値`` 用大类固定表 :data:`PLUS_CAP_BY_BIG`（武器 / 防具 / 饰品 30、魂核 15）。
+    实测值来自 ``data/equipment_ranges.json``（每个类别都带样本数），作为证据保留：
+    武器 / 防具观测到的 +値 各种类并不相同（22..30），魂核只到 15；等级上限多数类别观测
+    到 180，少数类别低一些（例如弓 170、大太刀 172、忍者防具/足部 174）。
     """
     bucket = equipment_class_range(item, ranges)
     if bucket is None:
