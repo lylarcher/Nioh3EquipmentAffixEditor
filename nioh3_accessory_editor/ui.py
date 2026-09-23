@@ -1110,10 +1110,21 @@ class AccessoryEditorApp(tk.Tk):
             self.soul_kind_status_var.set(
                 f"魂核词条库不可用：{self.soul_db_error}（本页只读）")
 
+    def _apply_soul_slot_states(self) -> None:
+        """数值框按「是不是固定词条槽」逐个决定：固定的不能填（词条与数值都不能改）。"""
+        view = self._selected_soul()
+        for index, entry in enumerate(self.soul_value_entries):
+            fixed = view is not None and view.slot_is_fixed(index, self.soul_db)
+            entry.state(["disabled"] if fixed else ["!disabled"])
+
     def _set_soul_controls(self, enabled: bool) -> None:
         state = ["!disabled"] if enabled else ["disabled"]
-        for entry in self.soul_value_entries:
-            entry.state(state)
+        if enabled:
+            # 不能无脑启用：固定词条槽的数值框必须保持禁用，否则用户能填却改不了。
+            self._apply_soul_slot_states()
+        else:
+            for entry in self.soul_value_entries:
+                entry.state(state)
         self.soul_level_entry.state(state)
         self.soul_level_button.state(state)
         self.soul_kind_combo.state(["!disabled", "readonly"] if enabled

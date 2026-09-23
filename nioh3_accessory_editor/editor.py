@@ -1025,6 +1025,70 @@ def _with_category_code(edit: dict[str, int], view, db: AffixDb) -> dict[str, in
     return dict(edit, metadata=affix_metadata(slot.metadata, entry))
 
 
+#: 「其他」种类允许重复出现；其余种类每个物品最多一个词条。
+CATEGORY_OTHER = "其他"
+
+
+def _slot_is_star(slot: records.EffectSlot, db: AffixDb) -> bool:
+    entry = db.lookup(slot.effect_id)
+    return bool(entry is not None and entry.is_star)
+
+
+def _slot_is_fixed(slot: records.EffectSlot, db: AffixDb) -> bool:
+    entry = db.lookup(slot.effect_id)
+    return bool(entry is not None and entry.is_fixed)
+
+
+def assert_single_affix_per_category(plans: tuple[EditPlan, ...], db: AffixDb,
+                                     codes: Mapping[str, int] | None = None) -> None:
+    """Refuse a plan that would leave two affixes of one 种类 in the same item.
+
+    The game's own rule (confirmed in game): an item — 饰品, 魂核, … — carries at
+    most **one** affix of each 种类, the category that the icon in front of the line
+    shows (metadata bits 8..12).  Two exceptions:
+
+    * ``其他`` (the catch-all 种类) may appear any number of times;
+    * one ★ affix and the item's 同名固定 affix of the *same* 种类 may coexist —
+      exactly those two, never a third.
+
+    As with the 恩宠 rule, only a *newly introduced* duplicate is refused, so a save
+    that already looks unusual is never blocked from an unrelated edit.
+    """
+    table = _category_codes() if codes is None else codes
+    other = table.get(CATEGORY_OTHER)
+    for plan in plans:
+        after: dict[int, list[records.EffectSlot]] = {}
+        for slot in plan.after:
+            if slot.is_empty:
+                continue
+            after.setdefault(slot.metadata & CATEGORY_CODE_MASK, []).append(slot)
+        for code, slots in sorted(after.items()):
+            if code == other or len(slots) <= 1:
+                continue
+            before = [slot for slot in plan.before
+                      if not slot.is_empty
+                      and slot.metadata & CATEGORY_CODE_MASK == code]
+            if len(slots) <= len(before):
+                continue  # 这条记录本来就这样：不因为这个拦住其它改动
+            stars = [slot for slot in slots if _slot_is_star(slot, db)]
+            fixed = [slot for slot in slots if _slot_is_fixed(slot, db)]
+            if len(slots) == 2 and len(stars) == 1 and len(fixed) == 1:
+                continue  # 一个 ★ + 一个同名固定，允许
+            name = next((entry.category for entry in db.all()
+                         if table.get(entry.category) == code), f"种类码 {code:#x}")
+            listed = "、".join(
+                f"槽{slot.slot_index + 1} "
+                f"{(db.lookup(slot.effect_id).name if db.lookup(slot.effect_id) else f'{slot.effect_id:#06x}')}"
+                for slot in slots
+            )
+            raise EditorError(
+                f"记录 #{plan.record_index} 会有 {len(slots)} 个「{name}」种类的词条"
+                f"（{listed}）：同一个物品每个种类只能有一个词条"
+                "（同种类的 ★ 与同名固定可以各一个，[其他] 种类不受限）。"
+                "请把其中一个换成别的种类。"
+            )
+
+
 def assert_single_grace(plans: tuple[EditPlan, ...], grace_db: GraceDb) -> None:
     """Refuse a plan that would leave **two** 恩宠/套装 affixes in one record.
 
@@ -1145,6 +1209,7 @@ def plan_edits(
                 after=records.read_effect_slots(patched),
             )
         )
+    assert_single_affix_per_category(tuple(plans), affix_db)
     if grace_db is not None:
         assert_single_grace(tuple(plans), grace_db)
     return tuple(plans)
@@ -1227,6 +1292,7 @@ def plan_soul_edits(
                 after=records.read_effect_slots(patched),
             )
         )
+    assert_single_affix_per_category(tuple(plans), soul_db)
     return tuple(plans)
 
 
