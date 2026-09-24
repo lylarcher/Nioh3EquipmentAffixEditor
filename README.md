@@ -745,8 +745,9 @@ soul cores with the same three edits, switched to the core tables by `--soul`:
 
 武器 and 防具 are the two tabs next to 饰品 / 魂核. They read the same decrypted
 bytes — one 读取数据 fills all four tabs — and follow the accessory tab's flow:
-pick a record, edit its slots, 预览改动, 应用修改, then 写入副本 (the write path *is*
-that tab's code and its copy gate).
+pick a record, edit its slots, 预览改动, 应用修改, then 写入存档 (the write path *is*
+that tab's code and its copy gate: it only ever writes the copy you pick, never the
+original save).
 
 * **Candidates belong to the item** — a 刀 offers the melee table, a 弓 / 火枪 / 大炮
   offers the ranged table, armour offers the armour table; on top of that the affix's
