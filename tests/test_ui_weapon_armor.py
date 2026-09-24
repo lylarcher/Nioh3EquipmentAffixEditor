@@ -14,7 +14,7 @@ import unittest
 from unittest import mock
 
 from nioh3_accessory_editor import editor, equipmentdb, records, ui
-from nioh3_accessory_editor.affixdb import GraceDb
+from nioh3_accessory_editor.affixdb import AffixDb, GraceDb
 from nioh3_accessory_editor.editor import EditorError
 from tests import support
 from tests.test_ui import TK_AVAILABLE, TK_ERROR, UiTestCase
@@ -762,6 +762,253 @@ class EquipmentTabTestCase(UiTestCase):
         self.assertFalse(warned.called)
         self.assertFalse(committed.called)
 
+
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class SlotValueRefreshTests(UiTestCase):
+    """切记录后每个槽的数值框 / 标识 / 区间必须**整体**刷新（用户实测的 bug）。
+
+    用户实测：在【防具】页签里先选 #1794（胸甲）再选 #1868（头盔），词条下拉更新了，
+    但「数值」框还留着上一条记录的值（槽3 的固定值 3 显示成 17、槽4 的 91..99 显示
+    成 134）。根因是 ``EquipmentTab._on_selected`` 只在「固定词条」「恩宠」两个分支
+    写了数值框，普通词条 / 空槽 / 不存在的槽都留旧值。
+    """
+
+    #: 两条记录里同一个槽用不同的 metadata，标识行才可能被看出残留。
+    META_A = 0x0C00
+    META_B = 0x1400
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.item_db = equipmentdb.load_equipment_item_db()
+        cls.armor = equipmentdb.load_pool(equipmentdb.POOL_ARMOR)
+        cls.chest = _first(cls.item_db.all(), lambda e: e.small == "身体")
+        cls.head = _first(cls.item_db.all(), lambda e: e.small == "头部")
+        cls.grace_db = GraceDb.best_effort()
+        cls.grace = cls.grace_db.all()[0]
+
+        def usable(entry) -> bool:
+            """头部与身体都能出、且不是同名固定 —— 这样它一定在候选里。"""
+            tags = set(cls.armor.tags_of(entry.effect_id))
+            return not entry.is_fixed and {"头部", "身体"} <= tags
+
+        pool = [entry for entry in cls.armor.db.all() if usable(entry)]
+        #: 有多个取值 → 数值框可改。
+        cls.ranged = _first(pool, lambda e: e.value_min is not None
+                            and e.value_max > e.value_min)
+        #: 只有唯一取值（原始表写死了）→ 数值框只显示。
+        cls.single = _first(pool, lambda e: e.value_min is not None
+                            and e.value_min == e.value_max
+                            and e.effect_id != cls.ranged.effect_id)
+        cls.other = _first(pool, lambda e: e.effect_id not in (cls.ranged.effect_id,
+                                                              cls.single.effect_id)
+                           and e.value_min is not None
+                           and e.value_max > e.value_min)
+        #: 表外词条：饰品表里的一条，且不是恩宠/套装（那样会被当成恩宠槽）。
+        cls.outside = _first(
+            AffixDb().all(),
+            lambda e: cls.armor.db.lookup(e.effect_id) is None
+            and not cls.grace_db.describe(e.effect_id))
+
+    # ------------------------------------------------------------- 夹具
+    def _tab(self, big: str) -> ui.EquipmentTab:
+        return next(tab for tab in self.app.equipment_tabs if tab.big == big)
+
+    def _load_pair(self) -> ui.EquipmentTab:
+        """#5 胸甲 与 #6 头盔：同一个槽位放不同词条、不同数值、不同 metadata。"""
+        data = support.build_plain_save(records_by_slot={
+            5: support.build_record(
+                record_type=self.chest.item_id, level=170, rarity=4,
+                effects=((self.ranged.effect_id, self.ranged.value_max, self.META_A),
+                         (self.single.effect_id, self.single.value_min, self.META_A),
+                         (self.other.effect_id, self.other.value_min, self.META_A),
+                         (self.grace.effect_id, 0, self.META_A))),
+            6: support.build_record(
+                record_type=self.head.item_id, level=170, rarity=4,
+                effects=((self.other.effect_id, self.other.value_max, self.META_B),
+                         (self.ranged.effect_id, self.ranged.value_min, self.META_B),
+                         (self.single.effect_id, self.single.value_min, self.META_B),
+                         (self.outside.effect_id, self.outside.value, self.META_B))),
+        })
+        layout = records.locate_layout(data)
+        known_ids = ui.accessory_catalog_ids(self.app.affix_db)
+        self.app._populate_accessories(
+            (data, ui.list_accessories(data, layout=layout, known_ids=known_ids),
+             True, layout))
+        return self._tab("防具")
+
+    def _select(self, tab: ui.EquipmentTab, index: int) -> ui.EquipmentTab:
+        tab.tree.selection_set(str(index))
+        tab._on_selected()
+        return tab
+
+    # --------------------------------------------------- 用户实测的残留
+    def test_switching_records_refreshes_every_value_box(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        self.assertEqual(tab.value_vars[0].get(), str(self.ranged.value_max))
+        self.assertEqual(tab.value_vars[1].get(), str(self.single.value_min))
+        self.assertEqual(tab.value_vars[2].get(), str(self.other.value_min))
+        self._select(tab, 6)
+        self.assertEqual(tab.value_vars[0].get(), str(self.other.value_max))
+        self.assertEqual(tab.value_vars[1].get(), str(self.ranged.value_min))
+        self.assertEqual(tab.value_vars[2].get(), str(self.single.value_min))
+
+    def test_switching_back_refreshes_the_value_boxes_again(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        self._select(tab, 6)
+        self._select(tab, 5)
+        self.assertEqual(tab.value_vars[0].get(), str(self.ranged.value_max))
+
+    def test_the_identifier_line_follows_the_new_record(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        self.assertIn(f"标识={self.META_A:#010x}", tab.slot_labels[2].get())
+        self._select(tab, 6)
+        self.assertIn(f"标识={self.META_B:#010x}", tab.slot_labels[0].get())
+        self.assertNotIn(f"标识={self.META_A:#010x}", tab.slot_labels[0].get())
+
+    def test_the_span_text_follows_the_new_record(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 6)
+        self.assertIn(self.ranged.describe_value_range(), tab.slot_labels[1].get())
+        self.assertIn(str(self.ranged.value_min), tab.slot_labels[1].get())
+
+    def test_an_empty_slot_has_no_leftover_value(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        self._select(tab, 6)
+        for index in range(4, ui.EFFECT_COUNT):
+            with self.subTest(index=index):
+                self.assertEqual(tab.value_vars[index].get(), "")
+
+    # ------------------------------------------------- 数值框能不能改
+    def test_a_single_value_affix_greys_out_its_box(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        # 槽2 是唯一取值词条：只显示，不可编辑。
+        self.assertEqual(tab.value_vars[1].get(), str(self.single.value_min))
+        self.assertIn("disabled", tab.value_entries[1].state())
+        self.assertIn("固定值", tab.slot_labels[1].get())
+        # 槽1 有区间：可以改。
+        self.assertNotIn("disabled", tab.value_entries[0].state())
+        self.assertIn("可改区间", tab.slot_labels[0].get())
+
+    def test_picking_a_range_affix_makes_the_box_editable(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        tab.slot_combos[1].set(self.other.label)
+        tab._on_slot_picked(1)
+        self.assertEqual(tab.value_vars[1].get(), str(self.other.value))
+        self.assertNotIn("disabled", tab.value_entries[1].state())
+
+    def test_picking_a_single_value_affix_makes_the_box_read_only(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        tab.slot_combos[0].set(self.single.label)
+        tab._on_slot_picked(0)
+        self.assertEqual(tab.value_vars[0].get(), str(self.single.value_min))
+        self.assertIn("disabled", tab.value_entries[0].state())
+
+    def test_clearing_a_slot_clears_its_value_box(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        tab.slot_combos[0].set(ui.EMPTY_LABEL)
+        tab._on_slot_picked(0)
+        self.assertEqual(tab.value_vars[0].get(), "")
+        self.assertIn("disabled", tab.value_entries[0].state())
+
+    def test_the_grace_slot_shows_its_value_but_is_not_editable(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        self.assertEqual(tab.value_vars[3].get(), "0")
+        self.assertIn("disabled", tab.value_entries[3].state())
+        self.assertIn("恩宠", tab.slot_labels[3].get())
+
+    def test_an_out_of_catalog_affix_refreshes_its_value_and_stays_editable(self) -> None:
+        """表外词条：数值照旧跟着记录刷新；数值框保持可编辑（既有口径）。"""
+        tab = self._load_pair()
+        self._select(tab, 5)
+        self._select(tab, 6)
+        self.assertEqual(tab.value_vars[3].get(), str(self.outside.value))
+        self.assertNotIn("disabled", tab.value_entries[3].state())
+        self.assertIn("非本池词条", tab.slot_combos[3].get())
+
+    def test_a_star_slot_stays_editable(self) -> None:
+        star = _first(self.armor.db.all(),
+                      lambda e: e.is_star and not e.is_fixed
+                      and e.value_min is not None and e.value_max > e.value_min)
+        data = support.build_plain_save(records_by_slot={
+            7: support.build_record(
+                record_type=self.chest.item_id, level=170, rarity=4,
+                effects=((star.effect_id, star.value_min, STAR_BIT),)),
+        })
+        layout = records.locate_layout(data)
+        known_ids = ui.accessory_catalog_ids(self.app.affix_db)
+        self.app._populate_accessories(
+            (data, ui.list_accessories(data, layout=layout, known_ids=known_ids),
+             True, layout))
+        tab = self._select(self._tab("防具"), 7)
+        self.assertNotIn("disabled", tab.value_entries[0].state())
+        self.assertIn("★ 词条（可改）", tab.slot_labels[0].get())
+
+    # --------------------------------------------------- 应用之后不残留
+    def test_applying_and_reloading_shows_the_new_values(self) -> None:
+        tab = self._load_pair()
+        self._select(tab, 5)
+        tab.value_vars[0].set(str(self.ranged.value_min))
+        tab.apply_edits()
+        view = next(v for v in tab.views if v.slot_index == 5)
+        for index, effect in enumerate(view.effects):
+            with self.subTest(index=index):
+                expected = "" if effect.is_empty else str(effect.value)
+                self.assertEqual(tab.value_vars[index].get(), expected)
+
+    def test_edits_are_still_collected_after_switching_records(self) -> None:
+        """残留值曾经会被当成"改动"收进计划里，切回来必须只报真改动。
+
+        注意：这里刻意用 #5（槽位里没有表外词条），因为表外词条的槽位文本本来就
+        解析不成候选，会让整条记录的改动收集 fail closed（既有行为，另案处理）。
+        """
+        tab = self._load_pair()
+        self._select(tab, 6)
+        self._select(tab, 5)
+        self.assertEqual(tab.current_edits(), ())
+        tab.value_vars[0].set(str(self.ranged.value_min))
+        edits = tab.current_edits()
+        self.assertEqual(len(edits), 1)
+        self.assertEqual(edits[0]["slot_index"], 0)
+        self.assertEqual(edits[0]["value"], self.ranged.value_min)
+
+
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class AccessoryAndSoulValueRefreshTests(UiTestCase):
+    """饰品 / 魂核页签切记录后也不许残留（用户怀疑不只防具）。"""
+
+    def test_switching_accessories_refreshes_every_value_box(self) -> None:
+        db = self.app.affix_db
+        first = next(e for e in db.all() if not e.is_fixed)
+        second = next(e for e in db.all()
+                      if not e.is_fixed and e.effect_id != first.effect_id)
+        data = support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=0x4001, level=150, rarity=5,
+                                    effects=((first.effect_id, first.value, 0x40),)),
+            4: support.build_record(record_type=0x4001, level=150, rarity=5,
+                                    effects=((second.effect_id, second.value, 0x40),)),
+        })
+        layout = records.locate_layout(data)
+        known_ids = ui.accessory_catalog_ids(db)
+        self.app._populate_accessories(
+            (data, ui.list_accessories(data, layout=layout, known_ids=known_ids),
+             True, layout))
+        self.app.tree.selection_set("3")
+        self.app._on_accessory_selected()
+        self.assertEqual(self.app.value_vars[0].get(), str(first.value))
+        self.app.tree.selection_set("4")
+        self.app._on_accessory_selected()
+        self.assertEqual(self.app.value_vars[0].get(), str(second.value))
+        self.assertEqual(self.app.value_vars[1].get(), "")
 
 
 if __name__ == "__main__":  # pragma: no cover

@@ -126,6 +126,27 @@ GAME_STATUS_UNKNOWN = "游戏状态：检查中…"
 MSG_NEED_DATA = "还没有读取数据，请先点【读取数据】"
 MSG_NEED_SELECTION = "还没有选中记录，请在左侧列表里点一行"
 
+
+def affix_value_editable(entry) -> bool:
+    """这条词条是否允许多个取值 —— 决定「数值」框能不能改（用户规则）。
+
+    只有唯一合法取值的词条（``value_min == value_max``，或取值集合只有一个元素）
+    数值框只显示、不可编辑；换词条后立刻按新词条重算。区间未知（原始表没给出）
+    时同样按不可编辑处理：引擎也只接受它自己的目录值，让用户白打一遍没有意义。
+
+    表外词条（``None``）保持**可编辑**，这是既有口径：这类槽要先在同一个槽里换成
+    表内词条，才谈得上改数值，界面不额外加一层禁用（既有测试钉住了这一点）。
+    """
+    if entry is None:
+        return True
+    values = getattr(entry, "values", None)
+    if values:
+        return len(set(values)) > 1
+    if not entry.has_value_range:
+        return False
+    return entry.value_min != entry.value_max
+
+
 GAME_STATUS_CLOSED = "游戏状态：未检测到仁王3 进程 —— 可以写入存档"
 GAME_STATUS_RUNNING = (
     "游戏状态：{names} 正在运行 —— 写入会被拒绝；"
@@ -601,13 +622,24 @@ class EquipmentTab(ttk.Frame):
                 "在某一槽里输入关键词只缩小该槽的下拉列表，别的槽不受影响。"
                 "空格分隔多个关键词＝必须同时包含（如「星 恢复」）")
 
+    def _show_slot_value(self, index: int, value: int | None, *,
+                         editable: bool) -> None:
+        """把一个槽的数值框整体刷成当前记录的取值，并决定它能不能改。
+
+        切记录时**每个分支都必须走这里**：以前只有「固定词条」「恩宠」两个分支写了
+        数值框，普通词条 / 空槽 / 不存在的槽都留着上一条记录的值 —— 于是切到新记录后
+        词条变了、数值框还是旧的（用户实测的 bug）。
+        """
+        self.value_vars[index].set("" if value is None else str(value))
+        self.value_entries[index].state(["!disabled"] if editable else ["disabled"])
+
     def _reset_slot_widgets(self) -> None:
         self._set_candidates(None)
         for index in range(EFFECT_COUNT):
             self.slot_combos[index].configure(values=(EMPTY_LABEL,))
             self.slot_combos[index].set("")
             self.slot_labels[index].set("")
-            self.value_vars[index].set("")
+            self._show_slot_value(index, None, editable=False)
         self.search_status_var.set("选择一条记录后，这里会列出它自己的候选词条。")
 
     def _reset_slot_lists(self) -> None:
@@ -670,16 +702,28 @@ class EquipmentTab(ttk.Frame):
                 f"槽{index + 1}: 「{typed}」在本装备的候选词条里没有匹配")
 
     def _on_slot_picked(self, index: int) -> None:
-        """Pick a value: show the affix's own value span next to the box."""
+        """Pick a value: show the affix's own value span and whether it may be typed.
+
+        换词条后数值立刻跟着新词条走（用户规则）：有区间 → 可改；只有唯一取值 →
+        只显示该值且不可编辑。
+        """
         if self.selected is None:
             return
         text = self.slot_combos[index].get()
+        if not text or text == EMPTY_LABEL:
+            self.slot_labels[index].set("")
+            self._show_slot_value(index, None, editable=False)
+            return
         entry = self._candidate_entries.get(text)
         if entry is None:
             self.slot_labels[index].set("")
             return
-        self.value_vars[index].set(str(entry.value))
-        self.slot_labels[index].set(f"可改区间 {entry.describe_value_range()}")
+        editable = affix_value_editable(entry)
+        self._show_slot_value(index, entry.value, editable=editable)
+        span = (f"可改区间 {entry.describe_value_range()}" if editable
+                else entry.describe_value_range())
+        self.slot_labels[index].set(
+            span if editable else f"{span} ← 固定值，数值不可改（词条可换）")
 
     @staticmethod
     def _entry_from_id_text(text: str, db):
@@ -745,15 +789,15 @@ class EquipmentTab(ttk.Frame):
                 combo.configure(values=(EMPTY_LABEL,))
                 combo.set(EMPTY_LABEL)
                 combo.state(["!disabled"])
-                self.value_entries[index].state(["!disabled"])
                 self.slot_labels[index].set("")
+                self._show_slot_value(index, None, editable=False)
                 continue
             effect = view.effects[index]
-            self.value_entries[index].state(["!disabled"])
             if effect.is_empty:
                 combo.set(EMPTY_LABEL)
                 combo.state(["!disabled"])
                 self.slot_labels[index].set("")
+                self._show_slot_value(index, None, editable=False)
                 continue
             entry = pool.db.lookup(effect.effect_id) if pool is not None else None
             if view.slot_is_fixed(index, pool):
@@ -761,8 +805,7 @@ class EquipmentTab(ttk.Frame):
                 combo.configure(values=(f"{label}（固定，不可修改）",))
                 combo.set(f"{label}（固定，不可修改）")
                 combo.state(["disabled"])
-                self.value_vars[index].set(str(effect.value))
-                self.value_entries[index].state(["disabled"])
+                self._show_slot_value(index, effect.value, editable=False)
                 self.slot_labels[index].set(
                     f"数值={effect.value} 标识={effect.metadata:#010x}"
                     " ← 固定词条，词条与数值都不能改")
@@ -772,8 +815,7 @@ class EquipmentTab(ttk.Frame):
                 combo.configure(values=(f"{effect.effect_id:#06x} {named}",))
                 combo.set(f"{effect.effect_id:#06x} {named}（用下方恩宠/套装栏替换）")
                 combo.state(["disabled"])
-                self.value_vars[index].set(str(effect.value))
-                self.value_entries[index].state(["disabled"])
+                self._show_slot_value(index, effect.value, editable=False)
                 self.slot_labels[index].set(
                     f"数值={effect.value} ← 恩宠/套装词条：用下方【恩宠 / 套装】栏替换")
                 continue
@@ -782,14 +824,21 @@ class EquipmentTab(ttk.Frame):
                 combo.set(entry.label)
                 # A star slot is editable on purpose (★ is never a fixed affix).
                 marks = ("★ 词条（可改）" if view.slot_is_star(index) else "可改")
+                editable = affix_value_editable(entry)
+                self._show_slot_value(index, effect.value, editable=editable)
+                span = (f"可改区间 {entry.describe_value_range()}" if editable
+                        else entry.describe_value_range())
                 self.slot_labels[index].set(
                     f"数值={effect.value} 标识={effect.metadata:#010x}"
-                    f"（可改区间 {entry.describe_value_range()}）· {marks}")
+                    f"（{span}）· {marks}"
+                    + ("" if editable else " · 固定值，数值不可改（词条可换）"))
             else:
                 combo.state(["!disabled"])
                 outside = f"{effect.effect_id:#06x}（非本池词条）"
                 combo.configure(values=(EMPTY_LABEL, outside))
                 combo.set(outside)
+                self._show_slot_value(index, effect.value,
+                                      editable=affix_value_editable(entry))
                 self.slot_labels[index].set(
                     f"数值={effect.value} 标识={effect.metadata:#010x}"
                     " ← 这条不在本装备的词条表里；换掉它才能改这一槽")
@@ -1869,6 +1918,10 @@ class AccessoryEditorApp(tk.Tk):
                 self.slot_labels[index].set(
                     f"数值={effect.value} 标识={effect.metadata:#010x} "
                     f"（可改区间 {entry.describe_value_range()}）")
+        # 记录自带的槽位可能少于控件数（武器恒 5 槽、防具 4..6 槽）：尾部必须清空，
+        # 否则会留下上一条记录的数值 —— 切记录时看起来就是"数值框没跟着换"。
+        for index in range(len(view.effects), len(boxes)):
+            boxes[index].set("")
 
     def _selected_accessory(self) -> AccessoryView | None:
         if self.selected_accessory is None:
@@ -2482,6 +2535,9 @@ class AccessoryEditorApp(tk.Tk):
             self.soul_slot_labels[index].set(
                 f"数值={effect.value} 标识={effect.metadata:#010x}")
             self.soul_slot_combos[index].state(["!disabled"])
+            # 数值框能不能改跟着槽里这条词条走（唯一取值 → 只显示）。
+            self.soul_value_entries[index].state(
+                ["!disabled"] if affix_value_editable(entry) else ["disabled"])
         self.soul_level_var.set(str(view.level))
         self.soul_level_status_var.set(
             f"当前 Lv{view.level}（范围 1..{MAX_ITEM_LEVEL}）。"
@@ -3063,6 +3119,9 @@ class AccessoryEditorApp(tk.Tk):
                 label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
                 detail = f"数值={effect.value} 标识={effect.metadata:#010x}"
                 self.slot_combos[index].state(["!disabled"])
+                # 数值框能不能改跟着槽里这条词条走（唯一取值 → 只显示）。
+                self.value_entries[index].state(
+                    ["!disabled"] if affix_value_editable(entry) else ["disabled"])
             self.slot_combos[index].set(label)
             self.slot_labels[index].set(detail)
         self.item_var.set(
@@ -3155,6 +3214,8 @@ class AccessoryEditorApp(tk.Tk):
                 "" if text == EMPTY_LABEL else f"{text} —— 不是表内词条，不会被写入")
         else:
             self.value_vars[index].set(str(entry.value))
+            self.value_entries[index].state(
+                ["!disabled"] if affix_value_editable(entry) else ["disabled"])
             self.slot_labels[index].set(
                 f"词条 {entry.effect_id:#06x}，合法数值 "
                 f"{entry.describe_value_range()}")
@@ -3163,6 +3224,8 @@ class AccessoryEditorApp(tk.Tk):
         text = self.soul_slot_combos[index].get()
         entry = self.soul_by_label.get(text)
         self.soul_value_vars[index].set("" if entry is None else str(entry.value))
+        self.soul_value_entries[index].state(
+            ["!disabled"] if affix_value_editable(entry) else ["disabled"])
         self.soul_slot_labels[index].set(
             "" if entry is None and text == EMPTY_LABEL else
             (f"词条 {entry.effect_id:#06x}，合法数值 {entry.describe_value_range()}"
