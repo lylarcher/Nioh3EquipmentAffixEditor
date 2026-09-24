@@ -287,10 +287,11 @@ def version_lines(
 
     ``来源`` and ``加密组件`` are resolved **at run time**: the directory the
     running executable actually sits in and the crypto component it reads from
-    there.  The build-time project root is only shown as an extra ``构建来源``
-    line when it differs from the run-time location, so copying the exe
-    elsewhere (or building on another machine) no longer prints a stale path.
-    ``location``/``crypto_exe`` override the resolution (used by tests).
+    there, so copying the exe elsewhere (or building on another machine) never
+    prints a stale path.  The build-time project root is deliberately **not**
+    shown anywhere: it names the machine the build ran on, which is of no use to
+    whoever is running the editor.  It stays recorded in ``BUILD-INFO.txt`` for
+    diagnosis.  ``location``/``crypto_exe`` override the resolution (tests only).
     """
     if info is None:
         info = version_info()
@@ -307,24 +308,7 @@ def version_lines(
         f"{_pad_to('构建时间', label_width)}: {built_at}",
         f"{_pad_to('语言', label_width)}: {info.language}",
     ]
-    if location is None and crypto_exe is None:
-        build_root = info.built_from
-        if build_root and build_root != UNKNOWN and not _same_path(
-                build_root, runtime_root):
-            lines.append(
-                f"{_pad_to('构建来源', label_width)}: {_elide(build_root)}")
     return tuple(lines)
-
-
-def _same_path(left: str | Path, right: str | Path) -> bool:
-    """Compare two paths as text (no filesystem access; Windows-aware case)."""
-    import os
-
-    def normalize(value: str | Path) -> str:
-        text = os.path.normpath(str(value)).replace("/", "\\")
-        return os.path.normcase(text)
-
-    return normalize(left) == normalize(right)
 
 
 def version_banner(info: BuildInfo | None = None) -> str:

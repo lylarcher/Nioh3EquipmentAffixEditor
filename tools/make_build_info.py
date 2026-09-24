@@ -173,7 +173,7 @@ def _write_text(path: Path, text: str) -> None:
 
 def write_artifacts(info: BuildInfo, *, module_path: Path, out_dir: Path,
                     banner: str) -> dict[str, Path]:
-    """Write the module, the JSON record and the text banner."""
+    """Write the module, the JSON record and the text report."""
     written = {
         "module": module_path,
         "json": out_dir / JSON_FILENAME,
@@ -182,7 +182,10 @@ def write_artifacts(info: BuildInfo, *, module_path: Path, out_dir: Path,
     _write_text(module_path, render_module(info))
     _write_text(written["json"],
                 json.dumps(info.as_dict(), indent=2, ensure_ascii=False) + "\n")
-    _write_text(written["text"], banner + "\n")
+    # 构建时所在的目录只写进这份报告（内部诊断用）：它是构建机的路径，对使用者
+    # 没有意义，所以横幅 / 界面 / --version 都不显示它（见 version_lines 的说明）。
+    _write_text(written["text"],
+                banner + "\n" + f"构建来源  : {info.built_from}\n")
     return written
 
 

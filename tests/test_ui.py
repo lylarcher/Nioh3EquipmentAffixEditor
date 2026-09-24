@@ -117,7 +117,8 @@ class ConstructionTests(UiTestCase):
         informed.assert_called_once()
         title, body = informed.call_args[0]
         self.assertEqual(title, "版本信息")
-        for expected in (info.commit, info.built_from, info.crypto_exe,
+        # 构建来源（构建机路径）不在对话框里；出现的是运行目录。
+        for expected in (info.commit, str(ui.resource_root()), info.crypto_exe,
                          info.language, "完整 commit", "分支"):
             self.assertIn(expected, body)
 

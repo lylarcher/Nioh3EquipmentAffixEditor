@@ -151,9 +151,9 @@ PYTHON_VERSION = '3.11.9'
         runtime_root = paths.application_root()
         self.assertIn(str(runtime_root), text)
         self.assertIn(str(paths.default_crypto_exe()), text)
-        # The build-time root is still visible, but labelled as such.
-        self.assertIn(r"D:\ci\checkout", text)
-        self.assertIn("构建来源", text)
+        # The build-time root is never printed: it names the build machine.
+        self.assertNotIn(r"D:\ci\checkout", text)
+        self.assertNotIn("构建来源", text)
         self.assertNotIn(r"来源      : D:\ci\checkout", text)
 
     def test_run_time_location_is_where_the_exe_lives(self) -> None:
@@ -167,7 +167,7 @@ PYTHON_VERSION = '3.11.9'
             text = version_banner()
         self.assertIn(str(fake), text)
         self.assertIn(str(fake / "bin" / "Nioh_Savefile_decrypt.exe"), text)
-        self.assertIn("构建来源", text)
+        self.assertNotIn("构建来源", text)
 
 
 class BannerRenderingTests(unittest.TestCase):
@@ -188,7 +188,7 @@ class BannerRenderingTests(unittest.TestCase):
         self.assertIn(str(paths.default_crypto_exe()), text)
         self.assertIn(info.built_at, text)
         self.assertIn(info.language, text)
-        self.assertIn(info.built_from, text)  # kept, as 构建来源
+        self.assertNotIn(info.built_from, text)  # 构建机路径一律不显示
 
     def test_dirty_worktree_is_called_out(self) -> None:
         self.assertIn("未提交改动", version_banner(sample_info(dirty=True)))
@@ -198,9 +198,13 @@ class BannerRenderingTests(unittest.TestCase):
         info = sample_info(source="git", built_at=UNKNOWN)
         self.assertIn("未构建", version_banner(info))
 
-    def test_no_extra_line_when_the_build_root_is_the_run_time_root(self) -> None:
-        info = sample_info(built_from=str(paths.application_root()))
-        self.assertNotIn("构建来源", version_banner(info))
+    def test_the_build_root_never_produces_a_line(self) -> None:
+        """构建目录与运行目录相同、或完全不同，都不该多出任何一行。"""
+        same = sample_info(built_from=str(paths.application_root()))
+        other = sample_info(built_from=r"D:\somewhere-else")
+        self.assertNotIn("构建来源", version_banner(same))
+        self.assertNotIn("构建来源", version_banner(other))
+        self.assertNotIn(r"D:\somewhere-else", version_banner(other))
 
     def test_long_paths_are_elided(self) -> None:
         long_root = "D:\\" + "x" * 200

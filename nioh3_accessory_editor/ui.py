@@ -121,6 +121,11 @@ ALL_FILTER = "(全部)"
 #: acknowledgement that it sits on its title screen, so the state is shown
 #: continuously instead of only when a write is refused.
 GAME_STATUS_UNKNOWN = "游戏状态：检查中…"
+#: 「还没读数」与「读了但没选」必须分开说：合并成一句时，在武器/防具页签点
+#: 全局【应用修改】（旧行为只认饰品选中项）会得到一句完全误导的提示。
+MSG_NEED_DATA = "还没有读取数据，请先点【读取数据】"
+MSG_NEED_SELECTION = "还没有选中记录，请在左侧列表里点一行"
+
 GAME_STATUS_CLOSED = "游戏状态：未检测到仁王3 进程 —— 可以写入存档"
 GAME_STATUS_RUNNING = (
     "游戏状态：{names} 正在运行 —— 写入会被拒绝；"
@@ -414,6 +419,10 @@ class EquipmentTab(ttk.Frame):
         self.create_button.pack(side=tk.LEFT, padx=4)
         self.preview_button = ttk.Button(row, text="预览改动", command=self.preview_edits)
         self.preview_button.pack(side=tk.LEFT, padx=2)
+        # 本页签自己的【应用修改】：底部那条全局按钮按页签分派，这里也留一个
+        # 就地入口，免得"预览改动旁边没有应用"让人以为只能靠全局按钮。
+        self.apply_button = ttk.Button(row, text="应用修改", command=self.apply_edits)
+        self.apply_button.pack(side=tk.LEFT, padx=2)
         self.create_status_var = tk.StringVar(
             value="实验性功能：需要进游戏实测确认后才算数。用法：在右侧槽位挑好词条，"
                   "选种类并点「新建到空槽」。模板优先取同种类；没有同种类时改用"
@@ -877,10 +886,24 @@ class EquipmentTab(ttk.Frame):
             names.append(f"槽{index + 1}: {old_name} → {new_name}{value}")
         return "；".join(names)
 
-    def preview_edits(self) -> None:
+    def _require_view(self) -> EquipmentView | None:
+        """当前选中的记录；没有就给出**准确**的提示并返回 ``None``。
+
+        「还没读取数据」和「读了但没选记录」是两件事，合并成一句话会把用户
+        引向错误的操作（见 MSG_NEED_DATA / MSG_NEED_SELECTION）。
+        """
+        if self.app.decrypted is None:
+            messagebox.showwarning("提示", MSG_NEED_DATA)
+            return None
         view = self._selected_view()
-        if view is None or self.app.decrypted is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        if view is None:
+            messagebox.showwarning("提示", MSG_NEED_SELECTION)
+            return None
+        return view
+
+    def preview_edits(self) -> None:
+        view = self._require_view()
+        if view is None:
             return
         edits = self.current_edits()
         if not edits:
@@ -901,9 +924,8 @@ class EquipmentTab(ttk.Frame):
         self.app._status(f"{self.title}记录 #{view.slot_index} 预览：{text}")
 
     def apply_edits(self) -> None:
-        view = self._selected_view()
-        if view is None or self.app.decrypted is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        view = self._require_view()
+        if view is None:
             return
         edits = self.current_edits()
         if not edits:
@@ -937,9 +959,8 @@ class EquipmentTab(ttk.Frame):
         self.plus_button.state(state)
 
     def apply_level(self) -> None:
-        view = self._selected_view()
-        if view is None or self.app.decrypted is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        view = self._require_view()
+        if view is None:
             return
         try:
             level = int(self.level_var.get().strip(), 10)
@@ -969,9 +990,8 @@ class EquipmentTab(ttk.Frame):
         self.reload()
 
     def apply_plus(self) -> None:
-        view = self._selected_view()
-        if view is None or self.app.decrypted is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        view = self._require_view()
+        if view is None:
             return
         try:
             plus = int(self.plus_var.get().strip(), 10)
@@ -1028,9 +1048,8 @@ class EquipmentTab(ttk.Frame):
                 break
 
     def apply_grace(self) -> None:
-        view = self._selected_view()
-        if view is None or self.app.decrypted is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        view = self._require_view()
+        if view is None:
             return
         text_value = self.grace_combo.get().strip()
         if not text_value:
@@ -1153,6 +1172,7 @@ class EquipmentTab(ttk.Frame):
         self.create_status_var.set(message)
         self.create_button.state(["disabled"])
         self.preview_button.state(["disabled"])
+        self.apply_button.state(["disabled"])
 
 
 
@@ -1395,8 +1415,9 @@ class AccessoryEditorApp(tk.Tk):
         self.verify_var = tk.BooleanVar(value=self.config.default_verify)
         ttk.Checkbutton(controls, text="写入校验",
                         variable=self.verify_var).pack(side=tk.LEFT, padx=6)
-        ttk.Button(controls, text="应用修改",
-                   command=self.apply_edits_to_selection).pack(side=tk.LEFT, padx=2)
+        self.apply_button = ttk.Button(controls, text="应用修改",
+                                       command=self.apply_current_tab_edits)
+        self.apply_button.pack(side=tk.LEFT, padx=2)
         self.write_button = ttk.Button(controls, text="写入存档", command=self.write_save)
         self.write_button.pack(side=tk.LEFT, padx=2)
 
@@ -2521,9 +2542,12 @@ class AccessoryEditorApp(tk.Tk):
                 "value": wanted, "metadata": current.metadata}
 
     def apply_soul_edits_to_selection(self) -> None:
+        if self.decrypted is None:
+            messagebox.showwarning("提示", MSG_NEED_DATA)
+            return
         view = self._selected_soul()
-        if self.decrypted is None or view is None:
-            messagebox.showwarning("提示", "请先读取存档并在魂核页选择一条记录")
+        if view is None:
+            messagebox.showwarning("提示", MSG_NEED_SELECTION)
             return
         edits = []
         for index in range(EFFECT_COUNT):
@@ -2551,9 +2575,12 @@ class AccessoryEditorApp(tk.Tk):
         self._refresh_after_edit(target)
 
     def apply_soul_level_to_selection(self) -> None:
+        if self.decrypted is None:
+            messagebox.showwarning("提示", MSG_NEED_DATA)
+            return
         view = self._selected_soul()
-        if self.decrypted is None or view is None:
-            messagebox.showwarning("提示", "请先读取存档并在魂核页选择一条记录")
+        if view is None:
+            messagebox.showwarning("提示", MSG_NEED_SELECTION)
             return
         try:
             level = int(self.soul_level_var.get().strip(), 10)
@@ -2582,9 +2609,12 @@ class AccessoryEditorApp(tk.Tk):
         self._refresh_after_edit(target)
 
     def apply_soul_kind_to_selection(self) -> None:
+        if self.decrypted is None:
+            messagebox.showwarning("提示", MSG_NEED_DATA)
+            return
         view = self._selected_soul()
-        if self.decrypted is None or view is None:
-            messagebox.showwarning("提示", "请先读取存档并在魂核页选择一条记录")
+        if view is None:
+            messagebox.showwarning("提示", MSG_NEED_SELECTION)
             return
         chosen = self.soul_kind_choices.get(self.soul_kind_combo.get())
         if chosen is None:
@@ -2641,12 +2671,16 @@ class AccessoryEditorApp(tk.Tk):
 
     @staticmethod
     def _version_text() -> str:
-        """Four required facts: commit tail, source, build time, language."""
+        """Four required facts: commit tail, program folder, build time, language.
+
+        ``来源`` is the folder the running copy sits in — never the build machine's
+        path (that one is only recorded in ``BUILD-INFO.txt``).
+        """
         info = version_info()
         built = info.built_at if info.built_at != UNKNOWN else "未构建（源码运行）"
         return (
             f"版本 v{info.version} · commit {info.commit}{info.dirty_suffix}\n"
-            f"来源 {info.built_from}\n"
+            f"来源 {paths.application_root()}\n"
             f"加密组件 {info.crypto_exe}\n"
             f"构建时间 {built} · 语言 {info.language}"
         )
@@ -3071,8 +3105,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def apply_grace_to_selection(self) -> None:
         """Replace the selected accessory's 恩宠 (memory only; 写入存档 commits)."""
-        if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        if not self._require_accessory_selection():
             return
         text = self.grace_combo.get()
         if not text:
@@ -3208,9 +3241,46 @@ class AccessoryEditorApp(tk.Tk):
                 edits.append(dict(edit, record_index=self.selected_accessory))
         return tuple(edits)
 
+    def _current_tab(self) -> tk.Widget | None:
+        """当前选中的 notebook 页签控件（取不到就返回 None）。"""
+        try:
+            return self.notebook.nametowidget(self.notebook.select())
+        except (tk.TclError, KeyError):
+            return None
+
+    def apply_current_tab_edits(self) -> None:
+        """底部【应用修改】：按**当前页签**分派到该页签自己的处理器。
+
+        以前这里固定调用饰品页签的 :meth:`apply_edits_to_selection`，于是在武器 /
+        防具页签里点它会得到「请先读取数据并选择一条记录」——页签明明已经读取了
+        数据也选了记录，因为饰品那份选中项当然是空的。
+        """
+        tab = self._current_tab()
+        for equipment_tab in self.equipment_tabs:
+            if tab is equipment_tab:
+                equipment_tab.apply_edits()
+                return
+        if tab is self.accessory_tab:
+            self.apply_edits_to_selection()
+            return
+        if tab is self.soul_tab:
+            self.apply_soul_edits_to_selection()
+            return
+        messagebox.showwarning(
+            "提示", "请用当前页签自己的【应用修改】按钮应用这一页的改动。")
+
+    def _require_accessory_selection(self) -> bool:
+        """饰品页签的选中记录是否就绪；不然给出准确提示（两句分开）。"""
+        if self.decrypted is None:
+            messagebox.showwarning("提示", MSG_NEED_DATA)
+            return False
+        if self.selected_accessory is None:
+            messagebox.showwarning("提示", MSG_NEED_SELECTION)
+            return False
+        return True
+
     def apply_edits_to_selection(self) -> None:
-        if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        if not self._require_accessory_selection():
             return
         target = self.selected_accessory
         edits = self._current_edits()
@@ -3337,8 +3407,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def apply_kind_to_selection(self) -> None:
         """Swap the selected record's 种类 (memory only; 写入存档 commits)."""
-        if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        if not self._require_accessory_selection():
             return
         chosen = self.kind_choices.get(self.kind_combo.get())
         if chosen is None:
@@ -3378,8 +3447,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def apply_level_to_selection(self) -> None:
         """Change the selected record's 等级 (memory only; 写入存档 commits)."""
-        if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        if not self._require_accessory_selection():
             return
         text = self.level_var.get().strip()
         try:
@@ -3420,8 +3488,7 @@ class AccessoryEditorApp(tk.Tk):
 
     def apply_plus_to_selection(self) -> None:
         """Change the selected record's +值 (memory only; 写入存档 commits)."""
-        if self.decrypted is None or self.selected_accessory is None:
-            messagebox.showwarning("提示", "请先读取数据并选择一条记录")
+        if not self._require_accessory_selection():
             return
         text = self.plus_var.get().strip()
         try:

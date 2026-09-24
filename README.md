@@ -463,7 +463,6 @@ commit    : 34cca8de (工作区有未提交改动)
 加密组件  : D:\wherever-you-put-it\Nioh3AccessoryEditor\bin\Nioh_Savefile_decrypt.exe
 构建时间  : 2026-09-19T11:01:52+08:00
 语言      : CPython 3.10.10 (仅标准库 / stdlib only, 含 tkinter GUI)
-构建来源  : D:\AIWorkspace\DSHWorkSpcae\Nioh3AccessoryEditor
 ```
 
 | Fact | Meaning |
@@ -472,7 +471,7 @@ commit    : 34cca8de (工作区有未提交改动)
 | `来源` / `加密组件` | where the running copy **is right now**: the folder holding the executable and the crypto component it reads from there. Move the exe and this follows it — no rebuild needed |
 | `构建时间` | local build time, ISO-8601 with UTC offset |
 | `语言` | language/runtime the build targets (CPython + stdlib only) |
-| `构建来源` | only shown when the folder the build ran in differs from where the copy runs now; `BUILD-INFO.txt` always records the build-time path |
+| `构建来源` | **never shown.** The folder the build ran in is only recorded in `BUILD-INFO.txt` for diagnosis, because it names the build machine rather than anything about the copy you are running |
 
 Where it shows up:
 

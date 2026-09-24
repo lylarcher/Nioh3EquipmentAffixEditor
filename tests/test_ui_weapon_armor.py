@@ -641,6 +641,128 @@ class EquipmentTabTestCase(UiTestCase):
         self.assertIn("装备词条修改器", ui.TITLE)
         self.assertNotIn("饰品词条修改器", ui.TITLE)
 
+    # ------------------------------------------- 应用修改：入口与页签分派
+    #
+    # 用户实测的 bug：在【防具】页签里读取数据并选中记录后，点底部那条【应用修改】
+    # 弹「请先读取数据并选择一条记录」——因为底部按钮固定调用饰品页签的处理器，
+    # 而武器 / 防具页签当时根本没有自己的应用入口。下面把"入口存在""按页签分派"
+    # "提示分两句"三件事钉住。
+
+    @staticmethod
+    def _other_candidate(tab: ui.EquipmentTab, pool, exclude: tuple[int, ...]):
+        """本槽候选里挑一个可编辑、且不是 ``exclude`` 那些 id 的词条。"""
+        return _first(pool.db.all(),
+                      lambda entry: not entry.is_fixed
+                      and entry.effect_id not in exclude
+                      and entry.label in tab._candidate_entries)
+
+    def _expected_bytes(self, data, layout, tab: ui.EquipmentTab) -> bytes:
+        return editor.apply_equipment_edits(
+            data, tab.current_edits(), item_db=self.item_db,
+            pools=self.app.equipment_pools, grace_db=self.grace_db, layout=layout)
+
+    def test_the_equipment_tab_has_its_own_apply_button(self) -> None:
+        """预览旁边必须有【应用修改】，而不是只能靠底部那条全局按钮。"""
+        data, layout = self._load_standard()
+        tab = self.select("武器", 4)
+        replacement = self._other_candidate(tab, self.ranged,
+                                            (self.bow_only.effect_id,))
+        tab.slot_combos[0].set(replacement.label)
+        tab.value_vars[0].set(str(replacement.value))
+        expected = self._expected_bytes(data, layout, tab)
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            tab.apply_button.invoke()
+        self.assertFalse(warned.called)
+        self.assertEqual(self.app.decrypted, expected)
+
+    def test_the_bottom_button_applies_on_the_equipment_tab(self) -> None:
+        """实测场景：防具页签 → 选中记录 → 改一个槽 → 底部【应用修改】必须生效。"""
+        data, layout = self._load_standard()
+        tab = self.tab("防具")
+        self.app.notebook.select(tab)
+        self.select("防具", 5)
+        replacement = self._other_candidate(tab, self.armor,
+                                            (self.armor_free.effect_id,))
+        tab.slot_combos[0].set(replacement.label)
+        tab.value_vars[0].set(str(replacement.value))
+        expected = self._expected_bytes(data, layout, tab)
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            self.app.apply_button.invoke()
+        self.assertFalse(warned.called, "底部【应用修改】不该再弹任何提示")
+        self.assertEqual(self.app.decrypted, expected)
+        written = _first(editor.list_equipment(self.app.decrypted, big="防具",
+                                               layout=layout, item_db=self.item_db),
+                         lambda view: view.slot_index == 5)
+        self.assertEqual(written.effects[0].effect_id, replacement.effect_id)
+
+    def test_the_bottom_button_is_dispatched_by_the_current_tab(self) -> None:
+        """四个页签各走自己的处理器，谁也不替谁干活。"""
+        self._load_standard()
+        weapon, armor = self.tab("武器"), self.tab("防具")
+        with mock.patch.object(self.app, "apply_edits_to_selection") as accessory, \
+                mock.patch.object(self.app, "apply_soul_edits_to_selection") as soul, \
+                mock.patch.object(weapon, "apply_edits") as weapon_apply, \
+                mock.patch.object(armor, "apply_edits") as armor_apply:
+            handlers = (accessory, soul, weapon_apply, armor_apply)
+            for widget, expected in ((self.app.accessory_tab, accessory),
+                                     (self.app.soul_tab, soul),
+                                     (weapon, weapon_apply),
+                                     (armor, armor_apply)):
+                for handler in handlers:
+                    handler.reset_mock()
+                self.app.notebook.select(widget)
+                self.app.apply_button.invoke()
+                expected.assert_called_once()
+                for handler in handlers:
+                    if handler is not expected:
+                        handler.assert_not_called()
+
+    def test_no_data_says_read_the_save_first(self) -> None:
+        """没读数时说"先读取数据"，不再和"没选记录"混成一句。"""
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            self.app.notebook.select(self.app.accessory_tab)
+            self.app.apply_current_tab_edits()
+        self.assertEqual(warned.call_args.args[1], ui.MSG_NEED_DATA)
+        tab = self.tab("武器")
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            tab.apply_edits()
+        self.assertEqual(warned.call_args.args[1], ui.MSG_NEED_DATA)
+
+    def test_read_but_no_record_says_pick_a_row(self) -> None:
+        """读了数据但没选记录时，提示去列表里点一行。"""
+        self._load_standard()
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            self.app.notebook.select(self.app.accessory_tab)
+            self.app.apply_current_tab_edits()
+        self.assertEqual(warned.call_args.args[1], ui.MSG_NEED_SELECTION)
+        tab = self.tab("防具")
+        self.app.notebook.select(tab)
+        tab.selected = None
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            self.app.apply_button.invoke()
+        self.assertEqual(warned.call_args.args[1], ui.MSG_NEED_SELECTION)
+
+    def test_the_two_messages_are_distinct(self) -> None:
+        self.assertNotEqual(ui.MSG_NEED_DATA, ui.MSG_NEED_SELECTION)
+        for message in (ui.MSG_NEED_DATA, ui.MSG_NEED_SELECTION):
+            self.assertNotIn("并选择一条记录", message)
+
+    def test_the_write_button_does_not_need_an_accessory_selection(self) -> None:
+        """底部【写入存档】只看数据与存档，不看当前页签有没有选中饰品。"""
+        self._load_standard()
+        self.app.notebook.select(self.tab("防具"))
+        self.app.selected_save = mock.MagicMock()
+        with mock.patch.object(ui, "running_game_processes", return_value=()), \
+                mock.patch.object(ui.messagebox, "askyesno",
+                                  return_value=False) as asked, \
+                mock.patch.object(ui.messagebox, "showwarning") as warned, \
+                mock.patch.object(ui, "commit_save") as committed:
+            self.app.write_save()
+        self.assertTrue(asked.called)
+        self.assertFalse(warned.called)
+        self.assertFalse(committed.called)
+
+
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
