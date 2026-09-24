@@ -207,7 +207,7 @@ class BilingualDocsTests(unittest.TestCase):
         self.assertIn("'readme.txt'", script)
         user_readme = (PROJECT_ROOT / "readme.txt").read_text(encoding="utf-8")
         self.assertIn("仅供测试学习用，不要用于联机影响游戏平衡", user_readme)
-        for marker in ("读取数据", "应用修改", "写入副本"):
+        for marker in ("读取数据", "应用修改", "写入存档"):
             self.assertIn(marker, user_readme)
 
     def test_the_two_readmes_cross_link_on_the_first_line(self) -> None:
