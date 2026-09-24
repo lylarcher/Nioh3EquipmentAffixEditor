@@ -2223,6 +2223,75 @@ GRACE_FAMILY_BYTE9 = 0x0C
 #: so the refusal message can say *what* the slot is instead of "not a 恩宠".
 SET_FAMILY_BYTE9 = 0x4C
 
+#: 恩宠名表自身的两大类（见 ``data/grace_affixes.json`` 的 category）。用户规则：
+#: **套装槽一旦存在就锁死**（既不能换成别的套装，也不能改成恩宠），**恩宠槽只能换成
+#: 另一个恩宠**。理由是套装与物品种类强绑定（例如「加贺百万石的荣华」只出在
+#: 百万石之铠与百万石长枪上），换个套装就等于让物品与它的套装脱钩。
+SET_KINDS = ("武士套装", "忍者套装")
+
+
+def grace_family_of(category: str) -> str:
+    """名表条目属于哪一族：``恩宠`` / ``套装`` / ``""``（表里没有的类别）。"""
+    if category in GRACE_KINDS:
+        return "恩宠"
+    if category in SET_KINDS:
+        return "套装"
+    return ""
+
+
+def grace_slot_kind(effect: "records.EffectSlot", *, grace_db: GraceDb) -> str:
+    """一个恩宠 / 套装槽属于哪一族；认不准返回 ``""``（调用方据此拒绝）。
+
+    两个条件都要满足：
+
+    * 名表条目的 ``category`` 认得出族（恩宠 / 上位恩宠 / 武士套装 / 忍者套装），
+    * metadata byte 9 的**低 4 位**是族标签 ``0x0C``（实测两个族都是它）。
+
+    这里**不**拿整字节去比 ``0x0C`` / ``0x4C``：实测发现那个 ``0x40`` 位是
+    专属/固定标记（与低字节的 ``0x4000`` 固定位同源），照整字节比会把
+    **带固定位的恩宠槽误判成套裝**，而 P5 的用例明确要求它照样能换。
+    """
+    entry = grace_db.lookup(effect.effect_id)
+    family = grace_family_of(entry.category) if entry is not None else ""
+    if not family:
+        return ""
+    if ((effect.metadata >> 8) & 0x0F) != (GRACE_FAMILY_BYTE9 & 0x0F):
+        return ""
+    return family
+
+
+def grace_replace_refusal(
+    effect: "records.EffectSlot",
+    *,
+    grace_db: GraceDb,
+    slot_index: int,
+    record_index: int,
+    item_label: str,
+) -> str:
+    """这个恩宠 / 套装槽不能替换的原因；可以替换时返回空串（fail closed）。"""
+    entry = grace_db.lookup(effect.effect_id)
+    name = entry.name if entry is not None else "未命名"
+    kind = grace_slot_kind(effect, grace_db=grace_db)
+    if kind == "套装":
+        return (f"记录 #{record_index}（{item_label}）的槽{slot_index + 1} 是套装"
+                f"「{name}」：套装与物品种类强绑定，不能替换"
+                "（既不能换成别的套装，也不能改成恩宠）")
+    if kind != "恩宠":
+        return (f"记录 #{record_index}（{item_label}）的槽{slot_index + 1} 不是可替换的恩宠"
+                f"（名表类别 {entry.category if entry is not None else '未知'}，"
+                f"族字节 {(effect.metadata >> 8) & 0xFF:#04x}），无法确认可以安全替换")
+    return ""
+
+
+def assert_grace_target_is_a_blessing(entry: AffixEntry, *, record_index: int) -> None:
+    """目标必须是恩宠族的条目（用户规则：恩宠不能换成套装）。"""
+    if grace_family_of(entry.category) != "恩宠":
+        raise GraceEditError(
+            f"记录 #{record_index}：「{entry.name}」是{entry.category}，"
+            "恩宠只能换成另一个恩宠，不能换成套装"
+            "（套装与物品种类强绑定，换错会让游戏里的显示与加成对不上）"
+        )
+
 
 class GraceEditError(EditorError):
     """Raised when a 恩宠 slot may not be rewritten (fail closed)."""
@@ -2283,34 +2352,29 @@ def grace_edit_availability(
             slot_index=slot_index, current_id=last.effect_id,
             current_name=affix_db.describe(last.effect_id), kind="饰品词条",
         )
-    if family == SET_FAMILY_BYTE9:
+    slot_kind = grace_slot_kind(last, grace_db=grace_db)
+    if slot_kind == "套装":
         return GraceAvailability(
             False,
-            f"末位槽 [{slot_index}] 是套装/专属套装词条"
-            f"（{entry.name if entry else '未命名'}，id={last.effect_id:#06x}），"
-            "按规则不能改成恩宠",
+            f"末位槽 [{slot_index}] 是套装「{entry.name if entry else '未命名'}」"
+            f"（id={last.effect_id:#06x}）：套装与物品种类强绑定，不能替换"
+            "（既不能换成别的套装，也不能改成恩宠）",
             slot_index=slot_index, current_id=last.effect_id,
             current_name=entry.name if entry else "", kind=kind or "套装",
         )
-    if family != GRACE_FAMILY_BYTE9:
-        return GraceAvailability(
-            False,
-            f"末位槽 [{slot_index}] 的标识族字节是 {family:#04x}，"
-            f"不是恩宠族 {GRACE_FAMILY_BYTE9:#04x}，无法确认可以安全替换",
-            slot_index=slot_index, current_id=last.effect_id,
-            current_name=entry.name if entry else "", kind=kind,
-        )
-    if entry is None or kind not in GRACE_KINDS:
+    if slot_kind != "恩宠":
         return GraceAvailability(
             False,
             f"末位槽 [{slot_index}] 的 id {last.effect_id:#06x} 不在恩宠名表里，"
-            "无法确认它是可替换的恩宠",
+            f"或不是可替换的恩宠（名表类别 {kind or '未知'}，族字节 {family:#04x}），"
+            "无法确认可以安全替换",
             slot_index=slot_index, current_id=last.effect_id,
             current_name=entry.name if entry else "", kind=kind,
         )
     return GraceAvailability(
         True,
-        f"末位槽 [{slot_index}] 当前是 {entry.name}，可以改成任意其他恩宠",
+        f"末位槽 [{slot_index}] 当前是 {entry.name}，可以改成另一个恩宠"
+        "（不能换成套装：套装与物品种类强绑定）",
         slot_index=slot_index, current_id=last.effect_id,
         current_name=entry.name, kind=kind,
     )
@@ -2404,7 +2468,8 @@ def plan_grace_edit(
     if target.category not in GRACE_KINDS:
         raise GraceEditError(
             f"{target.name} 是「{target.category}」，不是恩宠；"
-            "只有 xxx的恩宠 才能改成另外的 xxx的恩宠"
+            "恩宠只能换成另一个恩宠，不能换成套装"
+            "（套装与物品种类强绑定，换错会让游戏里的显示与加成对不上）"
         )
 
     if known_ids is None and layout is None:
@@ -2521,6 +2586,13 @@ def _validate_equipment_grace_edit(
             f"{grace_slot + 1}（当前是 {grace_db.describe(current)}），"
             f"不能写到槽{slot_index + 1}"
         )
+    # 用户规则：套装槽锁死、恩宠只能换恩宠（目标与当前槽两个方向都查）。
+    refusal = grace_replace_refusal(view.effects[grace_slot], grace_db=grace_db,
+                                    slot_index=grace_slot, record_index=record_index,
+                                    item_label=view.item_label)
+    if refusal:
+        raise GraceEditError(refusal)
+    assert_grace_target_is_a_blessing(entry, record_index=record_index)
     requested = edit.get("value")
     if requested is not None and requested != entry.value:
         raise EditorError(
@@ -2551,6 +2623,15 @@ def equipment_grace_availability(
         )
     effect = view.effects[slot_index]
     entry = grace_db.lookup(effect.effect_id)
+    refusal = grace_replace_refusal(effect, grace_db=grace_db, slot_index=slot_index,
+                                    record_index=view.slot_index,
+                                    item_label=view.item_label)
+    if refusal:
+        return GraceAvailability(
+            False, refusal, slot_index=slot_index, current_id=effect.effect_id,
+            current_name=entry.name if entry is not None else "",
+            kind=entry.category if entry is not None else "",
+        )
     return GraceAvailability(
         True, "", slot_index=slot_index, current_id=effect.effect_id,
         current_name=entry.name if entry is not None else "",
@@ -2569,10 +2650,15 @@ def plan_equipment_grace_edit(
     known_ids: frozenset[int] | None = None,
     layout: records.InventoryLayout | None = None,
 ) -> EditPlan:
-    """校验一件武器/防具的恩宠 -> 恩宠(或套装) 改动，返回计划（不写字节）。"""
+    """校验一件武器/防具的 恩宠 -> 恩宠 改动，返回计划（不写字节）。
+
+    目标**只能**是恩宠（含上位恩宠）：套装与物品种类强绑定，不能作为替换目标
+    （用户规则，与饰品路径同口径）。
+    """
     target = grace_db.lookup(grace_id)
     if target is None:
         raise GraceEditError(f"恩宠/套装 id {grace_id:#06x} 不在恩宠名表里")
+    assert_grace_target_is_a_blessing(target, record_index=record_index)
     views = {view.slot_index: view
              for view in list_equipment(decrypted, item_db=item_db, layout=layout,
                                         known_ids=known_ids)}

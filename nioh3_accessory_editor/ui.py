@@ -32,6 +32,7 @@ from .bootstrap import ensure_once, last_report
 from .config import ConfigError, EditorConfig, load_config
 from .editor import (
     apply_equipment_grace_edit,
+    grace_family_of,
     equipment_grace_availability,
     plan_equipment_grace_edit,
     AccessoryView,
@@ -398,11 +399,10 @@ class EquipmentTab(ttk.Frame):
         row.pack(fill=tk.X)
         ttk.Label(row, text="改成:").pack(side=tk.LEFT)
         self.grace_var = tk.StringVar(value="")
-        # 全部 77 条（恩宠 + 上位恩宠 + 武士套装 + 忍者套装），与 all() 同序：
-        # GraceDb.labels() 只给 21 条恩宠，装备上实测也有套装。
-        self.grace_values = tuple(
-            f"{entry.effect_id:#06x} {entry.name}（{entry.category}）"
-            for entry in self.app.grace_db.all())
+        # 只列**恩宠**族（GraceDb.labels() = 恩宠 + 上位恩宠，共 21 条，与饰品页签同一
+        # 来源）：用户规则是套装槽锁死不可替换、恩宠槽只能换成另一个恩宠，所以下拉里
+        # 根本不该出现套装，从源头上就选不到。
+        self.grace_values = self.app.grace_db.labels()
         self.grace_combo = ttk.Combobox(row, state="readonly", width=40,
                                         textvariable=self.grace_var,
                                         values=self.grace_values)
@@ -800,6 +800,31 @@ class EquipmentTab(ttk.Frame):
                 self._show_slot_value(index, None, editable=False)
                 continue
             entry = pool.db.lookup(effect.effect_id) if pool is not None else None
+            # 先查恩宠/套装名表：名表条目的 0x40 是它自己的标记，不是"同名固定词条"，
+            # 所以套装/恩宠绝不能落进下面的"固定，不可修改"分支（用户实测案例：#1206
+            # 的槽5 是 0xd363 加贺百万石的荣华，被显示成"非本池词条（固定，不可修改）"）。
+            grace_entry = self.app.grace_db.lookup(effect.effect_id)
+            if grace_entry is not None:
+                family = grace_family_of(grace_entry.category)
+                named = self.app.grace_db.describe(effect.effect_id)
+                kind = grace_entry.category
+                combo.state(["disabled"])
+                self._show_slot_value(index, effect.value, editable=False)
+                if family == "套装":
+                    text_value = f"{effect.effect_id:#06x} {named}（不可替换）"
+                    combo.configure(values=(text_value,))
+                    combo.set(text_value)
+                    self.slot_labels[index].set(
+                        f"数值={effect.value} 标识={effect.metadata:#010x}"
+                        f" ← {kind}：套装与物品种类强绑定，任何替换都会被拒绝")
+                else:
+                    text_value = f"{effect.effect_id:#06x} {named}（{kind}）"
+                    combo.configure(values=(text_value,))
+                    combo.set(f"{effect.effect_id:#06x} {named}（用下方恩宠/套装栏替换）")
+                    self.slot_labels[index].set(
+                        f"数值={effect.value} ← {kind}（{kind}）："
+                        "用下方【恩宠 / 套装】栏替换（恩宠只能换恩宠）")
+                continue
             if view.slot_is_fixed(index, pool):
                 label = entry.label if entry is not None else                     f"{effect.effect_id:#06x}（非本池词条）"
                 combo.configure(values=(f"{label}（固定，不可修改）",))
@@ -902,14 +927,22 @@ class EquipmentTab(ttk.Frame):
         if view is None:
             return ()
         edits: list[dict[str, int]] = []
+        skipped: list[str] = []
         for index in self._editable_slots(view):
             try:
                 edit = self._pending_edit(index, view)
             except UiEditError as error:
-                messagebox.showwarning("提示", str(error))
-                return ()
+                # 一格里是表外词条只影响它自己：记下来，其余槽的改动照常收集，
+                # 不要因为一格而把整条记录的改动全丢掉（用户实测反馈）。
+                skipped.append(f"槽{index + 1}（{error}）")
+                continue
             if edit is not None:
                 edits.append(dict(edit, record_index=view.slot_index))
+        if skipped:
+            messagebox.showwarning(
+                "提示",
+                "这些槽保持原样、没有收集改动：" + "；".join(skipped)
+                + "。其它槽的改动照常应用。")
         return tuple(edits)
 
     def describe_edits(self, view: EquipmentView,
@@ -1088,11 +1121,13 @@ class EquipmentTab(ttk.Frame):
             return
         self.grace_status_var.set(
             f"当前：{availability.describe_current()}"
-            f"（槽{int(availability.slot_index) + 1}）。可换成名表里的其它恩宠/套装；"
-            "一件装备只能有一个，写入只改这一槽的词条 id 与数值。")
+            f"（槽{int(availability.slot_index) + 1}）。只能换成另一个恩宠"
+            "（恩宠 10 条 + 上位恩宠 11 条）；套装与物品种类强绑定，不能替换。"
+            "写入只改这一槽的词条 id 与数值。")
         self._set_grace_enabled(True)
-        for index, entry in enumerate(self.app.grace_db.all()):
-            if entry.effect_id == availability.current_id:
+        for index, label in enumerate(self.grace_values):
+            if availability.current_id is not None and \
+                    label.startswith(f"{availability.current_id:#06x} "):
                 self.grace_combo.current(index)
                 break
 
@@ -1102,7 +1137,7 @@ class EquipmentTab(ttk.Frame):
             return
         text_value = self.grace_combo.get().strip()
         if not text_value:
-            messagebox.showwarning("提示", "请先在下拉里选择要换成的恩宠/套装")
+            messagebox.showwarning("提示", "请先在下拉里选择要换成的恩宠")
             return
         try:
             try:
@@ -1122,8 +1157,9 @@ class EquipmentTab(ttk.Frame):
             return
         name = self.app.grace_db.describe(grace_id)
         if not messagebox.askokcancel(
-            "确认修改恩宠 / 套装",
-            f"把{self.title}记录 #{view.slot_index} 的恩宠/套装换成 {name}？\n\n"
+            "确认修改恩宠",
+            f"把{self.title}记录 #{view.slot_index} 的恩宠换成 {name}？\n\n"
+            "· 只允许恩宠换恩宠；套装与物品种类强绑定，不能替换。\n"
             "· 只写这一槽的词条 id 与数值，槽里的其它标识（种类码、固定/★、byte 11）"
             "原样保留；\n"
             "· 一件装备只能有一个恩宠/套装；\n"
@@ -3105,15 +3141,29 @@ class AccessoryEditorApp(tk.Tk):
                 # it.  Leaving it enabled is what made 应用修改 complain that the text
                 # was "not in the affix table".
                 named = self.grace_db.describe(effect.effect_id)
-                label = (f"{effect.effect_id:#06x} {named}" if named
-                         else f"{effect.effect_id:#06x} 恩宠/套装词条（表外）")
-                self.slot_combos[index].set(f"{label}（用下方【恩宠】栏替换）")
+                grace_entry = self.grace_db.lookup(effect.effect_id)
+                kind = grace_entry.category if grace_entry is not None else ""
+                if grace_family_of(kind) == "套装":
+                    # 与武器 / 防具页签同一口径：套装槽锁死，理由说清楚。
+                    label = (f"{effect.effect_id:#06x} {named}（不可替换）"
+                             if named else
+                             f"{effect.effect_id:#06x} 套装词条（表外，不可替换）")
+                    self.slot_combos[index].set(label)
+                    self.slot_labels[index].set(
+                        f"数值={effect.value} 标识={effect.metadata:#010x}"
+                        f" ← {kind or '套装'}：套装与物品种类强绑定，"
+                        "任何替换都会被拒绝")
+                else:
+                    label = (f"{effect.effect_id:#06x} {named}" if named
+                             else f"{effect.effect_id:#06x} 恩宠/套装词条（表外）")
+                    self.slot_combos[index].set(f"{label}（用下方【恩宠】栏替换）")
+                    self.slot_labels[index].set(
+                        f"数值={effect.value} 标识={effect.metadata:#010x}"
+                        f" ← {kind or '恩宠/套装'}词条：用下方【恩宠】栏替换"
+                        "（恩宠只能换恩宠）")
                 self.slot_combos[index].state(["disabled"])
                 self.value_vars[index].set(str(effect.value))
                 self.value_entries[index].state(["disabled"])
-                self.slot_labels[index].set(
-                    f"数值={effect.value} 标识={effect.metadata:#010x}"
-                    " ← 恩宠/套装词条：用下方【恩宠】栏替换")
                 continue
             else:
                 label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
@@ -3289,6 +3339,7 @@ class AccessoryEditorApp(tk.Tk):
             return ()
         edits: list[dict[str, int]] = []
         grace_slots = self._grace_slot_indexes(view)
+        skipped: list[str] = []
         for index in range(EFFECT_COUNT):
             if view.slot_is_fixed(index, self.affix_db, grace_db=self.grace_db) or index in grace_slots:
                 # 固定词条 is part of what the item is, and an 恩宠/套装 slot is named
@@ -3298,10 +3349,16 @@ class AccessoryEditorApp(tk.Tk):
             try:
                 edit = self._pending_edit(index, view.effects[index])
             except UiEditError as error:
-                messagebox.showwarning("提示", str(error))
-                return ()
+                # 一格的表外词条只影响它自己（与武器/防具页签同一口径）。
+                skipped.append(f"槽{index + 1}（{error}）")
+                continue
             if edit is not None:
                 edits.append(dict(edit, record_index=self.selected_accessory))
+        if skipped:
+            messagebox.showwarning(
+                "提示",
+                "这些槽保持原样、没有收集改动：" + "；".join(skipped)
+                + "。其它槽的改动照常应用。")
         return tuple(edits)
 
     def _current_tab(self) -> tk.Widget | None:

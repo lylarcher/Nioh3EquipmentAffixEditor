@@ -190,7 +190,12 @@ class GraceSlotTests(unittest.TestCase):
                 mock.patch.object(ui.messagebox, "showwarning") as warned:
             tree.selection.return_value = ("7",)
             self.app._on_accessory_selected()
-            self.assertIn("用下方【恩宠】栏替换", self.app.slot_combos[0].get())
+            shown = self.app.slot_combos[0].get()
+        if grace.category in ("武士套装", "忍者套装"):
+            self.assertIn("不可替换", shown)
+            self.assertNotIn("固定，不可修改", shown)
+        else:
+            self.assertIn("用下方【恩宠】栏替换", shown)
             self.assertIn("disabled", str(self.app.slot_combos[0].state()))
             self.assertIn("disabled", str(self.app.value_entries[0].state()))
             self.assertEqual(self.app._current_edits(), ())

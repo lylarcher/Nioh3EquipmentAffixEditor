@@ -158,7 +158,13 @@ class UnknownNonGraceSlotTests(unittest.TestCase):
             self.app._on_accessory_selected()
         self.assertEqual(self.app._grace_slot_indexes(view), frozenset({1}))
         self.assertIn("disabled", str(self.app.slot_combos[1].state()))
-        self.assertIn("用下方【恩宠】栏替换", self.app.slot_combos[1].get())
+        shown = self.app.slot_combos[1].get()
+        if grace.category in ("武士套装", "忍者套装"):
+            # 用户规则：套装槽锁死，文案要说明"不可替换"，不是"用恩宠栏替换"。
+            self.assertIn("不可替换", shown)
+            self.assertNotIn("固定，不可修改", shown)
+        else:
+            self.assertIn("用下方【恩宠】栏替换", shown)
 
 
 if __name__ == "__main__":  # pragma: no cover - manual runs only

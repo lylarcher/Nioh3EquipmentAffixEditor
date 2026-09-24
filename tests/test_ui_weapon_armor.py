@@ -23,6 +23,9 @@ from tests.test_ui import TK_AVAILABLE, TK_ERROR, UiTestCase
 STAR_BIT = 0x040000
 FIXED_BIT = 0x4000
 PLAIN = 0x40
+#: 恩宠 / 套装槽的 metadata 形状：byte9 低 4 位是族标签 0x0C（与参考存档一致）。
+#: 以前夹具给恩宠槽也填 PLAIN(0x40)，byte9 是 0x00，是不真实的形状。
+GRACE_META = 0x00020C00
 
 
 def _first(items, predicate):
@@ -53,7 +56,9 @@ class EquipmentTabTestCase(UiTestCase):
         cls.bow_only = _first(
             cls.ranged.db.all(), lambda e: cls.ranged.tags_of(e.effect_id) == ("弓",))
         cls.armor_free = _first(cls.armor.db.all(), lambda e: not e.is_fixed)
-        cls.grace = cls.grace_db.all()[0]
+        # 用**恩宠**做夹具：套装槽按新规则锁死，不能拿来测「可替换」。
+        cls.grace = cls.grace_db.grace_entries()[0]
+        cls.set_entry = cls.grace_db.of_kind("武士套装")[0]
 
     # ------------------------------------------------------------- 夹具
     def _load(self, records_by_slot):
@@ -73,7 +78,7 @@ class EquipmentTabTestCase(UiTestCase):
                 record_type=self.katana.item_id, level=150, rarity=4, plus=3,
                 effects=((self.melee_free.effect_id, self.melee_free.value, PLAIN),
                          (self.melee_only.effect_id, self.melee_only.value, FIXED_BIT),
-                         (self.grace.effect_id, 0, PLAIN))),
+                         (self.grace.effect_id, 0, GRACE_META))),
             4: support.build_record(
                 record_type=self.bow.item_id, level=120, rarity=5,
                 effects=((self.bow_only.effect_id, self.bow_only.value, PLAIN),)),
@@ -323,8 +328,8 @@ class EquipmentTabTestCase(UiTestCase):
         self.assertEqual(index, 2)
         self.assertIn("disabled", tab.slot_combos[index].state())
         self.assertIn("用下方恩宠/套装栏替换", tab.slot_combos[index].get())
-        self.assertIn("可换成名表里的其它恩宠/套装", tab.grace_status_var.get())
-        self.assertIn("一件装备只能有一个", tab.grace_status_var.get())
+        self.assertIn("只能换成另一个恩宠", tab.grace_status_var.get())
+        self.assertIn("写入只改这一槽的词条 id 与数值", tab.grace_status_var.get())
         self.assertNotIn(index, [edit["slot_index"] for edit in tab.current_edits()])
         self.assertTrue(tab.grace_button.instate(["!disabled"]))
 
@@ -569,16 +574,110 @@ class EquipmentTabTestCase(UiTestCase):
         self._load_standard()
         return self.select("武器", 3)
 
-    def test_the_row_lists_every_grace_and_set(self) -> None:
+    def test_the_row_lists_only_the_changeable_blessings(self) -> None:
+        """用户规则：恩宠只能换恩宠，所以下拉只列恩宠族（恩宠 10 + 上位恩宠 11）。"""
         tab = self.tab("武器")
         self.assertIn("可替换", tab.grace_frame.cget("text"))
         self.assertEqual(tuple(tab.grace_combo.cget("values")), tab.grace_values)
-        # 装备上实测既有恩宠也有套装，所以下拉必须是全部 77 条，不是只有 21 条恩宠。
-        self.assertEqual(len(tab.grace_values), len(self.grace_db.all()))
+        self.assertEqual(len(tab.grace_values), len(self.grace_db.grace_entries()))
+        self.assertEqual(len(tab.grace_values), 21)
         kinds = {label.rsplit("（", 1)[-1].rstrip("）") for label in tab.grace_values}
-        self.assertIn("恩宠", kinds)
-        self.assertIn("武士套装", kinds)
-        self.assertIn("忍者套装", kinds)
+        self.assertEqual(kinds, {"恩宠", "上位恩宠"})
+        self.assertNotIn("武士套装", kinds)
+        self.assertNotIn("忍者套装", kinds)
+
+    def test_a_set_slot_disables_the_row(self) -> None:
+        """套装槽锁死：按钮置灰、下拉清空、理由写明「套装 … 不能替换」。"""
+        self._load({3: support.build_record(
+            record_type=self.katana.item_id, level=150, rarity=4,
+            effects=((self.set_entry.effect_id, int(self.set_entry.value),
+                      GRACE_META),))})
+        tab = self.select("武器", 3)
+        self.assertFalse(tab.grace_button.instate(["!disabled"]))
+        self.assertTrue(tab.grace_status_var.get().startswith("不可改："))
+        self.assertIn("套装", tab.grace_status_var.get())
+        self.assertIn("不能替换", tab.grace_status_var.get())
+        self.assertEqual(tab.grace_combo.get(), "")
+        # 引擎侧同样拒绝（界面与引擎同一口径）。
+        data, _layout = self._load({3: support.build_record(
+            record_type=self.katana.item_id, level=150, rarity=4,
+            effects=((self.set_entry.effect_id, int(self.set_entry.value),
+                      GRACE_META),))})
+        with self.assertRaises(editor.GraceEditError):
+            editor.apply_equipment_grace_edit(
+                data, 3, self.grace.effect_id, grace_db=self.grace_db)
+
+    def test_an_out_of_catalog_slot_does_not_sink_the_other_slots(self) -> None:
+        """表外词条只影响它自己那一格：同一条记录里别的槽照样收集、照样应用。"""
+        outsider = _first(
+            self.app.affix_db.all(),
+            lambda e: self.melee.db.lookup(e.effect_id) is None
+            and self.grace_db.lookup(e.effect_id) is None)
+        self._load({3: support.build_record(
+            record_type=self.katana.item_id, level=150, rarity=4,
+            effects=((outsider.effect_id, outsider.value, PLAIN),
+                     (self.melee_only.effect_id, self.melee_only.value, PLAIN),
+                     (self.grace.effect_id, 0, GRACE_META)))})
+        tab = self.select("武器", 3)
+        view = tab._selected_view()
+        self.assertIsNotNone(view)
+        self.assertIsNone(self.melee.db.lookup(view.effects[0].effect_id))
+        target = _first(self.melee.db.all(),
+                        lambda e: not e.is_fixed
+                        and e.effect_id != view.effects[1].effect_id
+                        and self.melee.tags_of(e.effect_id))
+        tab.slot_combos[1].set(target.label)
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            edits = tab.current_edits()
+        self.assertEqual([int(edit["slot_index"]) for edit in edits], [1])
+        self.assertEqual(int(edits[0]["effect_id"]), target.effect_id)
+        warned.assert_called()
+        # 表外那一格不被改写。
+        with mock.patch.object(ui.messagebox, "showwarning"):
+            tab.apply_edits()
+        after = tab._selected_view()
+        self.assertEqual(after.effects[0].effect_id, outsider.effect_id)
+
+    def test_a_set_slot_is_labelled_as_a_set_not_as_a_fixed_affix(self) -> None:
+        """实测案例 #1206：名表里的套装 id 自带 0x40，不能被说成"固定，不可修改"。"""
+        self._load({3: support.build_record(
+            record_type=self.katana.item_id, level=150, rarity=4,
+            effects=((self.set_entry.effect_id, int(self.set_entry.value),
+                      GRACE_META),))})
+        tab = self.select("武器", 3)
+        shown = tab.slot_combos[0].get()
+        label = tab.slot_labels[0].get()
+        self.assertIn(self.set_entry.name, shown)
+        self.assertIn(self.set_entry.category, shown)
+        self.assertIn("不可替换", shown)
+        self.assertIn("套装", label)
+        self.assertIn("任何替换都会被拒绝", label)
+        self.assertNotIn("固定，不可修改", shown)
+        self.assertNotIn("固定，不可修改", label)
+        self.assertFalse(tab.value_entries[0].instate(["!disabled"]))
+
+    def test_the_three_places_agree_on_the_family(self) -> None:
+        """记录列表的恩宠列、恩宠栏状态、槽位标签，对同一条记录必须一致。"""
+        self._load({3: support.build_record(
+            record_type=self.katana.item_id, level=150, rarity=4,
+            effects=((self.set_entry.effect_id, int(self.set_entry.value),
+                      GRACE_META),))})
+        tab = self.select("武器", 3)
+        row = tab.tree.item("3", "values")
+        self.assertIn(self.set_entry.name, row[1])
+        self.assertIn("套装", tab.grace_status_var.get())
+        self.assertIn("不可替换", tab.slot_combos[0].get())
+
+        self._load({3: support.build_record(
+            record_type=self.katana.item_id, level=150, rarity=4,
+            effects=((self.grace.effect_id, int(self.grace.value),
+                      GRACE_META),))})
+        tab = self.select("武器", 3)
+        row = tab.tree.item("3", "values")
+        self.assertIn(self.grace.name, row[1])
+        self.assertIn("只能换成另一个恩宠", tab.grace_status_var.get())
+        self.assertIn("恩宠", tab.slot_labels[0].get())
+        self.assertNotIn("不可替换", tab.slot_combos[0].get())
 
     def test_selecting_a_record_with_a_grace_enables_the_row(self) -> None:
         tab = self._select_katana()
@@ -785,7 +884,9 @@ class SlotValueRefreshTests(UiTestCase):
         cls.chest = _first(cls.item_db.all(), lambda e: e.small == "身体")
         cls.head = _first(cls.item_db.all(), lambda e: e.small == "头部")
         cls.grace_db = GraceDb.best_effort()
-        cls.grace = cls.grace_db.all()[0]
+        # 用**恩宠**做夹具：套装槽按新规则锁死，不能拿来测「可替换」。
+        cls.grace = cls.grace_db.grace_entries()[0]
+        cls.set_entry = cls.grace_db.of_kind("武士套装")[0]
 
         def usable(entry) -> bool:
             """头部与身体都能出、且不是同名固定 —— 这样它一定在候选里。"""

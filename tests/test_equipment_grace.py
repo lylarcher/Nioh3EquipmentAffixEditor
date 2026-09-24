@@ -38,6 +38,8 @@ ARMOR = equipmentdb.load_pool(equipmentdb.POOL_ARMOR)
 FIXED_BIT = 0x4000
 #: 参考存档里恩宠/套装槽实测的 metadata 形状（种类码 = 0x0c00「其他」，byte2 逐件不同）。
 GRACE_METADATA = 0x00020C00
+#: 套装槽的 metadata 形状（byte9 = 0x4C，即族标签 0x0C | 专属/固定位 0x40）。
+SET_METADATA = 0x00024C00
 
 GRACES = sorted(GRACE_DB.all(), key=lambda entry: entry.effect_id)
 #: 两条真正的「恩宠」（不含套装）：换恩宠用它们，避免和下面的套装条目撞 id。
@@ -103,7 +105,7 @@ def slots_of(data: bytes, index: int = 0) -> tuple[records.EffectSlot, ...]:
 
 
 class GraceSwapTests(unittest.TestCase):
-    """能换：武器、防具、恩宠、套装。"""
+    """能换：武器与防具的 恩宠 → 恩宠；套装槽锁死（用户规则）。"""
 
     def test_a_weapon_swaps_its_grace(self) -> None:
         data = save_with(record_with_grace(KATANA, GRACE_A))
@@ -119,13 +121,18 @@ class GraceSwapTests(unittest.TestCase):
                                              grace_db=GRACE_DB)
         self.assertEqual(slots_of(patched)[4].effect_id, GRACE_B.effect_id)
 
-    def test_a_set_entry_can_be_written(self) -> None:
+    def test_a_set_entry_cannot_be_written(self) -> None:
+        """用户规则：恩宠不能换成套装（套装与物品种类强绑定）。
+
+        这条用例原本断言「套装可以写进去」（P5 的口径）。新规则反转了它 ——
+        这是本次唯一被反转的既有断言，已在上报里点名。
+        """
         data = save_with(record_with_grace(KATANA, GRACE_A))
-        patched = apply_equipment_grace_edit(data, 0, SET_ENTRY.effect_id,
-                                            grace_db=GRACE_DB)
-        slot = slots_of(patched)[4]
-        self.assertEqual(slot.effect_id, SET_ENTRY.effect_id)
-        self.assertEqual(GRACE_DB.lookup(slot.effect_id).category, SET_ENTRY.category)
+        with self.assertRaises(GraceEditError) as caught:
+            apply_equipment_grace_edit(data, 0, SET_ENTRY.effect_id,
+                                       grace_db=GRACE_DB)
+        self.assertIn("只能换成另一个恩宠", str(caught.exception))
+        self.assertEqual(slots_of(data)[4].effect_id, GRACE_A.effect_id)
 
     def test_only_the_id_and_value_change(self) -> None:
         """与饰品同口径：metadata 一个字节都不许动。"""
@@ -181,6 +188,69 @@ class GraceSwapTests(unittest.TestCase):
         self.assertEqual(availability.current_id, GRACE_A.effect_id)
         self.assertEqual(availability.current_name, GRACE_A.name)
         self.assertIn(GRACE_A.name, availability.describe_current())
+
+
+class GraceFamilyRuleTests(unittest.TestCase):
+    """用户规则：套装槽锁死（任何替换都拒绝）、恩宠槽只能换恩宠。"""
+
+    def test_a_set_slot_cannot_be_replaced_on_a_weapon(self) -> None:
+        data = save_with(record_with_grace(KATANA, SET_ENTRY,
+                                           metadata=SET_METADATA))
+        availability = equipment_grace_availability(
+            list_equipment(data)[0], grace_db=GRACE_DB)
+        self.assertFalse(availability.allowed)
+        self.assertIn("套装", availability.reason)
+        self.assertIn("不能替换", availability.reason)
+        for target in (GRACE_B.effect_id, SET_ENTRY.effect_id):
+            with self.subTest(target=f"{target:#06x}"):
+                with self.assertRaises(GraceEditError):
+                    apply_equipment_grace_edit(data, 0, target, grace_db=GRACE_DB)
+
+    def test_a_set_slot_cannot_be_replaced_on_an_armor(self) -> None:
+        data = save_with(record_with_grace(ARM_PART, SET_ENTRY,
+                                           metadata=SET_METADATA))
+        availability = equipment_grace_availability(
+            list_equipment(data)[0], grace_db=GRACE_DB)
+        self.assertFalse(availability.allowed)
+        self.assertIn("套装", availability.reason)
+        with self.assertRaises(GraceEditError):
+            apply_equipment_grace_edit(data, 0, GRACE_B.effect_id,
+                                       grace_db=GRACE_DB)
+
+    def test_a_blessing_with_the_fixed_bit_is_still_replaceable(self) -> None:
+        """固定位不改变族：带 0x4000 的恩宠槽照样能换（族标签看 byte9 低 4 位）。"""
+        metadata = GRACE_METADATA | FIXED_BIT
+        data = save_with(record_with_grace(KATANA, GRACE_A, metadata=metadata))
+        patched = apply_equipment_grace_edit(data, 0, GRACE_B.effect_id,
+                                            grace_db=GRACE_DB)
+        slot = slots_of(patched)[4]
+        self.assertEqual(slot.effect_id, GRACE_B.effect_id)
+        self.assertEqual(slot.metadata, metadata)
+
+    def test_an_unknown_family_byte_is_refused(self) -> None:
+        """族标签根本不认识的槽一律拒绝（fail closed）。"""
+        data = save_with(record_with_grace(KATANA, GRACE_A, metadata=0x00029900))
+        availability = equipment_grace_availability(
+            list_equipment(data)[0], grace_db=GRACE_DB)
+        self.assertFalse(availability.allowed)
+        self.assertIn("0x99", availability.reason)
+
+    def test_the_creation_path_is_not_affected(self) -> None:
+        """无中生有从模板继承的套装槽不受这条规则影响（只约束「替换」）。"""
+        from nioh3_accessory_editor import equipmentdb as _equipmentdb
+        item_db = _equipmentdb.load_equipment_item_db()
+        # donor 必须自己命中过词条池，才有资格当模板（见 find_equipment_donor）。
+        donor = save_with(record_with_grace(KATANA, SET_ENTRY,
+                                            metadata=SET_METADATA, filler=AFFIX))
+        plan = editor.plan_create_equipment(
+            donor, record_type=KATANA.item_id, level=170, plus=0, rarity=4,
+            effects=(), slot_index=1, item_db=item_db, grace_db=GRACE_DB)
+        self.assertTrue(plan.effects)
+        copied = [slot for slot in plan.effects
+                  if not slot.is_empty and GRACE_DB.describe(slot.effect_id)]
+        self.assertEqual(len(copied), 1)
+        self.assertEqual(GRACE_DB.lookup(copied[0].effect_id).category,
+                         SET_ENTRY.category)
 
 
 class GraceRefusalTests(unittest.TestCase):
