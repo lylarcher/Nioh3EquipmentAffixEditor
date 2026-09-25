@@ -2085,7 +2085,8 @@ class AccessoryEditorApp(tk.Tk):
                   justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
 
         self.grace_frame = ttk.LabelFrame(right, text="恩宠（末位槽）", padding=(6, 4))
-        self.grace_frame.pack(fill=tk.X, pady=(6, 0))
+        # 恩宠已并入上方词条槽（在那一条槽的下拉里直接换），这个独立栏不再显示；
+        # 控件对象保留，避免既有的启用/禁用与快照逻辑引用到空对象。
         grace_row = ttk.Frame(self.grace_frame)
         grace_row.pack(fill=tk.X)
         ttk.Label(grace_row, text="改成:").pack(side=tk.LEFT)
@@ -3608,19 +3609,24 @@ class AccessoryEditorApp(tk.Tk):
                              if named else
                              f"{effect.effect_id:#06x} 套装词条（表外，不可替换）")
                     self.slot_combos[index].set(label)
+                    self.slot_combos[index].state(["disabled"])
                     self.slot_labels[index].set(
                         f"数值={effect.value} 标识={effect.metadata:#010x}"
                         f" ← {kind or '套装'}：套装与物品种类强绑定，"
                         "任何替换都会被拒绝")
-                else:
-                    label = (f"{effect.effect_id:#06x} {named}" if named
-                             else f"{effect.effect_id:#06x} 恩宠/套装词条（表外）")
-                    self.slot_combos[index].set(f"{label}（用下方【恩宠】栏替换）")
-                    self.slot_labels[index].set(
-                        f"数值={effect.value} 标识={effect.metadata:#010x}"
-                        f" ← {kind or '恩宠/套装'}词条：用下方【恩宠】栏替换"
-                        "（恩宠只能换恩宠）")
-                self.slot_combos[index].state(["disabled"])
+                    self.value_vars[index].set(str(effect.value))
+                    self.value_entries[index].state(["disabled"])
+                    continue
+                # 恩宠并入词条槽：这一槽自己就能换，候选只有恩宠系。
+                self.slot_combos[index].configure(values=self.grace_db.labels())
+                self.slot_combos[index].set(
+                    f"{effect.effect_id:#06x} {named}" if named
+                    else f"{effect.effect_id:#06x} 恩宠/套装词条（表外）")
+                self.slot_combos[index].state(["!disabled"])
+                self.slot_labels[index].set(
+                    f"数值={effect.value} 标识={effect.metadata:#010x}"
+                    f" ← {kind or '恩宠/套装'}：在这一槽里换成另一个恩宠"
+                    "（恩宠只能换恩宠；套装不可替换）")
                 self.value_vars[index].set(str(effect.value))
                 self.value_entries[index].state(["disabled"])
                 continue
@@ -3672,11 +3678,29 @@ class AccessoryEditorApp(tk.Tk):
             self.grace_combo.set("")
             self._set_grace_enabled(False)
 
+    def _grace_slot_index(self, view: AccessoryView | None) -> int | None:
+        """选中饰品里恩宠/套装词条所在的槽（名表里认得出才算）。"""
+        if view is None:
+            return None
+        for index, effect in enumerate(view.effects):
+            if effect.is_empty or index >= len(self.slot_combos):
+                continue
+            if self.grace_db.lookup(effect.effect_id) is not None:
+                return index
+        return None
+
+    def _grace_slot_text(self) -> str:
+        """恩宠槽当前在下拉里显示的文本（恩宠已并入词条槽）。"""
+        index = self._grace_slot_index(self._selected_view())
+        if index is None:
+            return ""
+        return self.slot_combos[index].get().strip()
+
     def apply_grace_to_selection(self) -> None:
         """Replace the selected accessory's 恩宠 (memory only; 写入存档 commits)."""
         if not self._require_accessory_selection():
             return
-        text = self.grace_combo.get()
+        text = self._grace_slot_text()
         if not text:
             messagebox.showwarning("提示", "请先选择要改成的恩宠")
             return
@@ -3893,14 +3917,15 @@ class AccessoryEditorApp(tk.Tk):
         if rarity is not None and rarity != view.rarity:
             parts.append(f"稀有度 {view.rarity} → {rarity}")
             calls.append(self.apply_rarity_to_selection)
-        availability = self.grace_availability
-        chosen = self.grace_combo.get().strip()
-        if (availability is not None and availability.allowed and chosen
-                and availability.current_id is not None
-                and not chosen.startswith(f"{availability.current_id:#06x} ")):
-            parts.append(f"恩宠 {availability.describe_current()} → "
-                         f"{chosen.split(' ', 1)[-1]}")
-            calls.append(self.apply_grace_to_selection)
+        # 恩宠已并入词条槽：比较那一槽的下拉文本（隐藏的 grace_combo 不再参与）。
+        grace_index = self._grace_slot_index(view)
+        if grace_index is not None:
+            chosen_id = _grace_id_from_text(self.slot_combos[grace_index].get())
+            current_id = view.effects[grace_index].effect_id
+            if chosen_id is not None and chosen_id != current_id:
+                parts.append(f"恩宠/套装 {self.grace_db.describe(current_id)} → "
+                             f"{self.grace_db.describe(chosen_id)}")
+                calls.append(self.apply_grace_to_selection)
         return parts, calls
 
     def _soul_pending(self) -> tuple[list[str], list]:

@@ -763,47 +763,56 @@ class GraceWidgetTests(UiTestCase):
         self.app.selected_accessory = 3
         self.app._on_accessory_selected()
 
-    def test_the_combo_offers_only_graces(self) -> None:
-        values = tuple(self.app.grace_combo["values"])
+    def _grace_slot(self) -> int:
+        view = next(item for item in self.app.accessory_views if item.slot_index == 3)
+        index = self.app._grace_slot_index(view)
+        self.assertIsNotNone(index, "夹具应当有一条恩宠/套装词条")
+        return int(index)
+
+    def test_the_slot_offers_only_graces(self) -> None:
+        """恩宠并入词条槽：那一槽的候选就是恩宠系 21 条，套装从源头选不到。"""
+        self._load(self.GRACE_A)
+        values = tuple(self.app.slot_combos[self._grace_slot()]["values"])
         self.assertEqual(len(values), 21)
         self.assertTrue(all("的恩宠" in value for value in values), values)
         self.assertFalse(any("套装" in value for value in values), values)
 
-    def test_a_grace_slot_enables_the_control_and_shows_the_current_one(self) -> None:
+    def test_a_grace_slot_is_editable_in_its_own_slot(self) -> None:
         self._load(self.GRACE_A)
-        self.assertNotIn("disabled", self.app.grace_button.state())
-        self.assertNotIn("disabled", self.app.grace_combo.state())
-        self.assertIn("稻荷神的恩宠", self.app.grace_status_var.get())
-        self.assertTrue(self.app.grace_combo.get().startswith(f"{self.GRACE_A:#06x}"))
+        index = self._grace_slot()
+        self.assertNotIn("disabled", self.app.slot_combos[index].state())
+        self.assertTrue(self.app.slot_combos[index].get().startswith(f"{self.GRACE_A:#06x}"))
+        self.assertIn("在这一槽里换成另一个恩宠", self.app.slot_labels[index].get())
 
-    def test_a_set_effect_disables_the_control_with_a_reason(self) -> None:
+    def test_a_set_effect_is_locked_with_a_reason(self) -> None:
         self._load(self.SET_ITEM, byte9=0x4C)
-        self.assertIn("disabled", self.app.grace_button.state())
-        self.assertIn("disabled", self.app.grace_combo.state())
-        text = self.app.grace_status_var.get()
-        self.assertIn("怨恨盖世", text)
-        self.assertIn("不能改", text)
+        index = self._grace_slot()
+        self.assertIn("disabled", self.app.slot_combos[index].state())
+        self.assertIn("不可替换", self.app.slot_combos[index].get())
+        self.assertIn("怨恨盖世", self.app.slot_combos[index].get())
+        self.assertIn("套装与物品种类强绑定", self.app.slot_labels[index].get())
 
-    def test_a_plain_affix_disables_the_control(self) -> None:
+    def test_a_plain_affix_has_no_grace_slot_to_change(self) -> None:
         self._load(self.free_affixes[1].effect_id)
-        self.assertIn("disabled", self.app.grace_button.state())
-        self.assertIn("恩宠只能替换恩宠", self.app.grace_status_var.get())
+        view = next(item for item in self.app.accessory_views if item.slot_index == 3)
+        self.assertIsNone(self.app._grace_slot_index(view))
+        self.assertEqual(self.app._grace_slot_text(), "")
 
     def test_applying_replaces_the_grace_in_memory_only(self) -> None:
         self._load(self.GRACE_A)
-        self.app.grace_combo.set(
-            next(value for value in self.app.grace_combo["values"]
-                 if value.startswith(f"{self.GRACE_B:#06x}"))
-        )
+        index = self._grace_slot()
+        target = next(value for value in self.app.grace_db.labels()
+                      if value.startswith(f"{self.GRACE_B:#06x}"))
+        self.app.slot_combos[index].set(target)
         self.app.apply_grace_to_selection()
-        self.assertIn("不动明王的恩宠", self.app.grace_status_var.get())
         view = next(item for item in self.app.accessory_views if item.slot_index == 3)
         self.assertEqual(view.occupied_effects[-1].effect_id, self.GRACE_B)
         self.assertIn("尚未写入存档", self.app.status_var.get())
 
     def test_applying_a_set_effect_is_impossible_through_the_widgets(self) -> None:
         self._load(self.GRACE_A)
-        self.app.grace_combo.set(f"{self.SET_ITEM:#06x} 怨恨盖世（忍者套装）")
+        index = self._grace_slot()
+        self.app.slot_combos[index].set(f"{self.SET_ITEM:#06x} 怨恨盖世（忍者套装）")
         with mock.patch.object(ui.messagebox, "showwarning") as warned, \
                 mock.patch.object(ui.messagebox, "showerror") as failed:
             self.app.apply_grace_to_selection()
