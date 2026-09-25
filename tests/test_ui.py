@@ -821,6 +821,23 @@ class GraceWidgetTests(UiTestCase):
         view = next(item for item in self.app.accessory_views if item.slot_index == 3)
         self.assertEqual(view.occupied_effects[-1].effect_id, self.GRACE_A)
 
+    def test_the_accessory_grace_frame_is_not_shown(self) -> None:
+        """恩宠并入词条槽：饰品页签那个独立的恩宠栏也不再显示。"""
+        self._load(self.GRACE_A)
+        self.assertFalse(self.app.grace_frame.winfo_ismapped())
+
+    def test_the_accessory_unified_apply_handles_a_grace_only_change(self) -> None:
+        self._load(self.GRACE_A)
+        index = self._grace_slot()
+        target = next(value for value in self.app.grace_db.labels()
+                      if value.startswith(f"{self.GRACE_B:#06x}"))
+        self.app.slot_combos[index].set(target)
+        with mock.patch.object(ui.messagebox, "askokcancel", return_value=True):
+            self.app.apply_all_selection()
+        view = next(item for item in self.app.accessory_views if item.slot_index == 3)
+        self.assertEqual(view.occupied_effects[-1].effect_id, self.GRACE_B)
+        self.assertIn("尚未写入存档", self.app.status_var.get())
+
     def test_without_a_selection_nothing_happens(self) -> None:
         self.app.selected_accessory = None
         self.app.decrypted = None

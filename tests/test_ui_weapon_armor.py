@@ -1303,3 +1303,69 @@ class UnifiedApplyTests(EquipmentTabTestCase):
             with self.subTest(widget=widget):
                 self.assertFalse(widget.winfo_ismapped(),
                                  "单独按钮不该再出现在界面上")
+
+
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class GraceInSlotTests(EquipmentTabTestCase):
+    """恩宠并入词条槽之后的行为（用户需求：不再单独拿出来，直接在槽里改）。"""
+
+    def test_the_separate_grace_frame_is_not_shown(self) -> None:
+        self._load_standard()
+        for big in ("武器", "防具"):
+            with self.subTest(big=big):
+                tab = self.tab(big)
+                self.assertFalse(tab.grace_frame.winfo_ismapped(),
+                                 "独立的恩宠 / 套装栏不该再出现")
+
+    def test_clearing_a_grace_slot_is_refused_and_writes_nothing(self) -> None:
+        """恩宠槽不能清空（只能换成另一个恩宠）——界面上也不提供 (空)。"""
+        self._load_standard()
+        before = self.app.decrypted
+        tab = self.select("武器", 3)
+        view = next(v for v in tab.views if v.slot_index == 3)
+        index = tab.grace_slot(view)
+        self.assertNotIn(ui.EMPTY_LABEL, tuple(tab.slot_combos[index].cget("values")))
+        tab.slot_combos[index].set(ui.EMPTY_LABEL)
+        with mock.patch.object(ui.messagebox, "showerror") as failed, \
+                mock.patch.object(ui.messagebox, "showwarning") as warned:
+            tab.apply_grace()
+        self.assertTrue(failed.called or warned.called,
+                        "清空恩宠槽必须被拒绝并给出说明")
+        self.assertEqual(self.app.decrypted, before)
+
+    def test_the_unified_apply_handles_a_grace_only_change(self) -> None:
+        data, layout = self._load_standard()
+        tab = self.select("武器", 3)
+        view = next(v for v in tab.views if v.slot_index == 3)
+        index = tab.grace_slot(view)
+        target = next(label for label in tab.grace_values
+                      if not label.startswith(f"{self.grace.effect_id:#06x} "))
+        target_id = int(target.split(" ", 1)[0], 16)
+        tab.slot_combos[index].set(target)
+        parts, calls = tab._pending_changes()
+        self.assertTrue(any("恩宠/套装" in part for part in parts), parts)
+        self.assertIn(tab.apply_grace, calls)
+        with mock.patch.object(ui.messagebox, "askokcancel", return_value=True):
+            tab.apply_all()
+        expected = editor.apply_equipment_grace_edit(
+            data, 3, target_id, grace_db=self.grace_db, item_db=tab.item_db,
+            pools=self.app.equipment_pools, known_ids=self.app.known_ids,
+            layout=layout)
+        self.assertEqual(self.app.decrypted, expected)
+
+    def test_a_set_target_is_still_refused_through_the_unified_apply(self) -> None:
+        """一件只能一个恩宠、且套装不可替换：硬把目标设成套装也会被拒。"""
+        self._load_standard()
+        before = self.app.decrypted
+        tab = self.select("武器", 3)
+        view = next(v for v in tab.views if v.slot_index == 3)
+        index = tab.grace_slot(view)
+        tab.slot_combos[index].set(f"{self.set_entry.effect_id:#06x} "
+                                   f"{self.set_entry.name}（{self.set_entry.category}）")
+        with mock.patch.object(ui.messagebox, "askokcancel", return_value=True), \
+                mock.patch.object(ui.messagebox, "showerror") as failed, \
+                mock.patch.object(ui.messagebox, "showwarning") as warned:
+            tab.apply_all()
+        self.assertTrue(failed.called or warned.called,
+                        "把恩宠换成套装必须被拒绝并给出说明")
+        self.assertEqual(self.app.decrypted, before)
