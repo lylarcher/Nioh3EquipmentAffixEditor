@@ -450,8 +450,8 @@ Release|Debug`、`-OutputDirectory`、`-PyInstallerPython`、`-Test`、`-TestPat
 每个版本展示面都报告同样的四项事实：
 
 ```text
-Nioh 3 Equipment Affix Editor v0.1.0
-commit    : 34cca8de (工作区有未提交改动)
+Nioh 3 Equipment Affix Editor v1.0.0
+commit    : 34cca8de（提交号后 8 位） （构建时工作区有未提交改动）
 来源      : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor
 加密组件  : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor\bin\Nioh_Savefile_decrypt.exe
 构建时间  : 2026-09-19T11:01:52+08:00
@@ -464,6 +464,7 @@ commit    : 34cca8de (工作区有未提交改动)
 | `来源` / `加密组件` | 正在运行的那份副本**此刻在哪里**：存放可执行程序的文件夹，以及它从那里读取的加解密组件。移动 exe，这一项就跟着变——不需要重新构建 |
 | `构建时间` | 本地构建时间，带 UTC 偏移的 ISO-8601 |
 | `语言` | 构建面向的语言/运行时（仅 CPython + 标准库） |
+| `（构建时工作区有未提交改动）` | 是**打包那一刻**的记录：表示当时工作区有未提交改动，不代表现在也脏。在干净提交上打出的正式版不会出现这一句 |
 | `构建来源` | **不显示**。构建时所在的文件夹只记录在 `BUILD-INFO.txt` 里供排查用——它说明的是构建机，而不是你正在运行的那份副本 |
 
 它出现在哪里：

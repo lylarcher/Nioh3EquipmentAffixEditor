@@ -44,7 +44,7 @@ __all__ = [
     "__version__",
 ]
 
-__version__ = "0.1.0"
+__version__ = "1.0.0"
 
 BUILD_SCHEMA = "nioh3-accessory-editor-build/v1"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -101,7 +101,7 @@ class BuildInfo:
 
     @property
     def dirty_suffix(self) -> str:
-        return " (工作区有未提交改动)" if self.dirty else ""
+        return " （构建时工作区有未提交改动）" if self.dirty else ""
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -320,7 +320,8 @@ def version_lines(
                       else paths.default_crypto_exe())
     lines = [
         f"Nioh 3 Equipment Affix Editor v{info.version}",
-        f"{_pad_to('commit', label_width)}: {info.commit}{info.dirty_suffix}",
+        f"{_pad_to('commit', label_width)}: {info.commit}（提交号后 8 位）"
+        f"{info.dirty_suffix}",
         f"{_pad_to('来源', label_width)}: {_elide(str(runtime_root), enabled=elide)}",
         f"{_pad_to('加密组件', label_width)}: {_elide(str(runtime_crypto), enabled=elide)}",
         f"{_pad_to('构建时间', label_width)}: {built_at}",

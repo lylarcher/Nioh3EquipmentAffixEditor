@@ -457,8 +457,8 @@ default). It works on Windows PowerShell 5.1 and PowerShell 7+.
 Every version surface reports the same four facts:
 
 ```text
-Nioh 3 Equipment Affix Editor v0.1.0
-commit    : 34cca8de (工作区有未提交改动)
+Nioh 3 Equipment Affix Editor v1.0.0
+commit    : 34cca8de（提交号后 8 位） （构建时工作区有未提交改动）
 来源      : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor
 加密组件  : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor\bin\Nioh_Savefile_decrypt.exe
 构建时间  : 2026-09-19T11:01:52+08:00
@@ -471,6 +471,7 @@ commit    : 34cca8de (工作区有未提交改动)
 | `来源` / `加密组件` | where the running copy **is right now**: the folder holding the executable and the crypto component it reads from there. Move the exe and this follows it — no rebuild needed |
 | `构建时间` | local build time, ISO-8601 with UTC offset |
 | `语言` | language/runtime the build targets (CPython + stdlib only) |
+| `（构建时工作区有未提交改动）` | recorded **when the build ran**; it means the working tree was dirty at that moment, not that it is dirty now. A release built from a clean commit never shows it |
 | `构建来源` | **never shown.** The folder the build ran in is only recorded in `BUILD-INFO.txt` for diagnosis, because it names the build machine rather than anything about the copy you are running |
 
 Where it shows up:
