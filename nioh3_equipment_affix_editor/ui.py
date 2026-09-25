@@ -256,6 +256,15 @@ class _quiet_dialogs:
         return False
 
 
+def _grace_id_from_text(text: str) -> int | None:
+    """从下拉文本里取出开头的 ``0xABCD``；取不到就返回 ``None``。"""
+    head = (text or "").strip().split(" ", 1)[0]
+    try:
+        return int(head, 16)
+    except ValueError:
+        return None
+
+
 class EquipmentTab(ttk.Frame):
     """武器 / 防具页签（同一个组件实例化两次，只有 ``big`` 不同）。
 
@@ -490,7 +499,8 @@ class EquipmentTab(ttk.Frame):
     def _build_grace(self, right: ttk.Frame) -> None:
         self.grace_frame = ttk.LabelFrame(right, text="恩宠 / 套装（可替换）",
                                           padding=(6, 4))
-        self.grace_frame.pack(fill=tk.X, pady=(6, 0))
+        # 恩宠已并入上方词条槽（在那一条槽的下拉里直接换），这个独立栏不再显示；
+        # 控件对象保留，避免既有的启用/禁用与快照逻辑引用到空对象。
         row = ttk.Frame(self.grace_frame)
         row.pack(fill=tk.X)
         ttk.Label(row, text="改成:").pack(side=tk.LEFT)
@@ -926,12 +936,15 @@ class EquipmentTab(ttk.Frame):
                         f"数值={effect.value} 标识={effect.metadata:#010x}"
                         f" ← {kind}：套装与物品种类强绑定，任何替换都会被拒绝")
                 else:
+                    # 恩宠在这一槽里直接换（原先指向右侧那个独立的恩宠栏，已并入本行）。
                     text_value = f"{effect.effect_id:#06x} {named}（{kind}）"
-                    combo.configure(values=(text_value,))
-                    combo.set(f"{effect.effect_id:#06x} {named}（用下方恩宠/套装栏替换）")
+                    combo.configure(values=self.app.grace_db.labels())
+                    combo.set(text_value)
+                    combo.state(["!disabled"])
+                    self._show_slot_value(index, effect.value, editable=False)
                     self.slot_labels[index].set(
-                        f"数值={effect.value} ← {kind}（{kind}）："
-                        "用下方【恩宠 / 套装】栏替换（恩宠只能换恩宠）")
+                        f"数值={effect.value} ← {kind}：在这一槽里换成另一个恩宠"
+                        "（恩宠只能换恩宠；套装不可替换）")
                 continue
             if view.slot_is_fixed(index, pool):
                 label = entry.label if entry is not None else                     f"{effect.effect_id:#06x}（非本池词条）"
@@ -946,11 +959,12 @@ class EquipmentTab(ttk.Frame):
             if index == grace:
                 named = self.app.grace_db.describe(effect.effect_id)
                 combo.configure(values=(f"{effect.effect_id:#06x} {named}",))
-                combo.set(f"{effect.effect_id:#06x} {named}（用下方恩宠/套装栏替换）")
+                combo.set(f"{effect.effect_id:#06x} {named}")
                 combo.state(["disabled"])
                 self._show_slot_value(index, effect.value, editable=False)
                 self.slot_labels[index].set(
-                    f"数值={effect.value} ← 恩宠/套装词条：用下方【恩宠 / 套装】栏替换")
+                    f"数值={effect.value} ← 恩宠/套装槽，但这一条不在名表里，"
+                    "为安全起见不能替换")
                 continue
             if entry is not None:
                 combo.state(["!disabled"])
@@ -1248,11 +1262,15 @@ class EquipmentTab(ttk.Frame):
             if rarity is not None and rarity != view.rarity:
                 parts.append(f"稀有度 {view.rarity} → {rarity}")
                 calls.append(self.apply_rarity)
-        current_grace = self.grace_name(view)
-        chosen_grace = self.grace_var.get().strip()
-        if chosen_grace and chosen_grace != current_grace:
-            parts.append(f"恩宠/套装 {current_grace or '（无）'} → {chosen_grace}")
-            calls.append(self.apply_grace)
+        # 恩宠/套装：改在词条槽里选，所以比较的是**那一槽的下拉文本**。
+        grace_index = self.grace_slot(view)
+        if grace_index is not None and grace_index < len(self.slot_combos):
+            chosen_id = _grace_id_from_text(self.slot_combos[grace_index].get())
+            current_id = view.effects[grace_index].effect_id
+            if chosen_id is not None and chosen_id != current_id:
+                parts.append(f"恩宠/套装 {self.grace_name(view) or '（无）'} → "
+                             f"{self.app.grace_db.describe(chosen_id)}")
+                calls.append(self.apply_grace)
         return parts, calls
 
     def apply_all(self) -> None:
@@ -1409,11 +1427,20 @@ class EquipmentTab(ttk.Frame):
                 self.grace_combo.current(index)
                 break
 
+    def _grace_slot_text(self, view: EquipmentView | None) -> str:
+        """恩宠/套装槽当前在下拉里显示的文本（恩宠已并入词条槽）。"""
+        if view is None:
+            return ""
+        index = self.grace_slot(view)
+        if index is None or index >= len(self.slot_combos):
+            return ""
+        return self.slot_combos[index].get().strip()
+
     def apply_grace(self) -> None:
         view = self._require_view()
         if view is None:
             return
-        text_value = self.grace_combo.get().strip()
+        text_value = self._grace_slot_text(view)
         if not text_value:
             messagebox.showwarning("提示", "请先在下拉里选择要换成的恩宠")
             return
