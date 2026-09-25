@@ -119,8 +119,8 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   may only be the grace table's own catalog value, and an id outside the table is
   still refused (fail closed). **The CLI did not change**: `edit --grace` still
   applies to accessory records only, so replacing a weapon / armour grace is a GUI
-  path. **Unverified**: whether the game accepts the swap afterwards has not been
-  confirmed in game yet — try it on a copy and keep the automatic backup.
+  path. **Confirmed in game**: replacing one 恩宠 with another through this tool is
+  recognised by the game (still try it on a copy and keep the automatic backup).
 * **Dual crypto backend** — the bundled reference executable
   (`bin/Nioh_Savefile_decrypt.exe`, ~0.4 s per pass) by default; a
   bit-exact pure-Python port of the custom Nioh AES as a zero-dependency
@@ -672,10 +672,10 @@ nothing.
 > in-game item list refreshes cleanly after such a swap (only load the save and
 > look). If the swapper shows something odd, restore the automatic backup.
 >
-> The weapon / armour 恩宠/套装 replacement shares these unverified boundaries
-> (metadata is kept from the slot being replaced, and whether 上位恩宠 is gated in
-> game by level/difficulty is equally unchecked), and **whether the game accepts it
-> is not confirmed in game yet either**.
+> The weapon / armour 恩宠/套装 replacement shares these boundaries (metadata is
+> kept from the slot being replaced, and whether 上位恩宠 is gated in game by
+> level/difficulty is still unchecked); **replacing one 恩宠 with another is
+> confirmed in game**, and 套装 cannot be replaced by rule.
 >
 > **饰品种类 (which accessory it is) and 等级 are writable, with the limits
 > below.** The field is known — the record header's per-item id at `+0x00`, with a
