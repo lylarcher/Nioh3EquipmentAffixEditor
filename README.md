@@ -103,11 +103,11 @@ Version history and the release checklist live in [CHANGELOG.md](CHANGELOG.md).
   value change; the family/sub-kind bytes and the unexplained byte 11 are kept
   exactly as the game wrote them. Measured on a copy of a real save: a whole
   9.4 MB save changes in 5 bytes — the 2 id bytes and 3 checksum bytes.
-* **A weapon / armour 恩宠/套装 can be replaced** — the 恩宠 / 套装 row of the
-  武器 / 防具 tabs is no longer a read-only display: it is a drop-down plus an
-  【应用恩宠/套装】 button listing **all 77 rows** of the grace table (恩宠 10,
-  上位恩宠 11, 武士套装 34, 忍者套装 22), so that slot can go from an 恩宠 to a
-  套装. The rule is replace-only: it rewrites the 恩宠/套装 slot the record
+* **A weapon / armour 恩宠/套装 can be replaced** — the 恩宠 slot itself of the
+  武器 / 防具 tabs is no longer a read-only display: it is a drop-down listing
+  **only the 恩宠 family** (恩宠 10 + 上位恩宠 11 = 21 rows); a 套装 slot stays
+  disabled and says 套装 cannot be replaced, while the 恩宠 slot can only become
+  another 恩宠. The rule is replace-only: it rewrites the 恩宠/套装 slot the record
   **already** has and never adds one — measured on the reference save, 497/497
   weapons and 614/614 armour carry **exactly one** each, always in slot 5, and a
   record with no grace slot is refused with the reason (there is no real metadata
@@ -567,7 +567,7 @@ Two tables come out of one workbook, deliberately kept apart:
   恩宠/上位恩宠 rows are the allowed **targets** and the 56 套装 rows are not
   writable there: the editor requires the slot being replaced to carry the 恩宠
   family byte (0x0C), which a 专属套装 effect (e.g. 怨恨盖世, 0x4C) never does.
-  **A weapon / armour is not limited by that**: its 恩宠 / 套装 row lists all 77
+  **A weapon / armour is not limited by that**: its 恩宠 / 套装 slot lists only the 恩宠 family
   rows, so its grace slot can become a 套装 (see
   [the 武器 / 防具 tabs](#the-武器--防具-tabs-weapons-and-armour)).
 * **`data/accessory_items.json`** — the 饰品 rows of 物品总目录 (89 rows → 88 ids:
@@ -764,9 +764,9 @@ original save).
 * **Per-slot search** — every slot owns its dropdown; typing narrows only that slot,
   a space means AND, Enter takes an unambiguous hit, and 2 or more matches must be
   picked from that slot's list.
-* **恩宠 / 套装 can be replaced (GUI)** — the 恩宠 / 套装 row is no longer a read-only
-  display but a drop-down plus an 【应用恩宠/套装】 button listing all 77 rows of the
-  grace table (恩宠 10, 上位恩宠 11, 武士套装 34, 忍者套装 22), so that slot can go
+* **恩宠 / 套装 can be replaced (GUI)** — the 恩宠 slot is no longer a read-only
+  display but a drop-down listing only the 恩宠 family (21 rows); a 套装 slot stays
+  grace table (only the 恩宠 family: 恩宠 10, 上位恩宠 11 = 21 rows; the set side 武士套装 34 / 忍者套装 22 is never offered), so that slot can go
   from an 恩宠 to a 套装; the rules and the measurements are in
   [Features](#features). The 恩宠·套装 filter axis still finds records by it.
 * **等级 / +値** — 180 and 30 for both tabs, taken from `class_limits_for_record`; the
