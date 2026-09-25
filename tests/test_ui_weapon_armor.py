@@ -119,7 +119,8 @@ class EquipmentTabTestCase(UiTestCase):
         self.assertEqual(values[1], self.grace_db.describe(self.grace.effect_id))
         self.assertEqual(values[2], "150")
         self.assertEqual(values[3], "3")
-        self.assertEqual(values[4], records.RARITY_NAMES[4])
+        self.assertEqual(values[4], ui.rarity_label(4, records.RARITY_NAMES[4]))
+        self.assertEqual(values[4], "神器（绿色）")
         self.assertIn(self.katana.name, tab.tree.item("3", "text"))
 
     def test_reading_the_save_fills_both_tabs_without_touching_the_others(self) -> None:

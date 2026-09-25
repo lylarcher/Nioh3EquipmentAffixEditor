@@ -20,7 +20,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
 
-from . import equipmentdb, paths
+from . import equipmentdb, limits, paths
 from .affixdb import (
     AffixDb,
     AffixError,
@@ -55,6 +55,7 @@ from .editor import (
     apply_kind_swaps,
     apply_level_edits,
     apply_plus_edits,
+    apply_rarity_edits,
     apply_soul_edits,
     collect_kind_samples,
     commit_save,
@@ -71,6 +72,7 @@ from .editor import (
     plan_kind_swap,
     plan_level_edit,
     plan_plus_edit,
+    plan_rarity_edit,
     resolve_grace_id,
     restore_backup,
     save_checksum_is_valid,
@@ -117,6 +119,26 @@ SUBTITLE = ("武器 / 防具 / 饰品 / 魂核 词条 · 取自《仁王3词条�
 EMPTY_LABEL = "(空)"
 #: Sentinel for "no filter" in the 种类 / 恩宠 filter comboboxes (需求 3).
 ALL_FILTER = "(全部)"
+
+#: 稀有度数值 -> 游戏内颜色的完整对照（显示用；数值本身来自 limits 这唯一来源）。
+RARITY_COLOR_HINT = " / ".join(
+    f"{value} {name}" for value, name in sorted(limits.RARITY_COLOR_BY_VALUE.items())
+)
+
+
+def rarity_color_of(value: object) -> str:
+    """稀有度数值的游戏内颜色名；未知值返回空串（fail-soft，不抛异常）。"""
+    return limits.rarity_color_name(value)
+
+
+def rarity_label(rarity: int, name: str) -> str:
+    """列表「品质」列的文字：保留既有游戏稀有度名，后面追加颜色名（「神器（绿色）」）。
+
+    颜色只做显示，**绝不替换**原来的名字（既有断言看的就是这个名字）；颜色查不到时
+    原样返回名字，不显示括号。
+    """
+    color = rarity_color_of(rarity)
+    return f"{name}（{color}）" if color else name
 
 #: Game-process state line.  Writing needs the game closed *or* an explicit
 #: acknowledgement that it sits on its title screen, so the state is shown
@@ -195,7 +217,7 @@ EQUIPMENT_FILTER_LABELS = {
 class EquipmentTab(ttk.Frame):
     """武器 / 防具页签（同一个组件实例化两次，只有 ``big`` 不同）。
 
-    与饰品页签同构：左边记录列表 + 四轴级联筛选，右边词条槽 / 等级 / +值 /
+    与饰品页签同构：左边记录列表 + 四轴级联筛选，右边词条槽 / 等级 / +值 / 稀有度 /
     无中生有。差异只在**规则来源**：
 
     * 候选词条来自这件装备自己的词条池（远程武器 = 远程表，其余武器 = 近战表，
@@ -203,8 +225,8 @@ class EquipmentTab(ttk.Frame):
       :func:`editor.equipment_affix_allowed`，界面里不重写一套规则；
     * 固定词条（目录标着同名固定，或存档标识带 0x4000）只读；恩宠/套装不在这排槽里改，
   用右下角的【恩宠 / 套装】栏替换；
-    * 等级 / +值 的上限取自 :func:`editor.class_limits_for_record`（等级 180、
-      +值按大类），不再写死。
+    * 等级 / +值 / 稀有度 的上限取自 :func:`editor.class_limits_for_record` 与
+      ``limits``（等级 180、+值按大类、稀有度按大类），不再写死。
 
     写入路径与其它页签共用：改动先落在内存里的 ``app.decrypted``，
     最后由窗口底部的「写入存档」写回副本。
@@ -321,6 +343,7 @@ class EquipmentTab(ttk.Frame):
         self._build_note(right)
         self._build_level(right)
         self._build_plus(right)
+        self._build_rarity(right)
         self._build_grace(right)
         self._build_create(right)
 
@@ -346,15 +369,20 @@ class EquipmentTab(ttk.Frame):
             "同名固定词条是该件装备固有的一部分，**禁止修改**（显示为「固定，不可修改」）；"
             "★（星号）词条可以改。恩宠/套装词条不在这排槽里改 —— "
             "选中记录后用右下角的【恩宠 / 套装】栏替换。\n"
-            "等级上限 180；+值上限按大类（武器 / 防具都是 0..30），上限数值来自"
-            "按类别收集的实测范围表。\n"
+            f"等级上限 {limits.LEVEL_CAP}；+值上限按大类（武器 / 防具都是 0..30，"
+            f"上限表见 limits.py）；稀有度上限 {limits.rarity_cap(self.big)}"
+            "（品质字段 +0x30）。\n"
+            f"稀有度的游戏内颜色：{RARITY_COLOR_HINT}"
+            "；橙色（5）在当前周目（三周目 / 本体+DLC1）不可达，DLC2 之后才可能开放。\n"
+            f"上限来历：{limits.describe_origin()}\n"
             "仅供测试学习用，不要用于联机影响游戏平衡。"
         )
         ttk.Label(right, text=note, foreground="#666666", wraplength=520,
                   justify=tk.LEFT).pack(anchor=tk.W, pady=(6, 0))
 
     def _build_level(self, right: ttk.Frame) -> None:
-        self.level_frame = ttk.LabelFrame(right, text="等级（上限 180）", padding=(6, 4))
+        self.level_frame = ttk.LabelFrame(right, text=f"等级（上限 {limits.LEVEL_CAP}）",
+                                          padding=(6, 4))
         self.level_frame.pack(fill=tk.X, pady=(6, 0))
         row = ttk.Frame(self.level_frame)
         row.pack(fill=tk.X)
@@ -390,6 +418,31 @@ class EquipmentTab(ttk.Frame):
                   foreground="#666666", wraplength=520,
                   justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
         self._set_plus_enabled(False)
+
+    def _build_rarity(self, right: ttk.Frame) -> None:
+        """稀有度（品质）修改：与等级 / +值 完全同构的一行。
+
+        当前值用 ``records.record_rarity`` 的口径显示，范围按**记录所属大类**取
+        （武器 / 防具 0..4）；序号对应的游戏内颜色一并显示，说明里给出完整对照。
+        """
+        self.rarity_frame = ttk.LabelFrame(
+            right, text=f"稀有度（0..{limits.rarity_cap(self.big)}，字段 +0x30）",
+            padding=(6, 4))
+        self.rarity_frame.pack(fill=tk.X, pady=(6, 0))
+        row = ttk.Frame(self.rarity_frame)
+        row.pack(fill=tk.X)
+        ttk.Label(row, text="改成:").pack(side=tk.LEFT)
+        self.rarity_var = tk.StringVar(value="")
+        self.rarity_entry = ttk.Entry(row, textvariable=self.rarity_var, width=8)
+        self.rarity_entry.pack(side=tk.LEFT, padx=4)
+        self.rarity_button = ttk.Button(row, text="应用稀有度", command=self.apply_rarity)
+        self.rarity_button.pack(side=tk.LEFT, padx=2)
+        self.rarity_status_var = tk.StringVar(
+            value=f"选择一条{self.title}记录后，这里会显示它的稀有度。")
+        ttk.Label(self.rarity_frame, textvariable=self.rarity_status_var,
+                  foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        self._set_rarity_enabled(False)
 
     def _build_grace(self, right: ttk.Frame) -> None:
         self.grace_frame = ttk.LabelFrame(right, text="恩宠 / 套装（可替换）",
@@ -465,6 +518,7 @@ class EquipmentTab(ttk.Frame):
             self.detail_var.set("")
             self._set_level_enabled(False)
             self._set_plus_enabled(False)
+            self._reset_rarity_widgets()
 
     def set_note(self, message: str) -> None:
         """Report a listing problem without raising (fail soft, per tab)."""
@@ -556,7 +610,8 @@ class EquipmentTab(ttk.Frame):
                 "", "end", iid=str(view.slot_index),
                 text=f"#{view.slot_index} {view.item_name}",
                 values=(view.small, self.grace_name(view), view.level,
-                        str(view.plus_value), view.rarity_name),
+                        str(view.plus_value),
+                        rarity_label(view.rarity, view.rarity_name)),
             )
         total = len(self.views)
         if all(self.filter_vars[axis].get() in ("", ALL_FILTER)
@@ -884,6 +939,7 @@ class EquipmentTab(ttk.Frame):
                 f"当前 +{view.plus_value}（字段 +0x0A，只写这两个字节）")
         self._set_level_enabled(True)
         self._set_plus_enabled(True)
+        self._refresh_rarity_state(view)
         self._refresh_grace_state(view)
         self.detail_var.set("")
 
@@ -1039,6 +1095,79 @@ class EquipmentTab(ttk.Frame):
         state = ["!disabled"] if enabled else ["disabled"]
         self.plus_entry.state(state)
         self.plus_button.state(state)
+
+    # -- 稀 有 度 ----------------------------------------------------------
+    def _set_rarity_enabled(self, enabled: bool) -> None:
+        state = ["!disabled"] if enabled else ["disabled"]
+        self.rarity_entry.state(state)
+        self.rarity_button.state(state)
+
+    def _reset_rarity_widgets(self) -> None:
+        """没选记录：稀有度框清空并置灰，**不留上一条的值**。"""
+        self.rarity_var.set("")
+        self.rarity_status_var.set(
+            f"选择一条{self.title}记录后，这里会显示它的稀有度。")
+        self._set_rarity_enabled(False)
+
+    def _refresh_rarity_state(self, view: EquipmentView) -> None:
+        """把稀有度框刷成**这条记录**的值与可用范围（切记录时逐字段重置）。"""
+        cap = self.app.rarity_cap_for_record(view.record_type)
+        color = rarity_color_of(view.rarity)
+        colored = f"（{color}）" if color else ""
+        if cap is None:
+            # 表外 id：引擎也会拒绝（fail closed），这里先说清楚，不猜一个上限。
+            self.rarity_var.set("")
+            self.rarity_frame.configure(
+                text=f"稀有度（{view.record_type:#06x} 不在物品总目录里）")
+            self.rarity_status_var.set(
+                f"不可改：记录 #{view.slot_index} 的种类 {view.record_type:#06x} "
+                "不在物品总目录（data/equipment_items.json）里，无法确定稀有度上限。")
+            self._set_rarity_enabled(False)
+            return
+        self.rarity_var.set(str(view.rarity))
+        self.rarity_frame.configure(text=f"稀有度（0..{cap}，字段 +0x30）")
+        self.rarity_status_var.set(
+            f"当前 {view.rarity}{colored}（{view.rarity_name}）。范围 0..{cap}"
+            f"（按大类「{self.big}」）；颜色对照 {RARITY_COLOR_HINT}；"
+            f"橙色（5）在当前周目不可达。{limits.describe_origin()}")
+        self._set_rarity_enabled(True)
+
+    def apply_rarity(self) -> None:
+        view = self._require_view()
+        if view is None:
+            return
+        try:
+            rarity = int(self.rarity_var.get().strip(), 10)
+        except ValueError:
+            messagebox.showwarning("提示", "稀有度必须是整数")
+            return
+        cap = self.app.rarity_cap_for_record(view.record_type)
+        cap_text = "（这条记录的种类不在物品总目录里，引擎会拒绝）" if cap is None \
+            else f"0..{cap}"
+        if not messagebox.askokcancel(
+            "确认修改稀有度",
+            f"把{self.title}记录 #{view.slot_index} 的稀有度改成 {rarity}？\n\n"
+            "· 只写入品质字段（+0x30 的低 4 位；写成 0 时才顺带清 +0x31 的低 4 位），"
+            "词条、等级、+值、标识都不动；\n"
+            f"· 合法范围 {cap_text}（按大类取，上限表见 limits.py）；\n"
+            f"· 颜色对照 {RARITY_COLOR_HINT}；橙色（5）在当前周目不可达；\n"
+            "· 存档写入前会自动备份，出问题可以用「恢复备份」恢复。",
+            icon="warning",
+        ):
+            return
+        try:
+            plan = plan_rarity_edit(self.app.decrypted, view.slot_index, rarity,
+                                    affix_db=self.app.affix_db,
+                                    known_ids=self.app.known_ids,
+                                    layout=self.app.layout)
+            self.app.decrypted = apply_rarity_edits(self.app.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - 通过对话框反馈
+            messagebox.showerror("错误", str(error))
+            return
+        self.detail_var.set(f"{plan.describe()}（内存中，尚未写入存档）")
+        self.app._status(
+            f"{self.title}记录 #{view.slot_index} 的稀有度改为 {plan.new_value}")
+        self.reload()
 
     def apply_level(self) -> None:
         view = self._require_view()
@@ -1651,14 +1780,15 @@ class AccessoryEditorApp(tk.Tk):
                   "恩宠（xxx的恩宠）可以用下面的【恩宠】栏改成另一个恩宠；"
                   "套装/专属套装（如 怨恨盖世）按规则不允许改动。\n"
                   "「种类」一栏由《仁王3词条装备库v2.21》物品总目录的饰品条目解析得到。"
-                  "等级可以改（上限 180）；「+值」也可以改（字段 +0x0A，"
+                  f"等级可以改（上限 {limits.LEVEL_CAP}）；「+值」也可以改（字段 +0x0A，"
                   "已由游戏内实测确认：存档字节与物品卡显示的 +13/+18/+19 一致，"
                   f"合法范围 0..{MAX_RECORD_PLUS}，只写这一个字段）。"),
             foreground="#666666", wraplength=520, justify=tk.LEFT,
         )
         note.pack(anchor=tk.W, pady=(6, 0))
 
-        self.level_frame = ttk.LabelFrame(right, text="等级（上限 180）", padding=(6, 4))
+        self.level_frame = ttk.LabelFrame(right, text=f"等级（上限 {limits.LEVEL_CAP}）",
+                                          padding=(6, 4))
         self.level_frame.pack(fill=tk.X, pady=(6, 0))
         level_row = ttk.Frame(self.level_frame)
         level_row.pack(fill=tk.X)
@@ -1699,6 +1829,29 @@ class AccessoryEditorApp(tk.Tk):
         )
         self.plus_status_label.pack(anchor=tk.W, pady=(4, 0))
         self._set_plus_enabled(False)
+
+        # 稀有度（品质）: 字段 +0x30；范围按记录所属大类取（饰品 0..4）。
+        self.rarity_frame = ttk.LabelFrame(
+            right, text=f"稀有度（0..{limits.rarity_cap('饰品')}，字段 +0x30）",
+            padding=(6, 4))
+        self.rarity_frame.pack(fill=tk.X, pady=(6, 0))
+        rarity_row = ttk.Frame(self.rarity_frame)
+        rarity_row.pack(fill=tk.X)
+        ttk.Label(rarity_row, text="改成:").pack(side=tk.LEFT)
+        self.rarity_var = tk.StringVar(value="")
+        self.rarity_entry = ttk.Entry(rarity_row, textvariable=self.rarity_var, width=8)
+        self.rarity_entry.pack(side=tk.LEFT, padx=4)
+        self.rarity_button = ttk.Button(rarity_row, text="应用稀有度",
+                                        command=self.apply_rarity_to_selection)
+        self.rarity_button.pack(side=tk.LEFT, padx=2)
+        self.rarity_status_var = tk.StringVar(
+            value="选择一条饰品记录后，这里会显示它的稀有度。")
+        self.rarity_status_label = ttk.Label(
+            self.rarity_frame, textvariable=self.rarity_status_var,
+            foreground="#666666", wraplength=520, justify=tk.LEFT,
+        )
+        self.rarity_status_label.pack(anchor=tk.W, pady=(4, 0))
+        self._set_rarity_enabled(False)
 
         self.kind_frame = ttk.LabelFrame(right, text="种类（同分类互换）", padding=(6, 4))
         self.kind_frame.pack(fill=tk.X, pady=(6, 0))
@@ -1909,7 +2062,8 @@ class AccessoryEditorApp(tk.Tk):
                 text=f"#{view.slot_index} @ {view.offset:#x}",
                 # Tk normalises a numeric-looking cell ("+5" comes back as "5"), so
                 # the meaning rides on the column header and the cell is a plain number.
-                values=(view.level, str(view.plus_value), view.rarity_name, label),
+                values=(view.level, str(view.plus_value),
+                        rarity_label(view.rarity, view.rarity_name), label),
             )
         total = len(self.accessory_views)
         if self.kind_filter_var.get() in ("", self.ALL_FILTER) and \
@@ -2244,7 +2398,8 @@ class AccessoryEditorApp(tk.Tk):
                    command=self.apply_soul_edits_to_selection).pack(anchor=tk.W,
                                                                    pady=(4, 0))
 
-        level_frame = ttk.LabelFrame(right, text="魂核等级（上限 180）", padding=(6, 4))
+        level_frame = ttk.LabelFrame(right, text=f"魂核等级（上限 {limits.LEVEL_CAP}）",
+                                     padding=(6, 4))
         level_frame.pack(fill=tk.X, pady=(6, 0))
         level_row = ttk.Frame(level_frame)
         level_row.pack(fill=tk.X)
@@ -2261,6 +2416,28 @@ class AccessoryEditorApp(tk.Tk):
         ttk.Label(level_frame, textvariable=self.soul_level_status_var,
                   foreground="#666666", wraplength=520,
                   justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+
+        # 稀有度（品质）：魂核的上限比其它大类低（3 = 特大名器），所以范围单独显示。
+        rarity_frame = ttk.LabelFrame(
+            right, text=f"魂核稀有度（0..{limits.rarity_cap('魂核')}，字段 +0x30）",
+            padding=(6, 4))
+        rarity_frame.pack(fill=tk.X, pady=(6, 0))
+        rarity_row = ttk.Frame(rarity_frame)
+        rarity_row.pack(fill=tk.X)
+        ttk.Label(rarity_row, text="改成:").pack(side=tk.LEFT)
+        self.soul_rarity_var = tk.StringVar(value="")
+        self.soul_rarity_entry = ttk.Entry(rarity_row, textvariable=self.soul_rarity_var,
+                                           width=8)
+        self.soul_rarity_entry.pack(side=tk.LEFT, padx=4)
+        self.soul_rarity_button = ttk.Button(rarity_row, text="应用魂核稀有度",
+                                             command=self.apply_soul_rarity_to_selection)
+        self.soul_rarity_button.pack(side=tk.LEFT, padx=2)
+        self.soul_rarity_status_var = tk.StringVar(
+            value="选择一条魂核记录后，这里会显示它的稀有度。")
+        ttk.Label(rarity_frame, textvariable=self.soul_rarity_status_var,
+                  foreground="#666666", wraplength=520,
+                  justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
+        self._set_soul_rarity_enabled(False)
 
         kind_frame = ttk.LabelFrame(right, text="魂核种类（同分类互换）", padding=(6, 4))
         kind_frame.pack(fill=tk.X, pady=(6, 0))
@@ -2325,6 +2502,11 @@ class AccessoryEditorApp(tk.Tk):
         else:
             for entry in self.soul_value_entries:
                 entry.state(state)
+            # 没选记录：稀有度框清空并置灰，**不留上一条的值**。
+            self.soul_rarity_var.set("")
+            self.soul_rarity_status_var.set(
+                "选择一条魂核记录后，这里会显示它的稀有度。")
+            self._set_soul_rarity_enabled(False)
         self.soul_level_entry.state(state)
         self.soul_level_button.state(state)
         self.soul_kind_combo.state(["!disabled", "readonly"] if enabled
@@ -2370,7 +2552,8 @@ class AccessoryEditorApp(tk.Tk):
         for view in shown:
             self.soul_tree.insert(
                 "", tk.END, iid=str(view.slot_index), text=f"#{view.slot_index}",
-                values=(f"Lv{view.level}", view.rarity_name,
+                values=(f"Lv{view.level}",
+                        rarity_label(view.rarity, view.rarity_name),
                         view.describe_item(self.soul_item_db)),
             )
         total = sum(1 for view in self.soul_views if not view.unidentified)
@@ -2579,6 +2762,7 @@ class AccessoryEditorApp(tk.Tk):
             f"当前 Lv{view.level}（范围 1..{MAX_ITEM_LEVEL}）。"
             "只改等级字段，词条数值不随等级变化；请谨慎修改并进游戏确认。"
         )
+        self._refresh_soul_rarity_state(view)
         allowed = view.level_mirror == view.level
         self.soul_level_entry.state(["!disabled"] if allowed else ["disabled"])
         self.soul_level_button.state(["!disabled"] if allowed else ["disabled"])
@@ -2695,6 +2879,75 @@ class AccessoryEditorApp(tk.Tk):
                                     known_ids=self.soul_known_ids,
                                     layout=self.soul_layout)
             self.decrypted = apply_level_edits(self.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        self._refresh_after_edit(target)
+
+    # -- 魂核稀有度 ---------------------------------------------------------
+    def _set_soul_rarity_enabled(self, enabled: bool) -> None:
+        state = ["!disabled"] if enabled else ["disabled"]
+        self.soul_rarity_entry.state(state)
+        self.soul_rarity_button.state(state)
+
+    def _refresh_soul_rarity_state(self, view: SoulCoreView) -> None:
+        """Enable the 稀有度 row for the selected 魂核 and show its value/range.
+
+        每次选中一条魂核都会调到这里，值和范围都重设 —— 上一条的值不会残留。
+        """
+        cap = self.rarity_cap_for_record(view.record_type)
+        color = rarity_color_of(view.rarity)
+        colored = f"（{color}）" if color else ""
+        if cap is None:
+            self.soul_rarity_var.set("")
+            self.soul_rarity_status_var.set(
+                f"不可改：魂核记录 #{view.slot_index} 的种类 {view.record_type:#06x} "
+                "不在物品总目录（data/equipment_items.json）里，无法确定稀有度上限。")
+            self._set_soul_rarity_enabled(False)
+            return
+        self.soul_rarity_var.set(str(view.rarity))
+        self.soul_rarity_status_var.set(
+            f"当前 {view.rarity}{colored}（{view.rarity_name}）。范围 0..{cap}"
+            f"（魂核比其它大类低一档）；颜色对照 {RARITY_COLOR_HINT}；"
+            f"橙色（5）在当前周目不可达。{limits.describe_origin()}")
+        self._set_soul_rarity_enabled(True)
+
+    def apply_soul_rarity_to_selection(self) -> None:
+        """Change the selected 魂核's 稀有度 (memory only; 写入存档 commits)."""
+        if self.decrypted is None:
+            messagebox.showwarning("提示", MSG_NEED_DATA)
+            return
+        view = self._selected_soul()
+        if view is None:
+            messagebox.showwarning("提示", MSG_NEED_SELECTION)
+            return
+        text = self.soul_rarity_var.get().strip()
+        try:
+            rarity = int(text, 10)
+        except ValueError:
+            messagebox.showwarning("提示", f"稀有度必须是整数：{text!r}")
+            return
+        target = view.slot_index
+        cap = self.rarity_cap_for_record(view.record_type)
+        cap_text = "（这条记录的种类不在物品总目录里，引擎会拒绝）" if cap is None \
+            else f"0..{cap}"
+        if not messagebox.askokcancel(
+            "确认修改魂核稀有度",
+            f"把魂核记录 #{target} 的稀有度改成 {rarity}？\n\n"
+            "· 只写入品质字段（+0x30 的低 4 位；写成 0 时才顺带清 +0x31 的低 4 位），"
+            "词条、等级、标识都不动；\n"
+            f"· 合法范围 {cap_text}（魂核上限比其它大类低）；\n"
+            f"· 颜色对照 {RARITY_COLOR_HINT}；橙色（5）在当前周目不可达；\n"
+            "· 存档写入前会自动备份。",
+            icon="warning",
+        ):
+            return
+        try:
+            plan = plan_rarity_edit(self.decrypted, target, rarity,
+                                    affix_db=self.soul_db,
+                                    known_ids=self.soul_known_ids,
+                                    layout=self.soul_layout)
+            self.decrypted = apply_rarity_edits(self.decrypted, [plan])
         except Exception as error:  # noqa: BLE001 - surfaced through the GUI
             messagebox.showerror("错误", str(error))
             return
@@ -2926,6 +3179,19 @@ class AccessoryEditorApp(tk.Tk):
         messagebox.showerror("错误", str(error))
 
     # ------------------------------------------------------------- actions
+
+    # ------------------------------------------------ 稀有度上限（界面显示）
+    def rarity_cap_for_record(self, record_type: int) -> int | None:
+        """这条记录所属大类的稀有度上限；**查不到返回 ``None``**（表外 id）。
+
+        与引擎同一口径（:func:`editor.plan_rarity_edit`）：大类来自**统一物品总目录**
+        ``data/equipment_items.json``，上限来自 ``limits.RARITY_CAP_BY_BIG``。
+        ``None`` = 表外 id，界面据此置灰并说明原因 —— 引擎也会拒绝它，绝不猜数字。
+        """
+        item = self.equipment_item_db.lookup(record_type)
+        if item is None or not item.big:
+            return None
+        return equipmentdb.rarity_cap_for_big(item.big)
 
     def refresh_saves(self) -> None:
         self._run_worker(self._load_saves)
@@ -3182,6 +3448,7 @@ class AccessoryEditorApp(tk.Tk):
         self._refresh_grace_state(view)
         self._refresh_level_state(view)
         self._refresh_plus_state(view)
+        self._refresh_rarity_state(view)
         self._refresh_kind_state(view)
 
     def _set_grace_enabled(self, enabled: bool) -> None:
@@ -3605,6 +3872,86 @@ class AccessoryEditorApp(tk.Tk):
         self.selected_accessory = target
         self._on_accessory_selected()
         self._status(f"记录 #{target} 的等级已改为 {level}（尚未写入存档）")
+
+    # -- 稀 有 度 -----------------------------------------------------------
+    def _set_rarity_enabled(self, enabled: bool) -> None:
+        self.rarity_entry.state(["!disabled"] if enabled else ["disabled"])
+        self.rarity_button.state(["!disabled"] if enabled else ["disabled"])
+
+    def _refresh_rarity_state(self, view: AccessoryView) -> None:
+        """Enable the 稀有度 row for the selected record and show its current value.
+
+        切记录时**这里重设值与范围**（`_on_accessory_selected` 每次都会调），
+        所以上一条记录的值不会残留。
+        """
+        cap = self.rarity_cap_for_record(view.record_type)
+        color = rarity_color_of(view.rarity)
+        colored = f"（{color}）" if color else ""
+        if cap is None:
+            self.rarity_var.set("")
+            self.rarity_frame.configure(
+                text=f"稀有度（{view.record_type:#06x} 不在物品总目录里）")
+            self.rarity_status_var.set(
+                f"不可改：记录 #{view.slot_index} 的种类 {view.record_type:#06x} "
+                "不在物品总目录（data/equipment_items.json）里，无法确定稀有度上限。")
+            self.rarity_status_label.configure(foreground="#b03030")
+            self._set_rarity_enabled(False)
+            return
+        self.rarity_var.set(str(view.rarity))
+        self.rarity_frame.configure(text=f"稀有度（0..{cap}，字段 +0x30）")
+        self.rarity_status_var.set(
+            f"当前 {view.rarity}{colored}（{view.rarity_name}）。范围 0..{cap}"
+            f"（按大类「饰品」）；颜色对照 {RARITY_COLOR_HINT}；"
+            f"橙色（5）在当前周目不可达。{limits.describe_origin()}")
+        self.rarity_status_label.configure(foreground="#1a7f37")
+        self._set_rarity_enabled(True)
+
+    def apply_rarity_to_selection(self) -> None:
+        """Change the selected record's 稀有度 (memory only; 写入存档 commits)."""
+        if not self._require_accessory_selection():
+            return
+        text = self.rarity_var.get().strip()
+        try:
+            rarity = int(text, 10)
+        except ValueError:
+            messagebox.showwarning("提示", f"稀有度必须是整数：{text!r}")
+            return
+        target = self.selected_accessory
+        view = self._selected_view()
+        cap = self.rarity_cap_for_record(view.record_type) if view else None
+        cap_text = "（这条记录的种类不在物品总目录里，引擎会拒绝）" if cap is None \
+            else f"0..{cap}"
+        if not messagebox.askokcancel(
+            "确认修改稀有度",
+            f"把记录 #{target} 的稀有度改成 {rarity}？\n\n"
+            "· 只写入品质字段（+0x30 的低 4 位；写成 0 时才顺带清 +0x31 的低 4 位），"
+            "词条、等级、+值、标识都不动；\n"
+            f"· 合法范围 {cap_text}（按大类取，上限表见 limits.py）；\n"
+            f"· 颜色对照 {RARITY_COLOR_HINT}；橙色（5）在当前周目不可达；\n"
+            "· 存档写入前会自动备份，出问题可以用「回滚」恢复。",
+            icon="warning",
+        ):
+            return
+        known_ids = accessory_catalog_ids(self.affix_db)
+        try:
+            plan = plan_rarity_edit(self.decrypted, target, rarity,
+                                    affix_db=self.affix_db, known_ids=known_ids,
+                                    layout=self.layout)
+            self.decrypted = apply_rarity_edits(self.decrypted, [plan])
+        except Exception as error:  # noqa: BLE001 - surfaced through the GUI
+            messagebox.showerror("错误", str(error))
+            return
+        layout = inspect_layout(self.decrypted, known_ids=known_ids)
+        self._populate_accessories(
+            (self.decrypted,
+             list_accessories(self.decrypted, layout=layout, known_ids=known_ids),
+             self.checksum_ok, layout),
+            keep_selection=True,
+        )
+        self.tree.selection_set(str(target))
+        self.selected_accessory = target
+        self._on_accessory_selected()
+        self._status(f"记录 #{target} 的稀有度已改为 {rarity}（尚未写入存档）")
 
     def apply_plus_to_selection(self) -> None:
         """Change the selected record's +值 (memory only; 写入存档 commits)."""

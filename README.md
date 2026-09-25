@@ -777,6 +777,32 @@ original save).
   real record is the template; when there is none, a same-小类 record is used and the
   slots that do not fit are cleared, with the reason shown before anything is written.
 
+### Editing 稀有度 (the item's quality)
+
+Every one of the four tabs (饰品 / 魂核 / 武器 / 防具) has a 稀有度 row next to
+等级 and +値: type the new value and press 应用稀有度 — same plan → 应用 → 写入存档
+flow, same `（内存中，尚未写入存档）` notice, nothing is written to disk until you
+press 写入存档.
+
+* **Only the quality field changes** — the low 4 bits of `+0x30` (writing `0` also
+  clears the low 4 bits of `+0x31`, because the reader falls back to it when `+0x30`
+  reads 0). 词条 / 等级 / +値 / metadata are untouched, the high 4 bits of `+0x30`
+  are preserved.
+* **The cap comes from the record's 大类**, looked up in the shipped
+  `data/equipment_items.json`: 武器 / 防具 / 饰品 ≤ 4 (神器), 魂核 ≤ 3 (特大名器).
+  A record whose id is not in that catalog is **refused**, never guessed.
+* **One table, one place** — `nioh3_equipment_affix_editor/limits.py` is the only
+  source for 等级 180, +値 30 for 武器/防具/饰品, 15 for 魂核, none for 绘卷, and
+  稀有度 4 for 武器/防具/饰品/绘卷, 3 for 魂核.
+* **In-game colour** — 0 white, 1 yellow, 2 blue, 3 purple, 4 green, 5 orange. The
+  colour is display only and never a cap. Orange (5) is not reachable in the
+  current rotation (third playthrough: base game + DLC1); it becomes possible once
+  DLC2 / the fourth playthrough ships, and by then only that one table in
+  `limits.py` has to change.
+* **Switching records refreshes the row** — the box always shows the newly selected
+  record's value and that record's range; with nothing selected it is greyed out.
+  A refusal shows the engine's Chinese reason in a dialog.
+
 ### 筛选、关键词搜索、数值区间与「无中生有」
 
 Five behaviours added on request, all fail-closed and all reachable from both the

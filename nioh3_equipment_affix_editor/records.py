@@ -45,6 +45,8 @@ from __future__ import annotations
 import struct
 from dataclasses import dataclass
 
+from . import limits
+
 __all__ = [
     "AccessoryRecord",
     "EFFECT_COUNT",
@@ -80,6 +82,7 @@ __all__ = [
     "patch_record_item_id",
     "patch_record_level",
     "patch_record_plus",
+    "patch_record_rarity",
     "read_effect_slots",
     "read_item_record",
     "read_record_item_id",
@@ -149,8 +152,11 @@ RECORD_ACCOUNT_LOW_OFFSET = 0x14
 #: Highest item level the game serialises: the reference project reads
 #: ``min(record +0x06, 180)`` as the effective level, and the reference save's
 #: save tops out at 0x00B4 = 180 as well.  Never write above it.
-MAX_ITEM_LEVEL = 180
-MIN_ITEM_LEVEL = 1
+#:
+#: 数值的**唯一来源**是 :mod:`limits`（那里写了上限的来历：当前三周目，
+#: DLC2 / 四周目开放后只改 ``limits`` 即可）；这里只 re-export，不再自带数值。
+MAX_ITEM_LEVEL = limits.LEVEL_CAP
+MIN_ITEM_LEVEL = limits.MIN_LEVEL
 #: Level mirror written alongside ``+0x06``.  Measured: equal to ``+0x06`` on all
 #: 213 accessories of the reference save, so a level edit writes both and
 #: refuses when they disagree (that would mean the record is not an accessory).
@@ -177,7 +183,10 @@ RECORD_PLUS_OFFSET = 0x0A
 #: Highest ``+0x0A`` value the reference save uses (0..30 across its 213 accessories).
 #: The field's meaning is confirmed, but no save or workbook states the game's own cap,
 #: so writes stay inside the span that was actually observed instead of guessing higher.
-MAX_RECORD_PLUS = 30
+#:
+#: 同上：**唯一来源**在 :mod:`limits`（按大类，魂核更低、绘卷没有 +値），这里只是
+#: "多数物品"的那个文档值。
+MAX_RECORD_PLUS = limits.DEFAULT_PLUS_CAP
 
 #: Kept for callers written while the field was still a candidate; same span.
 RECORD_PLUS_CANDIDATE_MAX = MAX_RECORD_PLUS
@@ -442,6 +451,29 @@ def record_rarity(record: bytes) -> int:
     if rarity == 0:
         rarity = record[RECORD_RARITY_HIGH_OFFSET] & 0x0F
     return rarity
+
+
+def patch_record_rarity(record: bytes, rarity: int) -> bytes:
+    """Return ``record`` with its 品质字段 set to ``rarity``.
+
+    Only the low nibble of ``+0x30`` changes (the high nibble is per-instance data and
+    is preserved).  ``+0x31`` is only touched when the new value is 0: the reader above
+    falls back to ``+0x31`` when ``+0x30``'s low nibble reads 0, so clearing both is what
+    makes a written 0 actually read back as 0.
+
+    上限本身（武器/防具/饰品/绘卷 4、魂核 3）在 :mod:`limits`；这里只管按位写入。
+    """
+    if len(record) != SCROLL_RECORD_SIZE:
+        raise RecordError("record must be exactly 0xE8 bytes")
+    if not isinstance(rarity, int) or isinstance(rarity, bool):
+        raise RecordError("稀有度必须是整数")
+    if not 0 <= rarity <= 0x0F:
+        raise RecordError(f"稀有度必须在 0..15 之内，实际 {rarity}")
+    data = bytearray(record)
+    data[RECORD_RARITY_OFFSET] = (data[RECORD_RARITY_OFFSET] & 0xF0) | (rarity & 0x0F)
+    if rarity == 0:
+        data[RECORD_RARITY_HIGH_OFFSET] = data[RECORD_RARITY_HIGH_OFFSET] & 0xF0
+    return bytes(data)
 
 
 def effect_metadata_is_fixed(metadata: int) -> bool:

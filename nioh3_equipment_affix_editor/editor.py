@@ -30,6 +30,7 @@ from .affixdb import (  # noqa: PLC0415 - catalog helpers live here
     load_soul_catalog, load_soul_item_catalog,
 )
 from . import equipmentdb
+from . import limits
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .equipmentdb import EquipmentItem, EquipmentItemDb, EquipmentPool
@@ -65,6 +66,7 @@ __all__ = [
     "LevelEditError",
     "LevelPlan",
     "PlusPlan",
+    "RarityPlan",
     "SaveDescriptor",
     "SoulCoreView",
     "apply_creations",
@@ -74,6 +76,7 @@ __all__ = [
     "apply_kind_swaps",
     "apply_level_edits",
     "apply_plus_edits",
+    "apply_rarity_edits",
     "apply_soul_edits",
     "class_limits_for_record",
     "collect_kind_samples",
@@ -99,6 +102,7 @@ __all__ = [
     "plan_kind_swap",
     "plan_level_edit",
     "plan_plus_edit",
+    "plan_rarity_edit",
     "plan_soul_edits",
     "resolve_item_id",
     "restore_backup",
@@ -739,6 +743,144 @@ def apply_plus_edits(
         record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
         output[offset:offset + records.SCROLL_RECORD_SIZE] = (
             records.patch_record_plus(record, plan.new_value)
+        )
+    return bytes(output)
+
+
+def _record_big_class(
+    record_type: int,
+    *,
+    item_db: EquipmentItemDb | None,
+    record_index: int,
+) -> str:
+    """记录所属**大类**（武器 / 防具 / 饰品 / 魂核 / 绘卷），查不到就 fail closed。
+
+    唯一的来源是**统一物品总目录** ``data/equipment_items.json``
+    （``equipmentdb.load_equipment_item_db()``）：它覆盖武器 / 防具 / 饰品 / 魂核
+    四类，所以四类都能定出上限；表外 id（合成件、未知 id）**一律拒绝**，因为
+    "不知道是哪一类"就无法证明上限几 —— 宁可不写，也不猜一个数字。
+
+    ``item.big`` 用 ``getattr`` 取：调用方万一传进来的不是**统一物品总目录**（例如
+    饰品页签自己的 ``ItemDb``，它的条目没有大类字段），这里同样按"查不到"拒绝，
+    而不是抛 ``AttributeError``。
+    """
+    db = default_equipment_item_db() if item_db is None else item_db
+    item = db.lookup(record_type)
+    big = getattr(item, "big", "") if item is not None else ""
+    if item is None or not big:
+        raise EditorError(
+            f"记录 #{record_index} 的种类 {record_type:#06x} 不在物品总目录里"
+            "（data/equipment_items.json），无法确定稀有度上限，已拒绝改写"
+        )
+    return big
+
+
+@dataclass(frozen=True, slots=True)
+class RarityPlan:
+    """A 稀有度 change for one record (``+0x30`` 的低 4 位).
+
+    稀有度就是物品卡上的品质（0 粗物、1 名器、2 大名器、3 特大名器、4 神器）。写入只改
+    ``+0x30`` 的低 4 位；高 4 位与 ``+0x31`` 保持原样，只有把值写成 0 时才顺带清掉
+    ``+0x31`` 的低 4 位（读回时的回退逻辑在 ``records.record_rarity``）。其它字段、词条槽、
+    等级、+値 一律不动。
+
+    ``describe()`` 里的颜色名（0 白 / 1 黄 / 2 蓝 / 3 紫 / 4 绿 / 5 橙）来自
+    :data:`limits.RARITY_COLOR_BY_VALUE`，**只用于显示**：能不能写由大类的
+    ``limits.RARITY_CAP_BY_BIG`` 决定，与颜色表无关。
+    """
+
+    record_index: int
+    offset: int
+    old_value: int
+    new_value: int
+    #: 记录所属大类（来自统一物品总目录），拒绝信息与界面提示都用它。
+    big: str
+
+    def describe(self) -> str:
+        color = limits.rarity_color_name(self.new_value)
+        colored = f"（{color}）" if color else ""
+        old_color = limits.rarity_color_name(self.old_value)
+        old_colored = f"（{old_color}）" if old_color else ""
+        return (f"记录 #{self.record_index}: 稀有度 {self.old_value}{old_colored} → "
+                f"{self.new_value}{colored}（{self.big}，+0x30，只写这一个字段）")
+
+
+def plan_rarity_edit(
+    decrypted: bytes,
+    record_index: int,
+    rarity: int,
+    *,
+    affix_db: AffixDb,
+    known_ids: frozenset[int] | None = None,
+    layout: records.InventoryLayout | None = None,
+    item_db: EquipmentItemDb | None = None,
+    equipment_item_db: EquipmentItemDb | None = None,
+    ranges: Mapping | None = None,
+) -> RarityPlan:
+    """Validate one 稀有度 change and return its plan (nothing is written here).
+
+    上限按**记录所属大类**取，上限表只有一份（:mod:`limits`）：
+
+    * 大类来自**统一物品总目录** ``data/equipment_items.json``（``item_db`` 或
+      ``equipment_item_db`` 显式给，默认用 ``default_equipment_item_db()``）；
+    * 武器 / 防具 / 饰品 / 绘卷 ≤4，魂核 ≤3（``limits.RARITY_CAP_BY_BIG``）；
+    * **表外 id 一律拒绝**（"该记录的种类不在物品总目录里，无法确定稀有度上限"，
+      fail closed），绝不退回默认值；
+    * 比的是**新值**，存档里已有的越界历史值不会拦住其它记录的改动（与等级 / +値
+      同一口径）。
+
+    ``ranges`` / ``affix_db`` / ``known_ids`` 与 ``plan_plus_edit`` 完全同构：``ranges``
+    只为把该类别的实测样本数写进拒绝信息（证据），写入上限不看它。
+    """
+    if not isinstance(rarity, int) or isinstance(rarity, bool):
+        raise EditorError("稀有度必须是整数")
+    if not isinstance(record_index, int) or isinstance(record_index, bool):
+        raise EditorError("记录索引必须是整数")
+    if known_ids is None and layout is None:
+        known_ids = accessory_catalog_ids(affix_db)
+    if layout is None:
+        layout = records.locate_layout(decrypted, known_ids=known_ids)
+    if not 0 <= record_index < layout.slot_count:
+        raise EditorError(
+            f"记录索引必须位于 0..{layout.slot_count - 1}，实际 {record_index}"
+        )
+    record = records.read_item_record(decrypted, record_index, layout=layout)
+    if record is None:
+        raise EditorError(f"记录 #{record_index} 不存在或不是物品记录")
+    catalog = default_equipment_item_db() if item_db is None else item_db
+    if equipment_item_db is not None:
+        catalog = equipment_item_db
+    big = _record_big_class(record.record_type, item_db=catalog,
+                            record_index=record_index)
+    cap = limits.rarity_cap(big)
+    if rarity > cap:
+        raise EditorError(
+            f"稀有度必须在 0..{cap} 之间：记录 #{record_index} 属于大类「{big}」，"
+            f"该类上限 {cap}，{rarity} 超出范围。{limits.describe_origin()}"
+        )
+    current = records.record_rarity(record.record)
+    if current == rarity:
+        raise EditorError(f"记录 #{record_index} 的稀有度已经是 {rarity}")
+    # The patch function owns the range check as well; call it so a changed rule
+    # cannot be bypassed here.
+    records.patch_record_rarity(record.record, rarity)
+    return RarityPlan(record_index=record_index, offset=record.offset,
+                      old_value=current, new_value=rarity, big=big)
+
+
+def apply_rarity_edits(
+    decrypted: bytes,
+    plans: tuple[RarityPlan, ...] | list[RarityPlan],
+) -> bytes:
+    """Return new save bytes with the planned 稀有度 changes applied."""
+    if not plans:
+        raise EditorError("没有稀有度修改计划")
+    output = bytearray(decrypted)
+    for plan in plans:
+        offset = plan.offset
+        record = bytes(output[offset:offset + records.SCROLL_RECORD_SIZE])
+        output[offset:offset + records.SCROLL_RECORD_SIZE] = (
+            records.patch_record_rarity(record, plan.new_value)
         )
     return bytes(output)
 
@@ -1423,13 +1565,21 @@ class ClassLimits:
     level_by_class: bool = False
     #: +値 上限是否取自大类固定表 ``equipmentdb.PLUS_CAP_BY_BIG``（否则是文档值 30）。
     plus_by_big_table: bool = False
+    #: 稀有度上限：按大类查 ``limits.RARITY_CAP_BY_BIG``（武器/防具/饰品/绘卷 4、
+    #: 魂核 3）。大类来自**统一物品总目录** ``data/equipment_items.json``。
+    max_rarity: int = 0
+    #: 稀有度上限是否取自那张大类表（否则调用方自己走 fail-closed 路径）。
+    rarity_by_big_table: bool = False
 
     def describe(self) -> str:
         level = (f"等级上限 {self.max_level} = 类别实测值" if self.level_by_class
                  else f"等级上限 {self.max_level} = 文档值")
         plus_source = ("大类固定表 equipmentdb.PLUS_CAP_BY_BIG"
                        if self.plus_by_big_table else "文档值")
-        origin = f"{level}；+値 上限 {self.max_plus} = {plus_source}"
+        rarity_source = ("大类固定表 limits.RARITY_CAP_BY_BIG"
+                         if self.rarity_by_big_table else "未取到")
+        origin = (f"{level}；+値 上限 {self.max_plus} = {plus_source}；"
+                  f"稀有度上限 {self.max_rarity} = {rarity_source}")
         if not self.measured:
             return f"{self.key}（该类别不在实测范围表里，{origin}）"
         return (f"{self.key}（{origin}；该类别在参考存档实测 {self.samples} "
@@ -1448,16 +1598,22 @@ def class_limits_for_record(
     的未知 id），或者它的大类不需要按类别设限（饰品）。这样"没查到"绝不会变成
     "查到了 0"，也就不会把存档里已有的东西误判成越界。
 
-    两条上限的来源不同（都是用户口径，**观测值不等于游戏上限**）：
+    三条上限的来源不同（都是用户口径，**观测值不等于游戏上限**）：
 
     * **等级**：默认就是文档值 180（``LEVEL_CAP_BY_CLASS = False``）；只有显式打开那个
       开关，才改用 ``data/equipment_ranges.json`` 里该类别的实测最大值。
     * **+値**：按**大类**查固定小表 ``equipmentdb.PLUS_CAP_BY_BIG``（武器 30、防具 30、
       魂核 15），完全不看实测值 —— 所以忍刀这类观测到 25 的武器类别也能写 30。表里没有
       的大类退回文档值 30。
+    * **稀有度**：按**大类**查 ``limits.RARITY_CAP_BY_BIG``（武器/防具/饰品/绘卷 4、
+      魂核 3）。同样只是查表，不看观测值。
 
     ``data/equipment_ranges.json`` 继续作为证据：类别在表里时 ``samples`` 记下它的样本
     数，``describe()`` 会把这份出处写进拒绝信息。
+
+    **稀有度的 fail-closed 在 :func:`plan_rarity_edit` 里**：本函数对表外 id（例如
+    饰品、合成件）仍然返回 ``None``，那是"按类别设限不适用"，不是"上限是 0"；稀有度
+    计划自己再查一次统一物品总目录，查不到就拒绝。
     """
     db = default_equipment_item_db() if item_db is None else item_db
     item = db.lookup(record_type)
@@ -1469,12 +1625,16 @@ def class_limits_for_record(
     big_cap = equipmentdb.plus_cap_for_big(item.big)
     max_plus = records.MAX_RECORD_PLUS if big_cap is None else big_cap
     plus_by_big_table = big_cap is not None
+    rarity_cap = equipmentdb.rarity_cap_for_big(item.big)
+    max_rarity = limits.rarity_cap(item.big) if rarity_cap is None else rarity_cap
     if bucket is None:
-        # 类别不在实测范围表里：等级退回文档值；+値 仍按大类固定表（它与那张表无关）。
+        # 类别不在实测范围表里：等级退回文档值；+値 / 稀有度 仍按大类固定表（与那张表无关）。
         return ClassLimits(key=key, max_level=records.MAX_ITEM_LEVEL,
                            max_plus=max_plus, samples=0, measured=False,
                            level_by_class=False,
-                           plus_by_big_table=plus_by_big_table)
+                           plus_by_big_table=plus_by_big_table,
+                           max_rarity=max_rarity,
+                           rarity_by_big_table=True)
     max_level = (equipmentdb.equipment_caps(item, table)[0] if LEVEL_CAP_BY_CLASS
                  else records.MAX_ITEM_LEVEL)
     return ClassLimits(
@@ -1484,6 +1644,8 @@ def class_limits_for_record(
         samples=int(bucket.get("samples", 0) or 0),
         level_by_class=LEVEL_CAP_BY_CLASS,
         plus_by_big_table=plus_by_big_table,
+        max_rarity=max_rarity,
+        rarity_by_big_table=True,
     )
 
 
@@ -2987,21 +3149,8 @@ DONOR_SAME_KIND = "同种类样本"
 DONOR_SAME_TYPE = "同类型样本"
 
 
-def _read_rarity(record: bytes) -> int:
-    """稀有度 = ``+0x30`` 的低 4 位（与 ``support.build_record`` 的写法一致）。"""
-    return record[records.RECORD_RARITY_OFFSET] & 0x0F
-
-
 def _read_count(record: bytes) -> int:
     return struct.unpack_from("<H", record, records.RECORD_ITEM_COUNT_OFFSET)[0]
-
-
-def _patch_rarity(record: bytes, rarity: int) -> bytes:
-    """只改 ``+0x30`` 的低 4 位，高 4 位原样保留。"""
-    data = bytearray(record)
-    offset = records.RECORD_RARITY_OFFSET
-    data[offset] = (data[offset] & 0xF0) | (rarity & 0x0F)
-    return bytes(data)
 
 
 def _patch_count(record: bytes, count: int) -> bytes:
@@ -3139,7 +3288,8 @@ def plan_create_equipment(
     metadata is kept with only the 种类码 and ★ bits rewritten).  Everything else comes
     from the template, and the same legality rules as the edit path apply:
     装备种类标签必须匹配、固定词条不能新增、同一个种类只能有一个词条（``其他`` 与
-    「★ + 同名固定」例外）、一件只能有一个恩宠/套装、等级 0..180、+値 武器/防具 0..30。
+    「★ + 同名固定」例外）、一件只能有一个恩宠/套装、等级 0..180、+値 武器/防具 0..30、
+    稀有度按大类 0..4（上限表见 :mod:`limits`）。
     """
     if item_db is None:
         item_db = default_equipment_item_db()
@@ -3156,14 +3306,19 @@ def plan_create_equipment(
         )
     if not isinstance(level, int) or isinstance(level, bool):
         raise EquipmentCreationError("等级必须是整数")
-    if not records.MIN_ITEM_LEVEL <= level <= records.MAX_ITEM_LEVEL:
+    if not limits.MIN_LEVEL <= level <= limits.level_cap(item.big):
         raise EquipmentCreationError(
-            f"等级必须在 {records.MIN_ITEM_LEVEL}..{records.MAX_ITEM_LEVEL} 之内，"
+            f"等级必须在 {limits.MIN_LEVEL}..{limits.level_cap(item.big)} 之内，"
             f"{level} 超出范围"
         )
     if not isinstance(plus, int) or isinstance(plus, bool):
         raise EquipmentCreationError("+値 必须是整数")
-    plus_cap = equipmentdb.plus_cap_for_big(item.big)
+    plus_cap = limits.plus_cap(item.big)
+    if plus_cap is None:
+        raise EquipmentCreationError(
+            f"大类「{item.big}」没有 +値（上限表 limits.PLUS_CAP_BY_BIG 里是 None），"
+            "不能写 +値"
+        )
     if not 0 <= plus <= plus_cap:
         raise EquipmentCreationError(
             f"+値 必须在 0..{plus_cap} 之内（按大类「{item.big}」的上限），"
@@ -3172,9 +3327,13 @@ def plan_create_equipment(
     if rarity is not None:
         if not isinstance(rarity, int) or isinstance(rarity, bool):
             raise EquipmentCreationError("稀有度必须是整数")
-        if not 0 <= rarity < len(records.RARITY_NAMES):
+        # 上限按大类取（唯一来源 limits）：武器/防具/饰品/绘卷 4、魂核 3。
+        # 新建入口只做武器 / 防具，所以这里实际上总是 4；仍然查表，避免留一份数值。
+        rarity_cap = limits.rarity_cap(item.big)
+        if not 0 <= rarity <= rarity_cap:
             raise EquipmentCreationError(
-                f"稀有度必须在 0..{len(records.RARITY_NAMES) - 1} 之内，{rarity} 超出范围"
+                f"稀有度必须在 0..{rarity_cap} 之内（按大类「{item.big}」的上限），"
+                f"{rarity} 超出范围。{limits.describe_origin()}"
             )
     if count is not None:
         if not isinstance(count, int) or isinstance(count, bool):
@@ -3205,7 +3364,8 @@ def plan_create_equipment(
     record = records.patch_record_level(record, level)
     record = records.patch_record_plus(record, plus)
     if rarity is not None:
-        record = _patch_rarity(record, rarity)
+        # 写稀有度与改稀有度走**同一个**记录层写入器（含写 0 时清 +0x31 的规则）。
+        record = records.patch_record_rarity(record, rarity)
     if count is not None:
         record = _patch_count(record, count)
 
@@ -3317,7 +3477,7 @@ def plan_create_equipment(
         item=item,
         level=records.read_record_level(record),
         plus_value=records.read_record_plus(record),
-        rarity=_read_rarity(record),
+        rarity=records.record_rarity(record),
         count=_read_count(record),
         donor_slot=donor.slot_index,
         donor_offset=donor.offset,

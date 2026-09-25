@@ -213,10 +213,12 @@ class CreationTests(CreationFixture):
 
     def test_plus_and_rarity_are_written(self) -> None:
         save = self.save_with(**{"0": self.donor(self.katana, level=150)})
-        made = plan(save, self.katana, plus=30, rarity=5, count=1, effects=[])
+        # 稀有度上限按大类取（武器 = 4，见 limits.RARITY_CAP_BY_BIG）：5 现在被拒绝，
+        # 所以这里改成写到上限 4；「写 5 被拒」由 tests/test_rarity.py 覆盖。
+        made = plan(save, self.katana, plus=30, rarity=4, count=1, effects=[])
         self.assertEqual(made.plus_value, 30)
-        self.assertEqual(made.rarity, 5)
-        self.assertEqual(made.rarity_name, records.RARITY_NAMES[5])
+        self.assertEqual(made.rarity, 4)
+        self.assertEqual(made.rarity_name, records.RARITY_NAMES[4])
         self.assertEqual(made.count, 1)
         self.assertEqual(records.read_record_plus(made.record), 30)
 

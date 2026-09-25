@@ -2,9 +2,10 @@
 按类别收集的字段范围。
 
 本模块只提供**判定所需的数据**与纯粹的查表函数（词条池、装备种类标签 token、
-按类别的实测范围、``+値`` 的大类固定上限表）：最终「能不能写」一律由 :mod:`editor`
-的合法规则决定，本模块自己不写任何东西。本模块对现有饰品/魂核路径毫无影响（它们继续
-用自己的 JSON 与 :class:`AffixDb`)。
+按类别的实测范围、``+値`` 与**稀有度**的大类固定上限表）：最终「能不能写」一律由
+:mod:`editor` 的合法规则决定，本模块自己不写任何东西。上限数值的**唯一来源**是
+:mod:`limits`（本模块的两张 cap 表都是它的 re-export）。本模块对现有饰品/魂核路径
+毫无影响（它们继续用自己的 JSON 与 :class:`AffixDb`)。
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .affixdb import AffixDb, AffixError, ItemDb, resource_root
+from . import limits
 from .records import MAX_ITEM_LEVEL, MAX_RECORD_PLUS
 
 #: 近战武器词条表（近战词条 + 绿色星号词条的「近战」行）——
@@ -455,29 +457,47 @@ def load_equipment_tags(
 # 按类别取上限（P2 规则 2 的数据来源）
 # --------------------------------------------------------------------------
 
-#: 类别不在实测范围表里时用的文档值；直接引用记录层常量，避免两处漂移。
+#: 类别不在实测范围表里时用的文档值；直接引用**唯一来源** :mod:`limits`
+#: （``limits.LEVEL_CAP`` / ``limits.DEFAULT_PLUS_CAP``），避免两处漂移。
 DOCUMENTED_MAX_LEVEL = MAX_ITEM_LEVEL
 DOCUMENTED_MAX_PLUS = MAX_RECORD_PLUS
 
 #: ``+値`` 上限的**大类固定表**（用户口径，不是实测值）：武器 / 防具 / 饰品 30、
-#: 魂核 15。
+#: 魂核 15、绘卷无。
+#:
+#: **这里只是 re-export ``limits.PLUS_CAP_BY_BIG``**（同一个 dict 对象，不是副本）：
+#: 数值的唯一来源在 :mod:`limits`，DLC2 / 四周目开放后只改那一张表。
 #:
 #: ``data/equipment_ranges.json`` 里的 ``plus`` 是"这份参考存档观测到的最大值"
 #: （忍刀 25、忍者防具/手臂 23 …），**观测值不等于游戏上限**：武器 / 防具 / 饰品的
 #: ``+値`` 上限就是 30，只有魂核收紧到 15。所以写入上限只查这张表，实测范围表退到
 #: 证据的位置（:meth:`editor.ClassLimits.describe` 引用它的样本数）。饰品这一行是口径
 #: 记录：饰品不走按类别的闸门，仍用扁平的 0..30（同一个数，行为不变）。
-PLUS_CAP_BY_BIG: dict[str, int] = {
-    "武器": MAX_RECORD_PLUS,
-    "防具": MAX_RECORD_PLUS,
-    "饰品": MAX_RECORD_PLUS,
-    "魂核": 15,
-}
+PLUS_CAP_BY_BIG: dict[str, int | None] = limits.PLUS_CAP_BY_BIG
+
+#: 稀有度上限的**大类固定表**：武器 / 防具 / 饰品 / 绘卷 4、魂核 3。
+#: 同样只是 re-export ``limits.RARITY_CAP_BY_BIG``（同一个 dict 对象）。
+RARITY_CAP_BY_BIG: dict[str, int] = limits.RARITY_CAP_BY_BIG
 
 
 def plus_cap_for_big(big: str) -> int | None:
-    """这个大类的 ``+値`` 上限；表里没有的大类返回 ``None``（调用方退回文档值）。"""
+    """这个大类的 ``+値`` 上限；表里没有的大类返回 ``None``（调用方退回文档值）。
+
+    ``None`` 有两种含义，调用方按上下文区分：绘卷（表里有这一行，值是 ``None``
+    = 该大类根本没有 +値），以及表外的大类（查不到 = 退回文档值）。原有语义与返回值
+    一字未改，只是查的表换成 :data:`limits.PLUS_CAP_BY_BIG`。
+    """
     return PLUS_CAP_BY_BIG.get(big)
+
+
+def rarity_cap_for_big(big: str) -> int | None:
+    """这个大类的稀有度上限；表里没有的大类返回 ``None``（调用方自行决定口径）。
+
+    **Fail closed 由调用方负责**：:func:`editor.plan_rarity_edit` 在物品不在统一
+    物品总目录（``data/equipment_items.json``）里时直接拒绝，而不是退到默认值 ——
+    因为"不知道是哪一类"就不能证明该写几。
+    """
+    return RARITY_CAP_BY_BIG.get(big)
 
 
 def equipment_class_key(item: "EquipmentItem") -> str:
@@ -503,7 +523,9 @@ def equipment_caps(item: "EquipmentItem",
     """``(等级上限, +値上限)``：该物品所在类别的**实测**上限，取不到就退回文档值。
 
     **这是观测数据，不是写入上限**：能不能写由 :mod:`editor` 决定 —— 等级默认用文档值
-    180，``+値`` 用大类固定表 :data:`PLUS_CAP_BY_BIG`（武器 / 防具 / 饰品 30、魂核 15）。
+    180，``+値`` 用大类固定表 :data:`PLUS_CAP_BY_BIG`（武器 / 防具 / 饰品 30、魂核 15），
+    稀有度用 :data:`RARITY_CAP_BY_BIG`（武器 / 防具 / 饰品 / 绘卷 4、魂核 3）。两张表都是
+    :mod:`limits` 的 re-export（数值的唯一来源）。
     实测值来自 ``data/equipment_ranges.json``（每个类别都带样本数），作为证据保留：
     武器 / 防具观测到的 +値 各种类并不相同（22..30），魂核只到 15；等级上限多数类别观测
     到 180，少数类别低一些（例如弓 170、大太刀 172、忍者防具/足部 174）。

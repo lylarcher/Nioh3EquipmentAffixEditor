@@ -25,6 +25,7 @@ class _View:
         self._grace = set() if grace is None else set(grace)
         self.level = 170
         self.level_mirror = 170
+        self.rarity = 4
         self.rarity_name = "神器"
         self.plus_value = 18
         self.record_type = 0x4001
