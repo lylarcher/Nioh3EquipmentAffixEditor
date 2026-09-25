@@ -46,7 +46,8 @@ class CollectorTests(unittest.TestCase):
                          "assets/logo-64.png",
                          "bin/Nioh_Savefile_decrypt.exe",
                          "README.md",
-                         "CHANGELOG.md"):
+                         "CHANGELOG.md",
+                         "LICENSE"):
             self.assertIn(expected, self.payload, expected)
         self.assertTrue(any(name.startswith("third_party/source-data/")
                             for name in self.payload))

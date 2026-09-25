@@ -19,6 +19,8 @@ python tools/build_affix_db.py --dry-run   # 只解析并报告，不写文件
 ## 授权与使用
 
 * 词条数据版权归原作者所有，**非商业使用需署名**；请勿二次商用发布。
+* 这些原始数据**不属于本项目许可证（PolyForm Noncommercial License 1.0.0）的范围**，
+  详见上级目录的 `third_party/README.md`。
 * 本目录仅用于本地测试学习；仁王 3 为单机 / 纯 PVE 联机游戏，请勿用于影响游戏平衡的用途。
 * 详细致谢见仓库根目录 `README.md` 的 Credits 一节。
 

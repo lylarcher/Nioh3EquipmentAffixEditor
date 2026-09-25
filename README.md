@@ -1022,3 +1022,18 @@ touches it, and the +値 row never touches the level.
 This tool is for testing and learning only. Do not use it in online modes in a
 way that affects game balance. Nioh 3's co-op is PvE-only; even so, respect the
 game's terms of service. Always keep a backup of your save.
+
+## License
+
+This tool is **free to use, noncommercial only**, under the [PolyForm Noncommercial License 1.0.0](LICENSE):
+
+- **Free to use**: free for personal and other noncommercial purposes; you may modify it for your own use.
+- **No commercial use**: you may not use it for any commercial purpose, including selling it, paid services, bundling it into a commercial product, or monetising it through ads or sponsorship.
+- **Redistribution**: redistribution is allowed for noncommercial purposes only, and it must keep this license, the disclaimer and the liability terms unchanged.
+- **No warranty**: provided "as is"; the author is not liable for save corruption, account bans or data loss.
+- **Third-party**: the `third_party/` directory, `bin/Nioh_Savefile_decrypt.exe` and the source workbook data keep their own original terms; this license does not cover them.
+- **Unofficial**: this tool is not affiliated with, authorised by or endorsed by the game's publisher (Koei Tecmo); please support the official release.
+
+> Because commercial use is restricted, this is **not an OSI open-source license** — it is "source-available, noncommercial". You are free to read and modify the source; commercial use requires separate permission.
+
+Source and release packages: <https://github.com/lylarcher/Nioh3EquipmentAffixEditor> — release packages are on the repository's Releases page.

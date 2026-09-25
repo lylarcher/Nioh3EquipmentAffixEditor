@@ -567,7 +567,7 @@ function Invoke-Build {
                 'data\equipment_items.json', 'data\equipment_ranges.json',
                 'assets\app.ico', 'assets\logo-32.png', 'assets\logo.png',
                 'bin\Nioh_Savefile_decrypt.exe', 'readme.txt', 'README.md',
-                'README.zh-CN.md', 'CHANGELOG.md',
+                'README.zh-CN.md', 'CHANGELOG.md', 'LICENSE',
                 'third_party\source-data')) {
             if (-not (Test-Path -LiteralPath (Join-Path $smokeRoot $relative))) {
                 throw "exe 未在自身目录解压: $relative"
@@ -600,16 +600,22 @@ function Invoke-Build {
             }
             # 用户先看到 readme.txt，再看到 exe；数据文件仍由 exe 首次运行自解压。
             $script:ReadmePath = Join-Path $projectRoot 'readme.txt'
+            $script:LicensePath = Join-Path $projectRoot 'LICENSE'
             $zipItems = @($script:ExePath)
             if (Test-Path -LiteralPath $script:ReadmePath) {
                 $zipItems += $script:ReadmePath
             } else {
                 throw '缺少 readme.txt：用户压缩包里必须带使用说明'
             }
+            if (Test-Path -LiteralPath $script:LicensePath) {
+                $zipItems += $script:LicensePath
+            } else {
+                throw '缺少 LICENSE：用户压缩包里必须带授权文件'
+            }
             Compress-Archive -LiteralPath $zipItems -DestinationPath $script:ZipPath `
                 -CompressionLevel Optimal
             $zipSize = [math]::Round((Get-Item -LiteralPath $script:ZipPath).Length / 1MB, 2)
-            Write-Note "压缩包: $zipSize MB（内含 exe + readme.txt，其余文件首次运行时自解压）"
+            Write-Note "压缩包: $zipSize MB（内含 exe + readme.txt + LICENSE，其余文件首次运行时自解压）"
         }
     }
 

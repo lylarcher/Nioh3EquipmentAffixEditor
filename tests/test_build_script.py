@@ -98,9 +98,12 @@ class ScriptContractTests(unittest.TestCase):
         self.assertIn("发行目录出现 Python 源文件", self.source)
 
     def test_ships_the_executable_and_the_user_readme_in_the_zip(self) -> None:
-        """压缩包里只有 exe + readme.txt：其余文件由 exe 首次运行自解压。"""
+        """压缩包里是 exe + readme.txt + LICENSE：其余文件由 exe 首次运行自解压。"""
         self.assertIn("$zipItems = @($script:ExePath)", self.source)
         self.assertIn("$zipItems += $script:ReadmePath", self.source)
+        self.assertIn("$script:LicensePath = Join-Path $projectRoot 'LICENSE'",
+                      self.source)
+        self.assertIn("$zipItems += $script:LicensePath", self.source)
         self.assertIn("Compress-Archive -LiteralPath $zipItems", self.source)
         self.assertNotIn("Compress-Archive -LiteralPath $script:ExePath", self.source)
 
@@ -196,7 +199,19 @@ class BilingualDocsTests(unittest.TestCase):
     def test_the_payload_ships_both_readmes(self) -> None:
         source = (PROJECT_ROOT / "tools" / "make_payload.py").read_text(encoding="utf-8")
         self.assertIn('PAYLOAD_FILES = ("readme.txt", "README.md", '
-                      '"README.zh-CN.md", "CHANGELOG.md")', source)
+                      '"README.zh-CN.md", "CHANGELOG.md",', source)
+        self.assertIn('"LICENSE")', source)
+
+    def test_the_package_carries_the_license(self) -> None:
+        """LICENSE 进载荷、进冒烟校验、进压缩包。"""
+        payload = (PROJECT_ROOT / "tools" / "make_payload.py").read_text(encoding="utf-8")
+        script = (PROJECT_ROOT / "build.ps1").read_text(encoding="utf-8")
+        self.assertTrue((PROJECT_ROOT / "LICENSE").is_file())
+        self.assertIn("LICENSE", payload)
+        self.assertIn("'LICENSE'", script)
+        text = (PROJECT_ROOT / "LICENSE").read_text(encoding="utf-8")
+        self.assertIn("PolyForm Noncommercial License 1.0.0", text)
+        self.assertIn("Required Notice:", text)
 
     def test_the_package_carries_the_user_readme(self) -> None:
         """readme.txt 是给使用者的操作说明：进载荷、进冒烟校验、进压缩包。"""

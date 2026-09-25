@@ -75,11 +75,18 @@ class CatalogSourceTests(unittest.TestCase):
         explicit = Path("X:/somewhere/else.xlsx")
         self.assertEqual(build_affix_db.resolve_source(explicit), explicit)
 
-    def test_legacy_paths_are_only_fallbacks(self) -> None:
+    def test_no_machine_specific_paths_are_hardcoded(self) -> None:
+        """源码里不得出现任何本机绝对路径（公开仓库尤其重要）。"""
         from tools import build_affix_db
 
-        for candidate in build_affix_db.LEGACY_SOURCES:
-            self.assertNotEqual(candidate, build_affix_db.DEFAULT_SOURCE)
+        self.assertFalse(
+            hasattr(build_affix_db, "LEGACY_SOURCES"),
+            "旧的 LEGACY_SOURCES 本机回退路径应当已经删除",
+        )
+        text = (support.PROJECT_ROOT / "tools" / "build_affix_db.py").read_text(
+            encoding="utf-8")
+        for marker in ("D:\\", "C:\\", "/Users/", "/home/"):
+            self.assertNotIn(marker, text, f"源码里出现本机路径片段: {marker}")
 
 
 if __name__ == "__main__":

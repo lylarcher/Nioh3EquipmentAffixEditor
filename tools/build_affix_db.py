@@ -48,16 +48,11 @@ NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-#: Bundled copy of the source workbook (see third_party/source-data/README.md).
-#: The legacy location is kept as a fallback so an older checkout layout still
-#: works; the bundled copy wins whenever it exists.  The legacy directory
-#: (``Nioh3Trainer``) was removed from the workspace, so this path normally just
-#: documents where the data used to live.
+#: The bundled copy of the source workbook, resolved relative to the project
+#: root (see third_party/source-data/README.md).  Nothing here depends on where
+#: the repository happens to live, so a fresh clone works as-is.
 DEFAULT_SOURCE = (
     PROJECT_ROOT / "third_party" / "source-data" / "仁王3词条装备库v2.21.xlsx"
-)
-LEGACY_SOURCES = (
-    Path(r"D:\AIWorkspace\DSHWorkSpcae\Nioh3Trainer\仁王3词条装备库v2.21.xlsx"),
 )
 TARGET_SHEET = "饰品词条"
 
@@ -120,14 +115,9 @@ SOUL_ITEM_BIG_CLASS = "魂核"
 
 
 def resolve_source(explicit: str | Path | None = None) -> Path:
-    """Pick the source workbook: explicit path > bundled copy > legacy path."""
+    """Pick the source workbook: explicit path, else the bundled copy."""
     if explicit is not None:
         return Path(explicit)
-    if DEFAULT_SOURCE.is_file():
-        return DEFAULT_SOURCE
-    for candidate in LEGACY_SOURCES:
-        if candidate.is_file():
-            return candidate
     return DEFAULT_SOURCE  # missing: the caller reports it with a hint
 
 

@@ -14,6 +14,7 @@ relative directories they occupy in a checkout:
     bin/Nioh_Savefile_decrypt.exe   随附的加解密组件（可替换）
     third_party/source-data/...     原始数据（xlsx / CT，供重新生成词条库）
     readme.txt                      使用说明（给使用者看，中文）
+LICENSE                         授权（PolyForm Noncommercial 1.0.0，免费使用、禁止商用）
 README.md, README.zh-CN.md      开发者文档（英文 / 简体中文）
     CHANGELOG.md                    变更日志
 
@@ -42,7 +43,8 @@ DEFAULT_OUTPUT = PROJECT_ROOT / "build" / "app-payload.zip"
 PAYLOAD_DIRECTORIES = ("assets", "bin", "data", "third_party")
 
 #: Individual files copied verbatim.
-PAYLOAD_FILES = ("readme.txt", "README.md", "README.zh-CN.md", "CHANGELOG.md")
+PAYLOAD_FILES = ("readme.txt", "README.md", "README.zh-CN.md", "CHANGELOG.md",
+                 "LICENSE")
 
 EXCLUDED_SUFFIXES = (".pyc", ".pyo", ".tmp", ".zip")
 EXCLUDED_DIRECTORIES = ("__pycache__", ".git")
