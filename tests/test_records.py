@@ -5,9 +5,9 @@ from __future__ import annotations
 import struct
 import unittest
 
-from nioh3_accessory_editor import records
-from nioh3_accessory_editor.affixdb import AffixDb
-from nioh3_accessory_editor.records import (
+from nioh3_equipment_affix_editor import records
+from nioh3_equipment_affix_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.records import (
     EFFECT_COUNT,
     EFFECT_START,
     EFFECT_STRIDE,

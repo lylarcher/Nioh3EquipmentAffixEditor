@@ -16,7 +16,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from nioh3_accessory_editor.affixdb import (
+from nioh3_equipment_affix_editor.affixdb import (
     DEFAULT_CATALOG,
     DEFAULT_GRACE_CATALOG,
     DEFAULT_ITEM_CATALOG,
@@ -241,7 +241,7 @@ class GreenSheetTests(unittest.TestCase):
                         or (entry.values and entry.value in entry.values))
 
     def test_a_row_is_tagged_with_the_star_bit(self) -> None:
-        from nioh3_accessory_editor.affixdb import FLAG_STAR
+        from nioh3_equipment_affix_editor.affixdb import FLAG_STAR
 
         for entries in self.entries.values():
             for entry in entries:

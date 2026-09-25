@@ -23,9 +23,9 @@ import unittest
 from types import SimpleNamespace
 from unittest import mock
 
-from nioh3_accessory_editor import cli, editor, equipmentdb, records
-from nioh3_accessory_editor.affixdb import AffixDb
-from nioh3_accessory_editor.editor import (
+from nioh3_equipment_affix_editor import cli, editor, equipmentdb, records
+from nioh3_equipment_affix_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.editor import (
     DONOR_SAME_KIND,
     DONOR_SAME_TYPE,
     EquipmentCreationError,

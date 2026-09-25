@@ -6,7 +6,7 @@ import collections
 import random
 import unittest
 
-from nioh3_accessory_editor.nioh_aes import (
+from nioh3_equipment_affix_editor.nioh_aes import (
     BLOCK_SIZE,
     INV_SHIFT_PERM,
     KEY_SIZE,

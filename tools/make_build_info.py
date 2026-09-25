@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Generate the build/version artifacts for Nioh3AccessoryEditor.
+"""Generate the build/version artifacts for Nioh 3 Equipment Affix Editor.
 
 ``build.ps1`` calls this so that every version surface reports the same four
 facts: the commit id tail (last 8 characters), where the build came from (the
@@ -8,8 +8,8 @@ programming language/runtime.
 
 Outputs (all paths overridable, all created atomically):
 
-* ``nioh3_accessory_editor/_buildinfo.py`` -- frozen facts imported at runtime
-  by :mod:`nioh3_accessory_editor.version`; makes a copied/distributed tree
+* ``nioh3_equipment_affix_editor/_buildinfo.py`` -- frozen facts imported at runtime
+  by :mod:`nioh3_equipment_affix_editor.version`; makes a copied/distributed tree
   report its real build identity even without ``.git``.
 * ``BUILD-INFO.json`` -- machine-readable record (same schema as the rest of
   the project's build metadata).
@@ -33,7 +33,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:  # allow "python tools/make_build_info.py"
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from nioh3_accessory_editor.version import (  # noqa: E402  (path bootstrap)
+from nioh3_equipment_affix_editor.version import (  # noqa: E402  (path bootstrap)
     BUILD_SCHEMA,
     DEFAULT_CRYPTO_EXE,
     BuildInfo,
@@ -43,7 +43,7 @@ from nioh3_accessory_editor.version import (  # noqa: E402  (path bootstrap)
 )
 
 MODULE_NAME = "_buildinfo"
-DEFAULT_MODULE_PATH = PROJECT_ROOT / "nioh3_accessory_editor" / f"{MODULE_NAME}.py"
+DEFAULT_MODULE_PATH = PROJECT_ROOT / "nioh3_equipment_affix_editor" / f"{MODULE_NAME}.py"
 JSON_FILENAME = "BUILD-INFO.json"
 TEXT_FILENAME = "BUILD-INFO.txt"
 
@@ -278,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"警告: 找不到加密组件 {info.crypto_exe}，其校验和记为 unknown",
               file=sys.stderr)
 
-    from nioh3_accessory_editor.version import version_banner
+    from nioh3_equipment_affix_editor.version import version_banner
 
     banner = version_banner(info)
     written = write_artifacts(info, module_path=arguments.module_path,

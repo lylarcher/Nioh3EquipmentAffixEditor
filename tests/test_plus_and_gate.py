@@ -13,15 +13,15 @@ import struct
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import records, ui
-from nioh3_accessory_editor.editor import (
+from nioh3_equipment_affix_editor import records, ui
+from nioh3_equipment_affix_editor.editor import (
     AccessoryView,
     EditorError,
     apply_plus_edits,
     list_accessories,
     plan_plus_edit,
 )
-from nioh3_accessory_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.affixdb import AffixDb
 from tests import support
 from tests.test_ui import TK_AVAILABLE, TK_ERROR, UiTestCase
 
@@ -200,7 +200,7 @@ class TitleScreenGateTests(UiTestCase):
     def test_write_save_stops_before_the_dialog_when_the_game_runs(self) -> None:
         self._select()
         self.app.selected_save = self.app.saves[0] if self.app.saves else None
-        from nioh3_accessory_editor.editor import SaveDescriptor
+        from nioh3_equipment_affix_editor.editor import SaveDescriptor
         self.app.selected_save = SaveDescriptor(self.root / "SAVEDATA.BIN", 1, 0,
                                                len(self.plan))
         with mock.patch.object(ui, "running_game_processes",

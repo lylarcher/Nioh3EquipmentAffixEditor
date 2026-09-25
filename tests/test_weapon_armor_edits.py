@@ -30,9 +30,9 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import editor, equipmentdb, records
-from nioh3_accessory_editor.affixdb import AffixDb
-from nioh3_accessory_editor.editor import (
+from nioh3_equipment_affix_editor import editor, equipmentdb, records
+from nioh3_equipment_affix_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.editor import (
     EditPlan,
     EditorError,
     LevelEditError,
@@ -44,7 +44,7 @@ from nioh3_accessory_editor.editor import (
     plan_level_edit,
     plan_plus_edit,
 )
-from nioh3_accessory_editor.records import EffectSlot
+from nioh3_equipment_affix_editor.records import EffectSlot
 from tests import support
 
 ITEM_DB = equipmentdb.load_equipment_item_db()

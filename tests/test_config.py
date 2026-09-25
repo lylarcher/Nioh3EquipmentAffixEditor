@@ -14,8 +14,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import config as config_module
-from nioh3_accessory_editor.config import (
+from nioh3_equipment_affix_editor import config as config_module
+from nioh3_equipment_affix_editor.config import (
     CONFIG_SCHEMA,
     ConfigError,
     EditorConfig,
@@ -285,7 +285,7 @@ class CliIntegrationTests(unittest.TestCase):
         import contextlib
         import io
 
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
@@ -297,7 +297,7 @@ class CliIntegrationTests(unittest.TestCase):
         import contextlib
         import io
 
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
@@ -310,7 +310,7 @@ class CliIntegrationTests(unittest.TestCase):
         import contextlib
         import io
 
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         with tempfile.TemporaryDirectory(prefix="nioh3-config-") as temp:
             target = Path(temp) / "editor.json"
@@ -325,7 +325,7 @@ class CliIntegrationTests(unittest.TestCase):
         import contextlib
         import io
 
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         with tempfile.TemporaryDirectory(prefix="nioh3-config-") as temp:
             target = Path(temp) / "editor.json"
@@ -340,7 +340,7 @@ class CliIntegrationTests(unittest.TestCase):
         import contextlib
         import io
 
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         with tempfile.TemporaryDirectory(prefix="nioh3-config-") as temp:
             target = Path(temp) / "editor.json"
@@ -355,7 +355,7 @@ class CliIntegrationTests(unittest.TestCase):
     def test_command_line_filters_win_over_the_file(self) -> None:
         import argparse
 
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         with tempfile.TemporaryDirectory(prefix="nioh3-config-") as temp:
             target = Path(temp) / "editor.json"

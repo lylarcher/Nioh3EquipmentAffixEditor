@@ -34,7 +34,7 @@ from xml.etree import ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nioh3_accessory_editor.affixdb import (
+from nioh3_equipment_affix_editor.affixdb import (
     AffixEntry,
     ItemEntry,
     save_catalog,

@@ -3,7 +3,7 @@
 This mirrors the C source statement for statement (flat 4x4 state traversed as
 ``state[i][j]``, in-place row/column operations, same round ordering) and is
 deliberately *not* optimized.  The optimized table-driven implementation in
-``nioh3_accessory_editor.nioh_aes`` must reproduce it exactly.
+``nioh3_equipment_affix_editor.nioh_aes`` must reproduce it exactly.
 
 Keeping this in the tests means the "fast" rewrite is checked against what the
 reference actually computes, not against the AES specification (which this
@@ -12,7 +12,7 @@ custom variant does not follow).
 
 from __future__ import annotations
 
-from nioh3_accessory_editor.nioh_aes import RCON, RSBOX, SBOX
+from nioh3_equipment_affix_editor.nioh_aes import RCON, RSBOX, SBOX
 
 NK = 4
 NR = 10

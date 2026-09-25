@@ -177,7 +177,7 @@ def default_config_document(version: str = "", commit: str = "") -> dict:
     return {
         "schema": CONFIG_SCHEMA,
         "_readme": [
-            "本文件是 Nioh3AccessoryEditor 的参数配置文件，首次运行时随程序解压到 exe 同目录。",
+            "本文件是「仁王3 装备词条修改器」的参数配置文件，首次运行时随程序解压到 exe 同目录。",
             "改完后重启程序生效；命令行参数始终优先于本文件。",
             "路径可以是绝对路径，也可以是相对 exe 目录的相对路径。",
             "crypto_exe 设为 null 或把 prefer_python_crypto 设为 true 可改用内置纯 Python 实现。",

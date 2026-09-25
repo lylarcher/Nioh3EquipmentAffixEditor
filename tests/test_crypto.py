@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from nioh3_accessory_editor import crypto
-from nioh3_accessory_editor.crypto import (
+from nioh3_equipment_affix_editor import crypto
+from nioh3_equipment_affix_editor.crypto import (
     HEADER_SIZE,
     ROOT_CRYPTO_BLOB,
     ROOT_CRYPTO_BLOB_SIZE,

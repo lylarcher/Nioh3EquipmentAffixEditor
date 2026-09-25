@@ -20,14 +20,14 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nioh3_accessory_editor import editor, records  # noqa: E402
-from nioh3_accessory_editor.affixdb import AffixDb  # noqa: E402
-from nioh3_accessory_editor.editor import SaveDescriptor  # noqa: E402
-from nioh3_accessory_editor.equipmentdb import (  # noqa: E402
+from nioh3_equipment_affix_editor import editor, records  # noqa: E402
+from nioh3_equipment_affix_editor.affixdb import AffixDb  # noqa: E402
+from nioh3_equipment_affix_editor.editor import SaveDescriptor  # noqa: E402
+from nioh3_equipment_affix_editor.equipmentdb import (  # noqa: E402
     DEFAULT_EQUIPMENT_ITEM_CATALOG, DEFAULT_EQUIPMENT_RANGES, EQUIPMENT_RANGES_SCHEMA,
     load_equipment_item_db,
 )
-from nioh3_accessory_editor.savefile import SaveCrypto  # noqa: E402
+from nioh3_equipment_affix_editor.savefile import SaveCrypto  # noqa: E402
 
 
 def main() -> int:

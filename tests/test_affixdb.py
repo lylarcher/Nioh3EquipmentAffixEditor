@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nioh3_accessory_editor.affixdb import (
+from nioh3_equipment_affix_editor.affixdb import (
     DEFAULT_CATALOG,
     DEFAULT_GRACE_CATALOG,
     DEFAULT_ITEM_CATALOG,

@@ -1,12 +1,12 @@
 """Launch the Nioh 3 accessory editor GUI, or the CLI when arguments are given.
 
-    Nioh3AccessoryEditor.exe               -> GUI
-    Nioh3AccessoryEditor.exe list          -> CLI: list records/affixes
-    Nioh3AccessoryEditor.exe check         -> CLI: read-only integrity check
-    Nioh3AccessoryEditor.exe edit --help   -> CLI: edit a save
-    Nioh3AccessoryEditor.exe backup        -> CLI: plaintext backup
-    Nioh3AccessoryEditor.exe config        -> CLI: show/create the config file
-    Nioh3AccessoryEditor.exe version       -> CLI: build/version information
+    Nioh3EquipmentAffixEditor.exe               -> GUI
+    Nioh3EquipmentAffixEditor.exe list          -> CLI: list records/affixes
+    Nioh3EquipmentAffixEditor.exe check         -> CLI: read-only integrity check
+    Nioh3EquipmentAffixEditor.exe edit --help   -> CLI: edit a save
+    Nioh3EquipmentAffixEditor.exe backup        -> CLI: plaintext backup
+    Nioh3EquipmentAffixEditor.exe config        -> CLI: show/create the config file
+    Nioh3EquipmentAffixEditor.exe version       -> CLI: build/version information
 
 Also runnable from a checkout: ``python launch_editor.py``.
 """
@@ -19,7 +19,7 @@ from pathlib import Path
 if not getattr(sys, "frozen", False):
     sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from nioh3_accessory_editor import bootstrap, console
+from nioh3_equipment_affix_editor import bootstrap, console
 
 #: Any of these as the first argument means "run the CLI, not the GUI".
 #: Kept in sync with the CLI subcommands by tests/test_entrypoints.py.
@@ -45,12 +45,12 @@ def main(argv: list[str] | None = None) -> int:
     # unpack them next to it before importing anything that reads them.
     bootstrap.ensure_once()
 
-    from nioh3_accessory_editor import cli  # noqa: PLC0415 - after bootstrap
+    from nioh3_equipment_affix_editor import cli  # noqa: PLC0415 - after bootstrap
 
     if wants_cli:
         return cli.main(args)
 
-    from nioh3_accessory_editor import ui  # noqa: PLC0415 - GUI is optional
+    from nioh3_equipment_affix_editor import ui  # noqa: PLC0415 - GUI is optional
 
     return ui.main()
 

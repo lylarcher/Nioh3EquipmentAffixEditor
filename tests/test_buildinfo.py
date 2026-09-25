@@ -2,7 +2,7 @@
 
 These cover both halves of the feature:
 
-* ``nioh3_accessory_editor.version`` -- what the app reports at runtime, from a
+* ``nioh3_equipment_affix_editor.version`` -- what the app reports at runtime, from a
   frozen ``_buildinfo`` module when present and from live git otherwise.
 * ``tools/make_build_info.py`` -- the generator ``build.ps1`` drives, including
   the guarantee that the generated module reproduces every reported fact.
@@ -20,8 +20,8 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import paths, version as version_module
-from nioh3_accessory_editor.version import (
+from nioh3_equipment_affix_editor import paths, version as version_module
+from nioh3_equipment_affix_editor.version import (
     UNKNOWN,
     BuildInfo,
     short_commit,
@@ -159,7 +159,7 @@ PYTHON_VERSION = '3.11.9'
     def test_run_time_location_is_where_the_exe_lives(self) -> None:
         """Copying the exe elsewhere must change 来源 without a rebuild."""
         version_info(refresh=True)
-        fake = Path(r"D:\copy\elsewhere\Nioh3AccessoryEditor")
+        fake = Path(r"D:\copy\elsewhere\Nioh3EquipmentAffixEditor")
         with mock.patch.object(paths, "application_root", lambda: fake), \
                 mock.patch.object(
                     paths, "default_crypto_exe",
@@ -384,7 +384,7 @@ class GeneratorTests(unittest.TestCase):
 
 class BannerIsPrintedByTheCliTests(unittest.TestCase):
     def test_version_flag_prints_the_banner_and_exits_zero(self) -> None:
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         buffer = io.StringIO()
         with redirect_stdout(buffer):
@@ -400,7 +400,7 @@ class BannerIsPrintedByTheCliTests(unittest.TestCase):
         self.assertIn("commit    :", text)
 
     def test_version_subcommand_prints_the_banner(self) -> None:
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         buffer = io.StringIO()
         with redirect_stdout(buffer):
@@ -409,7 +409,7 @@ class BannerIsPrintedByTheCliTests(unittest.TestCase):
         self.assertIn("来源", buffer.getvalue())
 
     def test_version_subcommand_json_is_valid(self) -> None:
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         buffer = io.StringIO()
         with redirect_stdout(buffer):
@@ -417,7 +417,7 @@ class BannerIsPrintedByTheCliTests(unittest.TestCase):
         self.assertEqual(code, 0)
         text = buffer.getvalue()
         payload = json.loads(text[text.index("{"):text.rindex("}") + 1])
-        self.assertEqual(payload["component"], "Nioh3AccessoryEditor")
+        self.assertEqual(payload["component"], "Nioh3EquipmentAffixEditor")
         self.assertEqual(payload["commit"], version_info().commit)
 
 
@@ -425,7 +425,7 @@ class RoutingTests(unittest.TestCase):
     def test_version_is_routable_from_both_entry_points(self) -> None:
         import launch_editor
 
-        from nioh3_accessory_editor import __main__ as package_main
+        from nioh3_equipment_affix_editor import __main__ as package_main
 
         self.assertIn("version", launch_editor.CLI_COMMANDS)
         self.assertIn("version", package_main.CLI_COMMANDS)
@@ -434,7 +434,7 @@ class RoutingTests(unittest.TestCase):
         """Every CLI subcommand must be routed to the CLI, not to the GUI."""
         import launch_editor
 
-        from nioh3_accessory_editor import cli
+        from nioh3_equipment_affix_editor import cli
 
         parser = cli.build_parser()
         subparsers = next(

@@ -5,8 +5,8 @@ from __future__ import annotations
 import struct
 import unittest
 
-from nioh3_accessory_editor import checksum as checksum_module
-from nioh3_accessory_editor.checksum import (
+from nioh3_equipment_affix_editor import checksum as checksum_module
+from nioh3_equipment_affix_editor.checksum import (
     BLOCK_SIZE,
     USER_CHECKSUM_BODY_END,
     USER_CHECKSUM_BODY_SIZE,
@@ -18,7 +18,7 @@ from nioh3_accessory_editor.checksum import (
     patch_user_checksum,
     verify_user_checksum,
 )
-from nioh3_accessory_editor.crypto import USER_SAVE_SIZE
+from nioh3_equipment_affix_editor.crypto import USER_SAVE_SIZE
 from tests import support
 
 

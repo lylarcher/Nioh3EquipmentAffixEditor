@@ -19,9 +19,9 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from nioh3_accessory_editor import bootstrap, paths
-from nioh3_accessory_editor.affixdb import AffixDb
-from nioh3_accessory_editor.config import CONFIG_SCHEMA, load_config
+from nioh3_equipment_affix_editor import bootstrap, paths
+from nioh3_equipment_affix_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.config import CONFIG_SCHEMA, load_config
 
 from tools import make_payload
 
@@ -212,7 +212,7 @@ class ExtractedApplicationTests(unittest.TestCase):
         import sys
         from unittest import mock
 
-        exe = self.target / "Nioh3AccessoryEditor.exe"
+        exe = self.target / "Nioh3EquipmentAffixEditor.exe"
         exe.write_bytes(b"MZ")
         with mock.patch.object(sys, "frozen", True, create=True), \
                 mock.patch.object(sys, "executable", str(exe)), \
@@ -231,7 +231,7 @@ class SpecContractTests(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls) -> None:
-        cls.spec = PROJECT_ROOT / "Nioh3AccessoryEditor.spec"
+        cls.spec = PROJECT_ROOT / "Nioh3EquipmentAffixEditor.spec"
         cls.source = cls.spec.read_text(encoding="utf-8")
         ast.parse(cls.source)
         cls.calls = [node for node in ast.walk(ast.parse(cls.source))
@@ -267,7 +267,7 @@ class SpecContractTests(unittest.TestCase):
         self.assertNotIn("console=True", self.source)
 
     def test_includes_the_generated_build_identity(self) -> None:
-        self.assertIn("nioh3_accessory_editor._buildinfo", self.source)
+        self.assertIn("nioh3_equipment_affix_editor._buildinfo", self.source)
 
     def test_does_not_ship_tests_or_tools(self) -> None:
         for excluded in ("tests", "tools"):

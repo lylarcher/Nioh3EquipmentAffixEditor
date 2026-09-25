@@ -21,9 +21,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from nioh3_accessory_editor import records
-from nioh3_accessory_editor.affixdb import AffixDb
-from nioh3_accessory_editor.config import default_config_document
+from nioh3_equipment_affix_editor import records
+from nioh3_equipment_affix_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.config import default_config_document
 from tests import support
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -186,7 +186,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("scan", text)
 
     def test_report_names_the_item_kind_and_counts_what_it_could_not(self) -> None:
-        from nioh3_accessory_editor.affixdb import ItemDb
+        from nioh3_equipment_affix_editor.affixdb import ItemDb
 
         save = support.build_plain_save(records_by_slot={
             1: support.build_record(
@@ -217,7 +217,7 @@ class ReportTests(unittest.TestCase):
         self.assertIn("能对上物品总目录 0 件", text)
 
     def test_report_names_the_trailing_grace_slot_and_flags_the_rest(self) -> None:
-        from nioh3_accessory_editor.affixdb import GraceDb
+        from nioh3_equipment_affix_editor.affixdb import GraceDb
         save = support.build_plain_save(records_by_slot={
             1: support.build_record(
                 record_type=0x4001,
@@ -253,7 +253,7 @@ class ReportTests(unittest.TestCase):
             account.mkdir(parents=True)
             import os
 
-            from nioh3_accessory_editor import savefile
+            from nioh3_equipment_affix_editor import savefile
 
             plain = support.build_plain_save(records_by_slot={
                 1: support.build_record(
@@ -292,7 +292,7 @@ class ReportTests(unittest.TestCase):
             root = Path(temp)
             save_path = root / "saves" / "76561198000000042" / "SAVEDATA00"
             save_path.mkdir(parents=True)
-            from nioh3_accessory_editor import savefile
+            from nioh3_equipment_affix_editor import savefile
 
             plain = support.build_plain_save(records_by_slot={
                 1: support.build_record(record_type=0x4001),

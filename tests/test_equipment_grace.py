@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import unittest
 
-from nioh3_accessory_editor import editor, equipmentdb, records
-from nioh3_accessory_editor.affixdb import GraceDb
-from nioh3_accessory_editor.editor import (
+from nioh3_equipment_affix_editor import editor, equipmentdb, records
+from nioh3_equipment_affix_editor.affixdb import GraceDb
+from nioh3_equipment_affix_editor.editor import (
     EditorError,
     GraceEditError,
     apply_equipment_edits,
@@ -237,7 +237,7 @@ class GraceFamilyRuleTests(unittest.TestCase):
 
     def test_the_creation_path_is_not_affected(self) -> None:
         """无中生有从模板继承的套装槽不受这条规则影响（只约束「替换」）。"""
-        from nioh3_accessory_editor import equipmentdb as _equipmentdb
+        from nioh3_equipment_affix_editor import equipmentdb as _equipmentdb
         item_db = _equipmentdb.load_equipment_item_db()
         # donor 必须自己命中过词条池，才有资格当模板（见 find_equipment_donor）。
         donor = save_with(record_with_grace(KATANA, SET_ENTRY,

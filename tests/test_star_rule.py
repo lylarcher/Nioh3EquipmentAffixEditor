@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import unittest
 
-from nioh3_accessory_editor import editor
-from nioh3_accessory_editor.affixdb import AffixDb, load_soul_catalog
+from nioh3_equipment_affix_editor import editor
+from nioh3_equipment_affix_editor.affixdb import AffixDb, load_soul_catalog
 from tests import support
 
 FIXED_BIT = 0x4000
@@ -13,7 +13,7 @@ STAR_BIT = editor.STAR_BIT
 
 
 def _view_with(effects):
-    from nioh3_accessory_editor import records
+    from nioh3_equipment_affix_editor import records
 
     save = support.build_plain_save(records_by_slot={
         3: support.build_record(record_type=0x4001, level=170, rarity=5,
@@ -64,7 +64,7 @@ class StarIsNeverFixedTests(unittest.TestCase):
     def test_a_scroll_record_may_keep_a_fixed_star_affix(self) -> None:
         """绘卷是例外：绘卷记录上「★ 且固定」允许存在。"""
         scroll_type = sorted(editor.SCROLL_RECORD_TYPES)[0]
-        from nioh3_accessory_editor import records
+        from nioh3_equipment_affix_editor import records
 
         save = support.build_plain_save(records_by_slot={
             3: support.build_record(record_type=scroll_type, level=170, rarity=5,
@@ -120,7 +120,7 @@ class StarBitWriteTests(unittest.TestCase):
         edits = [{"record_index": 3, "slot_index": 0,
                   "effect_id": self.star.effect_id, "value": self.star.value}]
         patched = editor.apply_edits(save, edits, affix_db=self.db)
-        from nioh3_accessory_editor import records
+        from nioh3_equipment_affix_editor import records
 
         layout = records.locate_layout(patched)
         view = next(v for v in editor.list_accessories(patched, layout=layout)

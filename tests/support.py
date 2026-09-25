@@ -1,4 +1,4 @@
-"""Shared fixtures for the Nioh3AccessoryEditor test-suite.
+"""Shared fixtures for the Nioh 3 Equipment Affix Editor test-suite.
 
 The suite runs against a *synthetic* decrypted save: the crypto layer is the
 only part that can be validated against the real game (via the reference exe),
@@ -18,9 +18,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from nioh3_accessory_editor import records
-from nioh3_accessory_editor.checksum import patch_user_checksum
-from nioh3_accessory_editor.crypto import HEADER_SIZE, USER_SAVE_SIZE
+from nioh3_equipment_affix_editor import records
+from nioh3_equipment_affix_editor.checksum import patch_user_checksum
+from nioh3_equipment_affix_editor.crypto import HEADER_SIZE, USER_SAVE_SIZE
 
 EXE_PATH = PROJECT_ROOT / "bin" / "Nioh_Savefile_decrypt.exe"
 HAVE_EXE = EXE_PATH.is_file()
@@ -189,7 +189,7 @@ def silence_dialogs(case: "unittest.TestCase") -> None:
     """
     from unittest import mock
 
-    from nioh3_accessory_editor import ui
+    from nioh3_equipment_affix_editor import ui
 
     for name in ("showinfo", "showwarning", "showerror", "askyesno",
                  "askokcancel", "askquestion"):
@@ -233,7 +233,7 @@ def load_tool_module(name: str):
     return module
 
 
-BUILD_INFO_MODULE_NAME = "nioh3_accessory_editor._buildinfo"
+BUILD_INFO_MODULE_NAME = "nioh3_equipment_affix_editor._buildinfo"
 
 
 def install_build_info_module(source: str):
@@ -248,7 +248,7 @@ def install_build_info_module(source: str):
     exec(compile(source, module.__file__, "exec"), module.__dict__)
     sys.modules[BUILD_INFO_MODULE_NAME] = module
 
-    package = sys.modules.get("nioh3_accessory_editor")
+    package = sys.modules.get("nioh3_equipment_affix_editor")
     if package is not None:
         setattr(package, "_buildinfo", module)
     return module
@@ -257,20 +257,20 @@ def install_build_info_module(source: str):
 def forget_build_info_module() -> None:
     """Remove any injected ``_buildinfo`` so tests stay independent."""
     sys.modules.pop(BUILD_INFO_MODULE_NAME, None)
-    package = sys.modules.get("nioh3_accessory_editor")
+    package = sys.modules.get("nioh3_equipment_affix_editor")
     if package is not None and hasattr(package, "_buildinfo"):
         delattr(package, "_buildinfo")
 
 
 def load_catalog_affixes():
     """The shipped 饰品 affix catalog (for tests that need the real table)."""
-    from nioh3_accessory_editor.affixdb import AffixDb
+    from nioh3_equipment_affix_editor.affixdb import AffixDb
 
     return AffixDb()
 
 
 def load_grace_table():
     """The shipped 恩宠/套装 table, built exactly like the app builds it."""
-    from nioh3_accessory_editor.affixdb import GraceDb
+    from nioh3_equipment_affix_editor.affixdb import GraceDb
 
     return GraceDb.best_effort()

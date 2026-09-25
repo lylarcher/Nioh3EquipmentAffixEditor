@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import editor, ui
+from nioh3_equipment_affix_editor import editor, ui
 from tests import support
 
 known_ids = editor.accessory_catalog_ids(affix_db=None) if False else None
@@ -30,7 +30,7 @@ class SchoolFilterTests(unittest.TestCase):
 
     def _views(self):
         """真实视图：用物品总目录里的 id 造两条记录（一条武士、一条忍者）。"""
-        from nioh3_accessory_editor import records
+        from nioh3_equipment_affix_editor import records
 
         picked = {}
         for entry in self.app.item_db.all():

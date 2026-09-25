@@ -84,7 +84,7 @@ class ScriptContractTests(unittest.TestCase):
         self.assertIn("$script:LastNativeExitCode -ne 0", self.source)
 
     def test_single_file_release_pipeline_is_intact(self) -> None:
-        for marker in ("app-payload.zip", "PyInstaller", "Nioh3AccessoryEditor.spec",
+        for marker in ("app-payload.zip", "PyInstaller", "Nioh3EquipmentAffixEditor.spec",
                        "--distpath", "onefile"):
             self.assertIn(marker, self.source, marker)
 
@@ -127,7 +127,7 @@ class ScriptContractTests(unittest.TestCase):
         self.assertIn("单元测试  : 未运行", self.source)
 
     def test_clean_only_removes_its_own_artifacts(self) -> None:
-        self.assertIn("Nioh3AccessoryEditor*", self.source)
+        self.assertIn("Nioh3EquipmentAffixEditor*", self.source)
 
     def test_restores_the_callers_console_encoding(self) -> None:
         self.assertIn("$previousConsoleEncoding", self.source)
@@ -148,7 +148,7 @@ class ScriptContractTests(unittest.TestCase):
 
 class SpecAndPayloadWiringTests(unittest.TestCase):
     def test_build_references_the_real_spec(self) -> None:
-        spec = PROJECT_ROOT / "Nioh3AccessoryEditor.spec"
+        spec = PROJECT_ROOT / "Nioh3EquipmentAffixEditor.spec"
         self.assertTrue(spec.is_file())
 
     def test_payload_generator_is_referenced(self) -> None:

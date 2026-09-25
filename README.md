@@ -1,8 +1,8 @@
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-# Nioh3AccessoryEditor（仁王3 装备词条修改器）
+# Nioh 3 Equipment Affix Editor（仁王3 装备词条修改器）
 
-A Python accessory (饰品) affix editor for **Nioh 3 (PC)** that writes edits
+A Python equipment (装备) affix editor for **Nioh 3 (PC)** that writes edits
 **directly into the save file** so they persist across sessions — not a
 memory-only trainer.
 
@@ -250,7 +250,7 @@ created, and the report ends by saying so.
 
 ### Release build: one single-file executable
 
-Download/copy `Nioh3AccessoryEditor.exe` anywhere and run it. There is **no
+Download/copy `Nioh3EquipmentAffixEditor.exe` anywhere and run it. There is **no
 installer, no `dist/` folder and no `.py` file** in a release: everything the
 program needs is inside that one file.
 
@@ -259,11 +259,11 @@ program needs is inside that one file.
   with, but a CLI run keeps it):
 
   ```powershell
-  .\Nioh3AccessoryEditor.exe list
-  .\Nioh3AccessoryEditor.exe check
-  .\Nioh3AccessoryEditor.exe edit --record 3 --edit 1:0x0B32:200
-  .\Nioh3AccessoryEditor.exe restore --list
-  .\Nioh3AccessoryEditor.exe version
+  .\Nioh3EquipmentAffixEditor.exe list
+  .\Nioh3EquipmentAffixEditor.exe check
+  .\Nioh3EquipmentAffixEditor.exe edit --record 3 --edit 1:0x0B32:200
+  .\Nioh3EquipmentAffixEditor.exe restore --list
+  .\Nioh3EquipmentAffixEditor.exe version
   ```
 
 **First run unpacks the side-by-side files next to the exe** (this is by
@@ -324,15 +324,15 @@ python tools/make_icon.py --preview build\icon-preview.png
 
 ```powershell
 # show the effective settings (file + defaults)
-.\Nioh3AccessoryEditor.exe config
+.\Nioh3EquipmentAffixEditor.exe config
 
 # same, as JSON
-.\Nioh3AccessoryEditor.exe config --json
+.\Nioh3EquipmentAffixEditor.exe config --json
 
 # (re)create config/editor.json with comments explaining every key
-.\Nioh3AccessoryEditor.exe config --init
-.\Nioh3AccessoryEditor.exe config --init --force     # overwrite an existing file
-.\Nioh3AccessoryEditor.exe --config D:\my\editor.json config   # use another file
+.\Nioh3EquipmentAffixEditor.exe config --init
+.\Nioh3EquipmentAffixEditor.exe config --init --force     # overwrite an existing file
+.\Nioh3EquipmentAffixEditor.exe --config D:\my\editor.json config   # use another file
 ```
 
 The file is deliberately strict: a wrong `schema`, an unknown key (e.g.
@@ -423,7 +423,7 @@ powershell -File .\build.ps1
 # Same, but verify first -- use this before releasing a changelog entry
 powershell -File .\build.ps1 -Test
 
-# Drop older dist/ artifacts first (only Nioh3AccessoryEditor* entries)
+# Drop older dist/ artifacts first (only Nioh3EquipmentAffixEditor* entries)
 powershell -File .\build.ps1 -Clean -Test
 
 # Only refresh the build identity of the working tree (no dist, no zip)
@@ -457,10 +457,10 @@ default). It works on Windows PowerShell 5.1 and PowerShell 7+.
 Every version surface reports the same four facts:
 
 ```text
-Nioh3AccessoryEditor v0.1.0
+Nioh 3 Equipment Affix Editor v0.1.0
 commit    : 34cca8de (工作区有未提交改动)
-来源      : D:\wherever-you-put-it\Nioh3AccessoryEditor
-加密组件  : D:\wherever-you-put-it\Nioh3AccessoryEditor\bin\Nioh_Savefile_decrypt.exe
+来源      : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor
+加密组件  : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor\bin\Nioh_Savefile_decrypt.exe
 构建时间  : 2026-09-19T11:01:52+08:00
 语言      : CPython 3.10.10 (仅标准库 / stdlib only, 含 tkinter GUI)
 ```
@@ -482,7 +482,7 @@ Where it shows up:
 * `BUILD-INFO.txt` / `BUILD-INFO.json` in the project root and inside the
   staged `dist\` tree, and the build log itself.
 
-`tools/make_build_info.py` generates `nioh3_accessory_editor/_buildinfo.py`
+`tools/make_build_info.py` generates `nioh3_equipment_affix_editor/_buildinfo.py`
 (frozen facts, imported at runtime), `BUILD-INFO.json` and `BUILD-INFO.txt`. It
 verifies its own output by re-importing the generated module and comparing every
 field, and it fails the build if the short commit is not exactly 8 characters.

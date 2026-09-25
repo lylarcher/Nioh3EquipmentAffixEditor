@@ -9,8 +9,8 @@ from unittest import mock
 
 import launch_editor
 
-from nioh3_accessory_editor import __main__ as package_main
-from nioh3_accessory_editor import bootstrap, cli, ui
+from nioh3_equipment_affix_editor import __main__ as package_main
+from nioh3_equipment_affix_editor import bootstrap, cli, ui
 
 
 def subcommand_names() -> set[str]:

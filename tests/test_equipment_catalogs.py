@@ -6,7 +6,7 @@ import json
 import unittest
 from pathlib import Path
 
-from nioh3_accessory_editor import equipmentdb
+from nioh3_equipment_affix_editor import equipmentdb
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,7 +33,7 @@ class WeaponArmorAffixTests(unittest.TestCase):
 
     def test_every_entry_has_a_category_from_the_shipped_table(self) -> None:
         """类别必须在这张 15 类的种类码表里，否则写入时会 fail closed。"""
-        from nioh3_accessory_editor import editor
+        from nioh3_equipment_affix_editor import editor
 
         codes = editor.load_affix_category_codes()
         for name, db in self.pools:

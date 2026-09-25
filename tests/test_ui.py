@@ -11,12 +11,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import records, ui
-from nioh3_accessory_editor.affixdb import AffixDb
-from nioh3_accessory_editor.editor import SaveDescriptor
-from nioh3_accessory_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID
-from nioh3_accessory_editor import savefile
-from nioh3_accessory_editor.version import version_info
+from nioh3_equipment_affix_editor import records, ui
+from nioh3_equipment_affix_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.editor import SaveDescriptor
+from nioh3_equipment_affix_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID
+from nioh3_equipment_affix_editor import savefile
+from nioh3_equipment_affix_editor.version import version_info
 from tests import support
 
 try:  # pragma: no cover - environment dependent
@@ -336,7 +336,7 @@ class EditCollectionTests(UiTestCase):
 
     def test_metadata_is_preserved_except_the_category_bits(self) -> None:
         """编辑词条时只改「词条种类」那 5 位（图标），其余位原样保留。"""
-        from nioh3_accessory_editor import editor
+        from nioh3_equipment_affix_editor import editor
 
         plan = support.build_plain_save(
             records_by_slot={3: support.build_record(
@@ -706,7 +706,7 @@ class StartupScanTests(unittest.TestCase):
     def test_window_opens_and_the_save_scan_does_not_error(self) -> None:
         with tempfile.TemporaryDirectory(prefix="nioh3-start-") as temp, \
                 mock.patch.object(tkinter, "Tk", tkinter.Tk), \
-                mock.patch("nioh3_accessory_editor.savefile.save_root_directory",
+                mock.patch("nioh3_equipment_affix_editor.savefile.save_root_directory",
                            return_value=Path(temp)), \
                 mock.patch.object(ui.messagebox, "showerror") as failed:
             app = ui.AccessoryEditorApp()
@@ -720,7 +720,7 @@ class StartupScanTests(unittest.TestCase):
 
     def test_missing_save_root_is_reported_as_a_status_not_a_dialog(self) -> None:
         with tempfile.TemporaryDirectory(prefix="nioh3-start-") as temp, \
-                mock.patch("nioh3_accessory_editor.savefile.save_root_directory",
+                mock.patch("nioh3_equipment_affix_editor.savefile.save_root_directory",
                            return_value=Path(temp) / "absent"), \
                 mock.patch.object(ui.AccessoryEditorApp, "refresh_saves",
                                   lambda self: None):
@@ -923,7 +923,7 @@ class StaticMethodTests(unittest.TestCase):
         import ast
         from pathlib import Path as _Path
 
-        package = _Path(__file__).resolve().parents[1] / "nioh3_accessory_editor"
+        package = _Path(__file__).resolve().parents[1] / "nioh3_equipment_affix_editor"
         offenders = []
         for path in sorted(package.glob("*.py")):
             tree = ast.parse(path.read_text(encoding="utf-8"))

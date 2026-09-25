@@ -16,7 +16,7 @@ state/
 dist/
 BUILD-INFO.json
 BUILD-INFO.txt
-nioh3_accessory_editor/_buildinfo.py
+nioh3_equipment_affix_editor/_buildinfo.py
 
 # PyInstaller scratch space, the embedded payload zip and smoke-test trees.
 build/

@@ -1,13 +1,13 @@
 ﻿<#
 .SYNOPSIS
-    Build Nioh3AccessoryEditor and stamp it with its build/version identity.
+    Build Nioh 3 Equipment Affix Editor and stamp it with its build/version identity.
 
 .DESCRIPTION
     Runs the whole build in one place:
 
       1. resolve the project Python interpreter,
       2. read the git facts (commit id, branch, dirty state),
-      3. generate the build identity -- nioh3_accessory_editor/_buildinfo.py,
+      3. generate the build identity -- nioh3_equipment_affix_editor/_buildinfo.py,
          BUILD-INFO.json and BUILD-INFO.txt -- via tools/make_build_info.py,
       4. build app-payload.zip -- the parameter configuration, affix catalogue,
          bundled crypto helper and original source data,
@@ -31,7 +31,7 @@
       * language -- the language/runtime the build targets (CPython + stdlib).
 
     On first run the exe writes data/, config/, bin/ and third_party/ next to
-    itself (see nioh3_accessory_editor/bootstrap.py); from then on those are
+    itself (see nioh3_equipment_affix_editor/bootstrap.py); from then on those are
     ordinary user-editable files, and a file the user changed is never
     overwritten by a later build.
 
@@ -78,7 +78,7 @@
     Also run the slow full-file pure-Python crypto round trip.  Implies -Test.
 
 .PARAMETER Clean
-    Remove previous Nioh3AccessoryEditor* artifacts from the output directory
+    Remove previous Nioh3EquipmentAffixEditor* artifacts from the output directory
     before building. Only entries matching this project's own artifact name are
     touched, so a custom -OutputDirectory is never wiped wholesale.
 
@@ -129,7 +129,7 @@ $script:PipIndex = if ($env:NIOH3_PIP_INDEX) { $env:NIOH3_PIP_INDEX }
     else { 'https://pypi.tuna.tsinghua.edu.cn/simple' }
 
 $projectRoot = $PSScriptRoot
-$packageRoot = Join-Path $projectRoot 'nioh3_accessory_editor'
+$packageRoot = Join-Path $projectRoot 'nioh3_equipment_affix_editor'
 $buildInfoScript = Join-Path $projectRoot 'tools\make_build_info.py'
 $testScript = Join-Path $projectRoot 'tools\run_tests.py'
 $cryptoExe = Join-Path $projectRoot 'bin\Nioh_Savefile_decrypt.exe'
@@ -473,7 +473,7 @@ function Invoke-Build {
         if ($Clean -and (Test-Path -LiteralPath $distRoot -PathType Container)) {
             Write-Step "清理旧的发行产物 $distRoot"
             $previous = Get-ChildItem -LiteralPath $distRoot -Force |
-                Where-Object { $_.Name -like 'Nioh3AccessoryEditor*' }
+                Where-Object { $_.Name -like 'Nioh3EquipmentAffixEditor*' }
             foreach ($entry in $previous) {
                 Remove-Item -LiteralPath $entry.FullName -Recurse -Force
                 Write-Note "已删除 $($entry.Name)"
@@ -510,7 +510,7 @@ function Invoke-Build {
             '--noconfirm', '--clean',
             '--distpath', $distRoot,
             '--workpath', (Join-Path $buildRoot 'pyi'),
-            (Join-Path $projectRoot 'Nioh3AccessoryEditor.spec')
+            (Join-Path $projectRoot 'Nioh3EquipmentAffixEditor.spec')
         )
         $packOutput = Invoke-NativeCommand -FilePath $script:PackPython `
             -Arguments $packArguments -MergeError
@@ -520,7 +520,7 @@ function Invoke-Build {
         if ($script:LastNativeExitCode -ne 0) {
             throw "PyInstaller 失败 (exit $($script:LastNativeExitCode))；完整日志: $packLog"
         }
-        $script:ExePath = Join-Path $distRoot 'Nioh3AccessoryEditor.exe'
+        $script:ExePath = Join-Path $distRoot 'Nioh3EquipmentAffixEditor.exe'
         if (-not (Test-Path -LiteralPath $script:ExePath -PathType Leaf)) {
             throw "未生成 exe: $($script:ExePath)"
         }
@@ -544,7 +544,7 @@ function Invoke-Build {
             Remove-Item -LiteralPath $smokeRoot -Recurse -Force
         }
         New-Item -ItemType Directory -Path $smokeRoot -Force | Out-Null
-        $smokeExe = Join-Path $smokeRoot 'Nioh3AccessoryEditor.exe'
+        $smokeExe = Join-Path $smokeRoot 'Nioh3EquipmentAffixEditor.exe'
         Copy-Item -LiteralPath $script:ExePath -Destination $smokeExe -Force
 
         $smokeOutput = Invoke-NativeCommand -FilePath $smokeExe `
@@ -593,7 +593,7 @@ function Invoke-Build {
         } else {
             $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
             $script:ZipPath = Join-Path $distRoot `
-                "Nioh3AccessoryEditor-v$($info.version)-$commitShort-$stamp.zip"
+                "Nioh3EquipmentAffixEditor-v$($info.version)-$commitShort-$stamp.zip"
             Write-Step "打包单文件 exe -> $($script:ZipPath)"
             if (Test-Path -LiteralPath $script:ZipPath) {
                 Remove-Item -LiteralPath $script:ZipPath -Force

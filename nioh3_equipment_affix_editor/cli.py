@@ -1,4 +1,4 @@
-"""Command-line interface for Nioh3AccessoryEditor.
+"""Command-line interface for Nioh 3 Equipment Affix Editor.
 
 Commands:
     list    Discover saves and list accessory-like records with their affixes.
@@ -881,7 +881,7 @@ def cmd_config(args: argparse.Namespace) -> int:
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
 
-    print("Nioh3AccessoryEditor 配置")
+    print("仁王3 装备词条修改器 配置")
     for line in config.describe():
         print(line)
     print(f"默认路径  : {paths.default_config_path()}"

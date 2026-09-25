@@ -25,7 +25,7 @@ from tools import check_exe_icon, make_icon
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 ASSETS = PROJECT_ROOT / "assets"
-DIST_EXE = PROJECT_ROOT / "dist" / "Nioh3AccessoryEditor.exe"
+DIST_EXE = PROJECT_ROOT / "dist" / "Nioh3EquipmentAffixEditor.exe"
 
 
 def decode_png(data: bytes) -> tuple[int, int, bytes]:
@@ -219,7 +219,7 @@ class CommittedAssetsTests(unittest.TestCase):
 
 class PathsTests(unittest.TestCase):
     def test_icon_and_logo_paths_sit_in_assets(self) -> None:
-        from nioh3_accessory_editor import paths
+        from nioh3_equipment_affix_editor import paths
 
         self.assertEqual(paths.icon_path().name, "app.ico")
         self.assertEqual(paths.icon_path().parent.name, "assets")
@@ -229,7 +229,7 @@ class PathsTests(unittest.TestCase):
         self.assertEqual(paths.logo_path(48).name, paths.LOGO_NAME)
 
     def test_assets_is_a_resource_directory(self) -> None:
-        from nioh3_accessory_editor import paths
+        from nioh3_equipment_affix_editor import paths
 
         self.assertIn("assets", paths.RESOURCE_DIRECTORIES)
         for size in paths.LOGO_SIZES:
@@ -247,7 +247,7 @@ class BuiltExecutableTests(unittest.TestCase):
 
     def setUp(self) -> None:
         if not DIST_EXE.is_file():
-            self.skipTest("dist/Nioh3AccessoryEditor.exe 不存在")
+            self.skipTest("dist/Nioh3EquipmentAffixEditor.exe 不存在")
         for asset in ASSETS.iterdir():
             if asset.is_file() and asset.stat().st_mtime > DIST_EXE.stat().st_mtime:
                 self.skipTest(

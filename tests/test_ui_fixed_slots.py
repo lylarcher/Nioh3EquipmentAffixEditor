@@ -10,7 +10,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import ui
+from nioh3_equipment_affix_editor import ui
 from tests import support
 
 
@@ -160,7 +160,7 @@ class GraceSlotTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         from unittest import mock
 
-        from nioh3_accessory_editor import ui
+        from nioh3_equipment_affix_editor import ui
 
         with mock.patch.object(ui.AccessoryEditorApp, "refresh_saves", lambda self: None):
             cls.app = ui.AccessoryEditorApp()
@@ -173,7 +173,7 @@ class GraceSlotTests(unittest.TestCase):
     def test_a_grace_slot_is_disabled_and_never_an_edit(self) -> None:
         from unittest import mock
 
-        from nioh3_accessory_editor import ui
+        from nioh3_equipment_affix_editor import ui
 
         grace = next(entry for entry in self.app.grace_db.all())
         # Only the grace slot carries the grace effect; the rest is empty, like a
@@ -209,7 +209,7 @@ class AndKeywordTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         from unittest import mock
 
-        from nioh3_accessory_editor import ui
+        from nioh3_equipment_affix_editor import ui
 
         with mock.patch.object(ui.AccessoryEditorApp, "refresh_saves", lambda self: None):
             cls.app = ui.AccessoryEditorApp()

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import unittest
 
-from nioh3_accessory_editor import editor
-from nioh3_accessory_editor.affixdb import AffixDb, GraceDb
-from nioh3_accessory_editor.editor import EditorError, SaveDescriptor
+from nioh3_equipment_affix_editor import editor
+from nioh3_equipment_affix_editor.affixdb import AffixDb, GraceDb
+from nioh3_equipment_affix_editor.editor import EditorError, SaveDescriptor
 from tests import support
 
 FIXED_BIT = 0x4000
@@ -14,7 +14,7 @@ FIXED_BIT = 0x4000
 
 def _view_with(effects):
     """真实 AccessoryView：造一个合成存档并列出记录（slot_is_fixed 是它的方法）。"""
-    from nioh3_accessory_editor import records
+    from nioh3_equipment_affix_editor import records
 
     save = support.build_plain_save(records_by_slot={
         3: support.build_record(record_type=0x4001, level=170, rarity=5,
@@ -113,7 +113,7 @@ class MetaFixedTests(unittest.TestCase):
 
 
 def _slots(pairs):
-    from nioh3_accessory_editor.records import EffectSlot
+    from nioh3_equipment_affix_editor.records import EffectSlot
 
     return tuple(EffectSlot(slot_index=index, prefix=0, effect_id=effect_id,
                             value=0, metadata=metadata, tail_0=0, tail_1=0)

@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import savefile
-from nioh3_accessory_editor.checksum import patch_user_checksum
-from nioh3_accessory_editor.savefile import (
+from nioh3_equipment_affix_editor import savefile
+from nioh3_equipment_affix_editor.checksum import patch_user_checksum
+from nioh3_equipment_affix_editor.savefile import (
     BACKUP_MANIFEST_SCHEMA,
     BACKUP_SUBDIRECTORY_NAME,
     GAME_PROCESS_NAMES,

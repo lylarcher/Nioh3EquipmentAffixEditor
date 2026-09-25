@@ -1,4 +1,4 @@
-"""Nioh3AccessoryEditor —— 仁王3 装备词条修改器（仅供测试学习用）。
+"""Nioh 3 Equipment Affix Editor —— 仁王3 装备词条修改器（仅供测试学习用）。
 
 参考 Nioh3-Scroll-Generator 的工程组织方式：
 - 纯 Python（仅标准库），加解密走「参考 exe 子进程（默认）/ 纯 Python 定制 AES」双后端。

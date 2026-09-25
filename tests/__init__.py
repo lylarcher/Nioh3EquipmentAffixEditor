@@ -1,4 +1,4 @@
-"""Test-suite package for Nioh3AccessoryEditor.
+"""Test-suite package for Nioh 3 Equipment Affix Editor.
 
 Run everything with::
 

@@ -16,7 +16,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import bootstrap, paths
+from nioh3_equipment_affix_editor import bootstrap, paths
 
 from tools import make_payload  # noqa: E402 - path set up by tests/__init__
 
@@ -37,7 +37,9 @@ class PathTests(unittest.TestCase):
     def test_source_layout(self) -> None:
         self.assertFalse(paths.is_frozen())
         # A source run reports the checkout root, not the package directory.
-        self.assertEqual(paths.application_root().name, "Nioh3AccessoryEditor")
+        # 源码运行时根目录就是仓库目录本身（仓库目录名不随产品改名而改）。
+        self.assertEqual(paths.application_root().name,
+                         Path(__file__).resolve().parents[1].name)
         self.assertTrue((paths.application_root() / "launch_editor.py").is_file())
         self.assertEqual(paths.resource_root(), paths.application_root())
         self.assertIsNone(paths.bundle_root())
@@ -49,7 +51,7 @@ class PathTests(unittest.TestCase):
 
     def test_frozen_layout_uses_the_executable_directory(self) -> None:
         with tempfile.TemporaryDirectory(prefix="nioh3-frozen-") as temp:
-            exe = Path(temp) / "Nioh3AccessoryEditor.exe"
+            exe = Path(temp) / "Nioh3EquipmentAffixEditor.exe"
             meipass = Path(temp) / "_MEI12345"
             meipass.mkdir()
             with mock.patch.object(sys, "frozen", True, create=True), \

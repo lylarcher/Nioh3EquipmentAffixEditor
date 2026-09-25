@@ -20,14 +20,14 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import editor, equipmentdb, records
-from nioh3_accessory_editor.affixdb import (
+from nioh3_equipment_affix_editor import editor, equipmentdb, records
+from nioh3_equipment_affix_editor.affixdb import (
     AffixDb,
     ItemDb,
     load_soul_catalog,
     load_soul_item_catalog,
 )
-from nioh3_accessory_editor.editor import (
+from nioh3_equipment_affix_editor.editor import (
     EditorError,
     list_accessories,
     list_armor,

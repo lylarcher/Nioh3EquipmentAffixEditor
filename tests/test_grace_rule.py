@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import editor, ui
-from nioh3_accessory_editor.editor import EditorError
+from nioh3_equipment_affix_editor import editor, ui
+from nioh3_equipment_affix_editor.editor import EditorError
 from tests import support
 
 GRACE_DB = support.load_grace_table()
@@ -32,14 +32,14 @@ class SingleGraceRuleTests(unittest.TestCase):
 
     @staticmethod
     def _slots(ids):
-        from nioh3_accessory_editor.records import EffectSlot
+        from nioh3_equipment_affix_editor.records import EffectSlot
 
         return tuple(EffectSlot(slot_index=index, prefix=0, effect_id=effect_id,
                                 value=0, metadata=0, tail_0=0, tail_1=0)
                      for index, effect_id in enumerate(ids))
 
     def _plan_with(self, before_ids, after_ids):
-        from nioh3_accessory_editor.editor import EditPlan
+        from nioh3_equipment_affix_editor.editor import EditPlan
 
         return EditPlan(record_index=3, offset=0, edits=(),
                         before=self._slots(before_ids), after=self._slots(after_ids))

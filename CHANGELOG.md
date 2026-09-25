@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-本文件记录 Nioh3AccessoryEditor 的所有重要变更。
+本文件记录 仁王3 装备词条修改器（Nioh 3 Equipment Affix Editor，旧名 Nioh3AccessoryEditor）的所有重要变更。
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
@@ -13,7 +13,22 @@
 
 每个版本对应的构建身份（commit 后 8 位 / 来源 / 构建时间 / 语言）由
 `build.ps1` 在构建时生成并写入 `BUILD-INFO.txt`、`BUILD-INFO.json` 与
-`nioh3_accessory_editor/_buildinfo.py`；这些文件属于构建产物、不入库。
+`nioh3_equipment_affix_editor/_buildinfo.py`；这些文件属于构建产物、不入库。
+
+---
+
+## 未发布：产品改名（Nioh3AccessoryEditor → Nioh3EquipmentAffixEditor）
+
+- 工具已经不只改饰品（还能改武器 / 防具 / 魂核），程序名不再叫「饰品词条修改器」：
+  **中文显示名保持「仁王3 装备词条修改器」**，英文名定为 **Nioh 3 Equipment Affix Editor**。
+- 无空格的 `Nioh3EquipmentAffixEditor` 用于**程序与产物**：单文件 exe、PyInstaller spec、发行包 zip
+  前缀、构建脚本与文档里的示例路径；带空格的英文名用于**界面横幅与文档标题**。
+- Python 包目录 `nioh3_accessory_editor/` 改名为 `nioh3_equipment_affix_editor/`，随之更新
+  `import`、`python -m` 入口、spec 的隐藏导入、构建脚本、工具与测试里的引用。
+- 旧名 `Nioh3AccessoryEditor` 只在本文件**既有的历史条目**里保留原样，便于对照；数据文件的 schema
+  字符串（例如 `nioh3-accessory-affixes/v1`）**不改** —— 那是数据格式名（饰品本来就该叫
+  accessory，武器 / 防具各有自己的 schema），不是产品名。
+- 界面文案与免责声明「仅供测试学习用，不要用于联机影响游戏平衡」不变。
 
 ---
 
@@ -964,7 +979,7 @@
 
 ## 版本号与发布流程
 
-1. 修改 `nioh3_accessory_editor/version.py` 里的 `__version__`。
+1. 修改 `nioh3_equipment_affix_editor/version.py` 里的 `__version__`。
 2. 在本文件顶部新增对应版本小节（`## [x.y.z] - YYYY-MM-DD`），把「未发布」内容
    移入该小节。
 3. 运行 `powershell -File .\build.ps1`：跑测试 → 生成构建身份 → 组装并冒烟测试

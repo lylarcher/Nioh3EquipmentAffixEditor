@@ -12,8 +12,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import ui
-from nioh3_accessory_editor.savefile import SAVE_WRITE_REQUIREMENT
+from nioh3_equipment_affix_editor import ui
+from nioh3_equipment_affix_editor.savefile import SAVE_WRITE_REQUIREMENT
 from tests import support
 
 try:  # pragma: no cover - environment dependent
@@ -43,8 +43,8 @@ class WriteRequirementTests(unittest.TestCase):
 
     def _load(self) -> None:
         """Populate the window so 写入存档 has something to write."""
-        from nioh3_accessory_editor import records
-        from nioh3_accessory_editor.editor import SaveDescriptor, list_accessories
+        from nioh3_equipment_affix_editor import records
+        from nioh3_equipment_affix_editor.editor import SaveDescriptor, list_accessories
 
         plain = support.build_plain_save(
             records_by_slot={3: support.build_record(record_type=0x4001)}

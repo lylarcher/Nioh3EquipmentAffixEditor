@@ -15,7 +15,7 @@ import re
 import unittest
 from pathlib import Path
 
-from nioh3_accessory_editor.version import __version__
+from nioh3_equipment_affix_editor.version import __version__
 from tests import support
 
 CHANGELOG = support.PROJECT_ROOT / "CHANGELOG.md"

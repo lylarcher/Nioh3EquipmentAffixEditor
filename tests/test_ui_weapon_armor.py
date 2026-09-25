@@ -13,9 +13,9 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import editor, equipmentdb, records, ui
-from nioh3_accessory_editor.affixdb import AffixDb, GraceDb
-from nioh3_accessory_editor.editor import EditorError
+from nioh3_equipment_affix_editor import editor, equipmentdb, records, ui
+from nioh3_equipment_affix_editor.affixdb import AffixDb, GraceDb
+from nioh3_equipment_affix_editor.editor import EditorError
 from tests import support
 from tests.test_ui import TK_AVAILABLE, TK_ERROR, UiTestCase
 

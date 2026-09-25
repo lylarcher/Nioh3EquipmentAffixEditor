@@ -16,8 +16,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from nioh3_accessory_editor.checksum import patch_user_checksum
-from nioh3_accessory_editor.crypto import USER_SAVE_SIZE, SaveCrypto
+from nioh3_equipment_affix_editor.checksum import patch_user_checksum
+from nioh3_equipment_affix_editor.crypto import USER_SAVE_SIZE, SaveCrypto
 
 EXE = ROOT / "bin" / "Nioh_Savefile_decrypt.exe"
 

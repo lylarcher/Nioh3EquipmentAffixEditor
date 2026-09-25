@@ -35,7 +35,7 @@
     存档一般在：  文档\KoeiTecmo\NIOH3\Savedata\<你的账号ID>\SAVEDATA00\
     里面有 SAVEDATA.BIN 等文件。把整个 SAVEDATA00 文件夹复制一份留底。
 
- 3) 双击 Nioh3AccessoryEditor.exe 打开界面（没有命令行黑框）。
+ 3) 双击 Nioh3EquipmentAffixEditor.exe 打开界面（没有命令行黑框）。
 
  4) 在【存档】下拉里选中要改的存档（程序会自动列出你机器上的存档：里面就有
     SAVEDATA.BIN；列表不对或空的就先点【刷新】）。
@@ -136,7 +136,7 @@
 ------------------------------------------------------------------------
  Q: 双击后什么都没发生 / 弹了一下就没了？
  A: 看同目录有没有日志或错误提示；也可以在命令行里运行
-    Nioh3AccessoryEditor.exe version 查看程序是否能正常输出（这条命令只打印版本）。
+    Nioh3EquipmentAffixEditor.exe version 查看程序是否能正常输出（这条命令只打印版本）。
 
  Q: 提示「游戏正在运行，已拒绝写入」。
  A: 关掉游戏再试。这是防止边玩边写导致存档被覆盖。

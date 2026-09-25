@@ -27,8 +27,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nioh3_accessory_editor.affixdb import AffixEntry  # noqa: E402
-from nioh3_accessory_editor.equipmentdb import (  # noqa: E402
+from nioh3_equipment_affix_editor.affixdb import AffixEntry  # noqa: E402
+from nioh3_equipment_affix_editor.equipmentdb import (  # noqa: E402
     ARMOR_CATALOG_SCHEMA, EQUIPMENT_ITEM_SCHEMA, MELEE_WEAPON_CATALOG_SCHEMA,
     RANGED_WEAPON_CATALOG_SCHEMA, DEFAULT_ARMOR_CATALOG, DEFAULT_EQUIPMENT_ITEM_CATALOG,
     DEFAULT_MELEE_WEAPON_CATALOG, DEFAULT_RANGED_WEAPON_CATALOG,

@@ -1,19 +1,19 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec for the single-file Nioh3AccessoryEditor executable.
+"""PyInstaller spec for the single-file Nioh 3 Equipment Affix Editor executable.
 
 Layout produced by this spec:
 
-* ``Nioh3AccessoryEditor.exe`` -- one file, no ``.py`` sources, windowed
+* ``Nioh3EquipmentAffixEditor.exe`` -- one file, no ``.py`` sources, windowed
   subsystem so ``--version`` / ``list`` / ``edit`` work from a terminal while the
   no console window is created at all (the GUI needs none), and a CLI subcommand run
 from a terminal attaches to that terminal so its output stays visible.
   Explorer, the taskbar and the window title bar take their icon from
   ``assets/app.ico`` (all nine sizes are compiled into the PE resources).
-* Inside it: the Python runtime, ``nioh3_accessory_editor`` (including the
+* Inside it: the Python runtime, ``nioh3_equipment_affix_editor`` (including the
   generated ``_buildinfo``) and ``app-payload.zip``.
 
 ``app-payload.zip`` is *not* read from the temporary extraction directory at
-run time: :mod:`nioh3_accessory_editor.bootstrap` unpacks it next to the
+run time: :mod:`nioh3_equipment_affix_editor.bootstrap` unpacks it next to the
 executable on first run, so the configuration file, the affix catalogue and the
 bundled crypto helper end up as ordinary files the user can edit.
 
@@ -21,7 +21,7 @@ Build it through ``build.ps1`` (which generates the payload and the build
 identity first):
 
     pyinstaller --noconfirm --clean --distpath dist --workpath build/pyi \\
-        Nioh3AccessoryEditor.spec
+        Nioh3EquipmentAffixEditor.spec
 """
 
 import os
@@ -44,7 +44,7 @@ if not ICON.is_file():
     )
 
 #: Ship the generated build identity even though it is imported defensively.
-HIDDEN_IMPORTS = ["nioh3_accessory_editor._buildinfo"]
+HIDDEN_IMPORTS = ["nioh3_equipment_affix_editor._buildinfo"]
 
 #: Nothing here is needed at run time and it keeps the image smaller.
 EXCLUDES = [
@@ -74,7 +74,7 @@ exe = EXE(  # noqa: F821
     a.binaries,
     a.datas,
     [],
-    name="Nioh3AccessoryEditor",
+    name="Nioh3EquipmentAffixEditor",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

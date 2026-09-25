@@ -25,16 +25,16 @@ from pathlib import Path
 PROJECT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT))
 
-from nioh3_accessory_editor import records, savefile  # noqa: E402
-from nioh3_accessory_editor.affixdb import AffixDb, ItemDb  # noqa: E402
-from nioh3_accessory_editor.cli import (  # noqa: E402
+from nioh3_equipment_affix_editor import records, savefile  # noqa: E402
+from nioh3_equipment_affix_editor.affixdb import AffixDb, ItemDb  # noqa: E402
+from nioh3_equipment_affix_editor.cli import (  # noqa: E402
     DISCLAIMER,
     SAVE_WRITE_REQUIREMENT,
     _crypto,
     _select_save,
     _state_root,
 )
-from nioh3_accessory_editor.editor import (  # noqa: E402
+from nioh3_equipment_affix_editor.editor import (  # noqa: E402
     EditorError,
     accessory_catalog_ids,
     apply_plus_edits,

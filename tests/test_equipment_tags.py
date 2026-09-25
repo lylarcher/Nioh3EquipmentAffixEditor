@@ -19,8 +19,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import equipmentdb, records
-from nioh3_accessory_editor.affixdb import AffixError
+from nioh3_equipment_affix_editor import equipmentdb, records
+from nioh3_equipment_affix_editor.affixdb import AffixError
 
 #: 三个词条池：近战武器 / 远程武器 / 防具。
 POOLS = (equipmentdb.POOL_MELEE, equipmentdb.POOL_RANGED, equipmentdb.POOL_ARMOR)

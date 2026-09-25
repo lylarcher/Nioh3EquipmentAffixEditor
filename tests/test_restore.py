@@ -21,10 +21,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import editor, savefile
-from nioh3_accessory_editor.crypto import USER_SAVE_SIZE
-from nioh3_accessory_editor.editor import EditorError, SaveDescriptor
-from nioh3_accessory_editor.savefile import (
+from nioh3_equipment_affix_editor import editor, savefile
+from nioh3_equipment_affix_editor.crypto import USER_SAVE_SIZE
+from nioh3_equipment_affix_editor.editor import EditorError, SaveDescriptor
+from nioh3_equipment_affix_editor.savefile import (
     BACKUP_SUBDIRECTORY_NAME,
     SaveError,
     backup_directory_for,

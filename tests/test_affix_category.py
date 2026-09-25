@@ -6,9 +6,9 @@ import json
 import unittest
 from pathlib import Path
 
-from nioh3_accessory_editor import editor
-from nioh3_accessory_editor.affixdb import AffixDb, AffixError, load_affix_category_codes
-from nioh3_accessory_editor.editor import EditorError
+from nioh3_equipment_affix_editor import editor
+from nioh3_equipment_affix_editor.affixdb import AffixDb, AffixError, load_affix_category_codes
+from nioh3_equipment_affix_editor.editor import EditorError
 from tests import support
 
 #: Repository root (this file lives in <root>/tests).
@@ -35,7 +35,7 @@ class CategoryTableTests(unittest.TestCase):
         self.assertEqual(missing, set())
 
     def test_soul_catalog_categories_are_covered_too(self) -> None:
-        from nioh3_accessory_editor.affixdb import load_soul_catalog
+        from nioh3_equipment_affix_editor.affixdb import load_soul_catalog
 
         soul = AffixDb(load_soul_catalog())
         missing = {entry.category for entry in soul.all()} - set(self.codes)

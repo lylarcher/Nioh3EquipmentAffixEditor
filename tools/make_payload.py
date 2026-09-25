@@ -4,7 +4,7 @@
 The executable is a **single file**, so everything the user is meant to see and
 edit -- the parameter configuration, the affix catalogue, the bundled crypto
 helper and the original source data -- travels inside it as one zip.  On first
-run :mod:`nioh3_accessory_editor.bootstrap` writes those files into the same
+run :mod:`nioh3_equipment_affix_editor.bootstrap` writes those files into the same
 relative directories they occupy in a checkout:
 
     data/accessory_affixes.json     词条库（合法词条，可自行查看）
@@ -32,8 +32,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from nioh3_accessory_editor import bootstrap
-from nioh3_accessory_editor.config import default_config_document
+from nioh3_equipment_affix_editor import bootstrap
+from nioh3_equipment_affix_editor.config import default_config_document
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = PROJECT_ROOT / "build" / "app-payload.zip"
@@ -97,7 +97,7 @@ def build_index(payload: dict[str, bytes], version: str, commit: str,
     """Index written into the archive so extraction can verify its work."""
     return {
         "schema": bootstrap.PAYLOAD_SCHEMA,
-        "component": "Nioh3AccessoryEditor",
+        "component": "Nioh3EquipmentAffixEditor",
         "version": version,
         "commit": commit,
         "created": created,

@@ -7,11 +7,11 @@ Two layouts are supported:
   ``bin/``, ``third_party/``) sit next to the sources.
 * **frozen** -- running from a single-file executable built by PyInstaller.
   ``sys.executable`` is the ``.exe``; resources are extracted **next to it** by
-  :mod:`nioh3_accessory_editor.bootstrap`, so users can read and edit the affix
+  :mod:`nioh3_equipment_affix_editor.bootstrap`, so users can read and edit the affix
   catalogue, the configuration file and the bundled crypto helper.
 
 Nothing here touches the filesystem beyond ``stat``-level checks; discovery and
-extraction live in :mod:`nioh3_accessory_editor.bootstrap`.
+extraction live in :mod:`nioh3_equipment_affix_editor.bootstrap`.
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def resource_root() -> Path:
     """Directory that resources (``data/``, ``bin/``, ...) are read from.
 
     This is always :func:`application_root`, i.e. the side-by-side tree: in a
-    frozen build, :func:`~nioh3_accessory_editor.bootstrap.ensure_side_by_side`
+    frozen build, :func:`~nioh3_equipment_affix_editor.bootstrap.ensure_side_by_side`
     guarantees the files exist there.
     """
     return application_root()

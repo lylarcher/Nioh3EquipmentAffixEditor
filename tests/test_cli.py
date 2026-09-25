@@ -10,12 +10,12 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import cli, records
-from nioh3_accessory_editor import savefile as savefile_module
-from nioh3_accessory_editor.affixdb import AffixDb
-from nioh3_accessory_editor.editor import EditorError, SaveDescriptor
-from nioh3_accessory_editor.records import EMPTY_EFFECT_ID
-from nioh3_accessory_editor.savefile import (
+from nioh3_equipment_affix_editor import cli, records
+from nioh3_equipment_affix_editor import savefile as savefile_module
+from nioh3_equipment_affix_editor.affixdb import AffixDb
+from nioh3_equipment_affix_editor.editor import EditorError, SaveDescriptor
+from nioh3_equipment_affix_editor.records import EMPTY_EFFECT_ID
+from nioh3_equipment_affix_editor.savefile import (
     SAVE_WRITE_REQUIREMENT,
     backup_directory_for,
 )
@@ -259,7 +259,7 @@ class CryptoBackendTests(unittest.TestCase):
         import json
         import tempfile
 
-        from nioh3_accessory_editor.config import CONFIG_SCHEMA
+        from nioh3_equipment_affix_editor.config import CONFIG_SCHEMA
 
         temp = tempfile.TemporaryDirectory(prefix="nioh3-cli-config-")
         self.addCleanup(temp.cleanup)
@@ -345,7 +345,7 @@ class EndToEndCliTests(unittest.TestCase):
         account.mkdir(parents=True)
         (account / "SYSTEMSAVEDATA00").parent.mkdir(exist_ok=True)
 
-        from nioh3_accessory_editor.savefile import SaveCrypto
+        from nioh3_equipment_affix_editor.savefile import SaveCrypto
 
         self.crypto = SaveCrypto(support.EXE_PATH)
         staged_plain = self.root / "staged.bin"
@@ -368,7 +368,7 @@ class EndToEndCliTests(unittest.TestCase):
                               self.save_path.stat().st_size)
 
     def _reload(self):
-        from nioh3_accessory_editor.editor import list_accessories
+        from nioh3_equipment_affix_editor.editor import list_accessories
 
         return list_accessories(cli.open_save(self.descriptor(), self.crypto))
 
@@ -705,7 +705,7 @@ class EndToEndCliTests(unittest.TestCase):
 
     def test_write_refuses_while_the_game_runs(self) -> None:
         """The gate inside the writer (not just the notice) must fail closed."""
-        from nioh3_accessory_editor import savefile
+        from nioh3_equipment_affix_editor import savefile
 
         before = self.save_path.read_bytes()
         with mock.patch.object(savefile, "running_game_processes",

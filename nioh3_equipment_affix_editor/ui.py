@@ -1,4 +1,4 @@
-"""Tkinter GUI for Nioh3AccessoryEditor (zero third-party dependencies).
+"""Tkinter GUI for Nioh 3 Equipment Affix Editor (zero third-party dependencies).
 
 Workflow:
 1. 刷新 -> discover saves, decrypt the selected one, scan accessory records.
@@ -3867,7 +3867,7 @@ def _hide_own_console() -> None:
 
     A console-subsystem executable gets a console window whether or not it was
     started from a terminal.  The window is hidden only when this process is the
-    sole owner of that console, so running ``Nioh3AccessoryEditor.exe`` from an
+    sole owner of that console, so running ``Nioh3EquipmentAffixEditor.exe`` from an
     existing shell never hides the user's own terminal.  Best effort by design:
     a failure here must not stop the GUI from opening.
     """

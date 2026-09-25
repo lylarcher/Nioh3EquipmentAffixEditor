@@ -8,10 +8,10 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import editor as editor_module
-from nioh3_accessory_editor import records
-from nioh3_accessory_editor import savefile as savefile_module
-from nioh3_accessory_editor.affixdb import (
+from nioh3_equipment_affix_editor import editor as editor_module
+from nioh3_equipment_affix_editor import records
+from nioh3_equipment_affix_editor import savefile as savefile_module
+from nioh3_equipment_affix_editor.affixdb import (
     AffixDb,
     AffixError,
     GraceDb,
@@ -21,7 +21,7 @@ from nioh3_accessory_editor.affixdb import (
     load_soul_catalog,
     load_soul_item_catalog,
 )
-from nioh3_accessory_editor.editor import (
+from nioh3_equipment_affix_editor.editor import (
     CreationError,
     KindSwapError,
     LevelEditError,
@@ -54,8 +54,8 @@ from nioh3_accessory_editor.editor import (
     resolve_grace_id,
     save_checksum_is_valid,
 )
-from nioh3_accessory_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID, RecordError
-from nioh3_accessory_editor.savefile import GameRunningError, SaveCrypto
+from nioh3_equipment_affix_editor.records import EFFECT_COUNT, EMPTY_EFFECT_ID, RecordError
+from nioh3_equipment_affix_editor.savefile import GameRunningError, SaveCrypto
 from tests import support
 
 ITEM_TYPE = 0x4001
@@ -1310,7 +1310,7 @@ class ApplyTests(EditorTestCase):
             return real_patch(record, edits, **kwargs)
 
         with mock.patch.object(editor_module, "plan_edits", side_effect=plan_then_arm), \
-                mock.patch("nioh3_accessory_editor.records.patch_effect_slots",
+                mock.patch("nioh3_equipment_affix_editor.records.patch_effect_slots",
                            side_effect=drop_on_write):
             with self.assertRaises(EditorError) as caught:
                 apply_edits(
@@ -1452,7 +1452,7 @@ class CommitTests(EditorTestCase):
     def test_commit_leaves_the_file_untouched_when_verification_fails(self) -> None:
         descriptor, crypto = self._make_save()
         original = descriptor.path.read_bytes()
-        with mock.patch("nioh3_accessory_editor.savefile._verify_encrypted_file",
+        with mock.patch("nioh3_equipment_affix_editor.savefile._verify_encrypted_file",
                         side_effect=Exception("boom")):
             with self.assertRaises(Exception):
                 commit_save(descriptor, self.plain, crypto=crypto,

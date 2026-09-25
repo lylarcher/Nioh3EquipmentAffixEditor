@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Run the Nioh3AccessoryEditor unit/integration test-suite.
+"""Run the Nioh 3 Equipment Affix Editor unit/integration test-suite.
 
     python tools/run_tests.py               # everything
     python tools/run_tests.py -v            # verbose

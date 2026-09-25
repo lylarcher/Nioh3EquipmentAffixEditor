@@ -5,7 +5,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import ui
+from nioh3_equipment_affix_editor import ui
 from tests import support
 from tests.test_ui import TK_AVAILABLE, TK_ERROR, UiTestCase
 

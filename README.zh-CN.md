@@ -1,8 +1,8 @@
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-# Nioh3AccessoryEditor（仁王3 装备词条修改器）
+# 仁王3 装备词条修改器（Nioh 3 Equipment Affix Editor）
 
-一个面向 **仁王3（PC）** 的 Python 饰品（accessory）词条编辑器，它把修改
+一个面向 **仁王3（PC）** 的 Python 装备（equipment）词条编辑器，它把修改
 **直接写入存档文件**，因此这些修改会跨会话保留——而不是一个
 只改内存的修改器。
 
@@ -244,7 +244,7 @@ python tools\inspect_save.py --save "D:\...\SAVEDATA00\SAVEDATA.BIN" --json repo
 
 ### 发布构建：单个单文件可执行程序
 
-把 `Nioh3AccessoryEditor.exe` 下载/复制到任意位置并运行它。发布版中**没有
+把 `Nioh3EquipmentAffixEditor.exe` 下载/复制到任意位置并运行它。发布版中**没有
 安装程序、没有 `dist/` 文件夹、也没有 `.py` 文件**：程序
 需要的一切都在那一个文件里。
 
@@ -253,11 +253,11 @@ python tools\inspect_save.py --save "D:\...\SAVEDATA00\SAVEDATA.BIN" --json repo
   但 CLI 运行会保留它）：
 
   ```powershell
-  .\Nioh3AccessoryEditor.exe list
-  .\Nioh3AccessoryEditor.exe check
-  .\Nioh3AccessoryEditor.exe edit --record 3 --edit 1:0x0B32:200
-  .\Nioh3AccessoryEditor.exe restore --list
-  .\Nioh3AccessoryEditor.exe version
+  .\Nioh3EquipmentAffixEditor.exe list
+  .\Nioh3EquipmentAffixEditor.exe check
+  .\Nioh3EquipmentAffixEditor.exe edit --record 3 --edit 1:0x0B32:200
+  .\Nioh3EquipmentAffixEditor.exe restore --list
+  .\Nioh3EquipmentAffixEditor.exe version
   ```
 
 **首次运行会把并列文件解包到 exe 旁边**（这是有意
@@ -318,15 +318,15 @@ python tools/make_icon.py --preview build\icon-preview.png
 
 ```powershell
 # 显示生效的设置（文件 + 默认值）
-.\Nioh3AccessoryEditor.exe config
+.\Nioh3EquipmentAffixEditor.exe config
 
 # 同上，JSON 格式
-.\Nioh3AccessoryEditor.exe config --json
+.\Nioh3EquipmentAffixEditor.exe config --json
 
 # （重新）创建 config/editor.json，并为每个键附上解释性注释
-.\Nioh3AccessoryEditor.exe config --init
-.\Nioh3AccessoryEditor.exe config --init --force     # 覆盖已存在的文件
-.\Nioh3AccessoryEditor.exe --config D:\my\editor.json config   # 使用另一个文件
+.\Nioh3EquipmentAffixEditor.exe config --init
+.\Nioh3EquipmentAffixEditor.exe config --init --force     # 覆盖已存在的文件
+.\Nioh3EquipmentAffixEditor.exe --config D:\my\editor.json config   # 使用另一个文件
 ```
 
 该文件是刻意严格的：错误的 `schema`、未知的键（例如
@@ -416,7 +416,7 @@ powershell -File .\build.ps1
 # 同上，但先做校验——发布一条 changelog 条目之前用它
 powershell -File .\build.ps1 -Test
 
-# 先清掉旧的 dist/ 产物（只清 Nioh3AccessoryEditor* 条目）
+# 先清掉旧的 dist/ 产物（只清 Nioh3EquipmentAffixEditor* 条目）
 powershell -File .\build.ps1 -Clean -Test
 
 # 只刷新工作树的构建标识（不产生 dist，不打包 zip）
@@ -450,10 +450,10 @@ Release|Debug`、`-OutputDirectory`、`-PyInstallerPython`、`-Test`、`-TestPat
 每个版本展示面都报告同样的四项事实：
 
 ```text
-Nioh3AccessoryEditor v0.1.0
+Nioh 3 Equipment Affix Editor v0.1.0
 commit    : 34cca8de (工作区有未提交改动)
-来源      : D:\wherever-you-put-it\Nioh3AccessoryEditor
-加密组件  : D:\wherever-you-put-it\Nioh3AccessoryEditor\bin\Nioh_Savefile_decrypt.exe
+来源      : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor
+加密组件  : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor\bin\Nioh_Savefile_decrypt.exe
 构建时间  : 2026-09-19T11:01:52+08:00
 语言      : CPython 3.10.10 (仅标准库 / stdlib only, 含 tkinter GUI)
 ```
@@ -475,7 +475,7 @@ commit    : 34cca8de (工作区有未提交改动)
 * 项目根目录和暂存的 `dist\` 目录树里的
   `BUILD-INFO.txt` / `BUILD-INFO.json`，还有构建日志本身。
 
-`tools/make_build_info.py` 会生成 `nioh3_accessory_editor/_buildinfo.py`
+`tools/make_build_info.py` 会生成 `nioh3_equipment_affix_editor/_buildinfo.py`
 （固化的事实，运行时导入）、`BUILD-INFO.json` 和 `BUILD-INFO.txt`。它
 通过重新导入生成出来的模块并比对每一个
 字段来校验自己的输出，如果短 commit 不是恰好 8 个字符就会

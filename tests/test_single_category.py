@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_accessory_editor import editor, ui
-from nioh3_accessory_editor.editor import EditorError
+from nioh3_equipment_affix_editor import editor, ui
+from nioh3_equipment_affix_editor.editor import EditorError
 from tests import support
 
 CODES = editor.load_affix_category_codes()
@@ -14,7 +14,7 @@ OTHER = CODES["其他"]
 
 
 def _slots(pairs):
-    from nioh3_accessory_editor.records import EffectSlot
+    from nioh3_equipment_affix_editor.records import EffectSlot
 
     return tuple(EffectSlot(slot_index=index, prefix=0, effect_id=effect_id,
                             value=0, metadata=metadata, tail_0=0, tail_1=0)
@@ -29,7 +29,7 @@ class CategoryRuleTests(unittest.TestCase):
         cls.db = support.load_catalog_affixes()
 
     def _plan(self, before, after):
-        from nioh3_accessory_editor.editor import EditPlan
+        from nioh3_equipment_affix_editor.editor import EditPlan
 
         return EditPlan(record_index=3, offset=0, edits=(),
                         before=_slots(before), after=_slots(after))

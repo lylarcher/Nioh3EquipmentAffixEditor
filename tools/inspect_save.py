@@ -36,16 +36,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from nioh3_accessory_editor import records, savefile  # noqa: E402
-from nioh3_accessory_editor.affixdb import AffixDb, GraceDb, ItemDb  # noqa: E402
-from nioh3_accessory_editor.config import load_config  # noqa: E402
-from nioh3_accessory_editor.editor import (  # noqa: E402
+from nioh3_equipment_affix_editor import records, savefile  # noqa: E402
+from nioh3_equipment_affix_editor.affixdb import AffixDb, GraceDb, ItemDb  # noqa: E402
+from nioh3_equipment_affix_editor.config import load_config  # noqa: E402
+from nioh3_equipment_affix_editor.editor import (  # noqa: E402
     SaveDescriptor,
     discover_saves,
     open_save,
     save_checksum_is_valid,
 )
-from nioh3_accessory_editor.savefile import (  # noqa: E402
+from nioh3_equipment_affix_editor.savefile import (  # noqa: E402
     account_id_from_save_path,
     save_slot_index_from_path,
 )

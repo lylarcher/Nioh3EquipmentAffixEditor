@@ -20,7 +20,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from nioh3_accessory_editor import paths, ui
+from nioh3_equipment_affix_editor import paths, ui
 from tests import support
 
 try:  # pragma: no cover - environment dependent

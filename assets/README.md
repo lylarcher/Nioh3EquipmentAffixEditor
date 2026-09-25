@@ -10,7 +10,7 @@ python tools/make_icon.py --preview build\icon-preview.png   # 生成各尺寸�
 
 | 文件 | 尺寸 | 用途 |
 | --- | --- | --- |
-| `app.ico` | 16 / 20 / 24 / 32 / 40 / 48 / 64 / 128 / 256 | exe 图标（Explorer、任务栏、标题栏）；构建时由 `Nioh3AccessoryEditor.spec` 嵌入 PE 资源 |
+| `app.ico` | 16 / 20 / 24 / 32 / 40 / 48 / 64 / 128 / 256 | exe 图标（Explorer、任务栏、标题栏）；构建时由 `Nioh3EquipmentAffixEditor.spec` 嵌入 PE 资源 |
 | `logo.png` | 256 | 通用 logo（透明背景，GUI/文档用） |
 | `logo-64.png` | 64 | GUI 标题区 logo（原生分辨率，不做缩放） |
 | `logo-32.png` | 32 | 备用小尺寸 / 窗口图标回退 |

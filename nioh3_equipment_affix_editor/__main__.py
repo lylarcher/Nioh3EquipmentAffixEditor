@@ -1,4 +1,4 @@
-"""Allow ``python -m nioh3_accessory_editor`` (GUI) with CLI subcommand support.
+"""Allow ``python -m nioh3_equipment_affix_editor`` (GUI) with CLI subcommand support.
 
 Delegates to the same entry logic as ``launch_editor.py`` so both entry points
 always agree about which arguments select the CLI.

@@ -13,7 +13,7 @@ the PE resource directory instead of trusting the build:
   not an assumption.
 
 Usage:
-    python tools/check_exe_icon.py dist/Nioh3AccessoryEditor.exe
+    python tools/check_exe_icon.py dist/Nioh3EquipmentAffixEditor.exe
     python tools/check_exe_icon.py --exe dist/x.exe --against assets/app.ico \\
         --expect 16,20,24,32,40,48,64,128,256 [--json]
 """
