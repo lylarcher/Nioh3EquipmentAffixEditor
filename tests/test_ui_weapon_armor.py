@@ -805,8 +805,8 @@ class EquipmentTabTestCase(UiTestCase):
         """四个页签各走自己的处理器，谁也不替谁干活。"""
         self._load_standard()
         weapon, armor = self.tab("武器"), self.tab("防具")
-        with mock.patch.object(self.app, "apply_edits_to_selection") as accessory, \
-                mock.patch.object(self.app, "apply_soul_edits_to_selection") as soul, \
+        with mock.patch.object(self.app, "apply_all_selection") as accessory, \
+                mock.patch.object(self.app, "apply_all_soul") as soul, \
                 mock.patch.object(weapon, "apply_all") as weapon_apply, \
                 mock.patch.object(armor, "apply_all") as armor_apply:
             handlers = (accessory, soul, weapon_apply, armor_apply)

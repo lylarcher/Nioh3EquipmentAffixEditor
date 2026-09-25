@@ -243,12 +243,16 @@ class _quiet_dialogs:
     """批量应用期间把每个字段自己的确认/提示框静音（统一的一次确认已经问过）。"""
 
     def __enter__(self) -> None:
-        self._saved = (messagebox.askokcancel, messagebox.showinfo)
+        self._saved = (messagebox.askokcancel, messagebox.showinfo,
+                       messagebox.showwarning)
         messagebox.askokcancel = lambda *a, **k: True
         messagebox.showinfo = lambda *a, **k: None
+        # 批量应用时某一字段"没有改动"不该再弹一次（统一确认里已经列过）。
+        messagebox.showwarning = lambda *a, **k: None
 
     def __exit__(self, *exc: object) -> bool:
-        messagebox.askokcancel, messagebox.showinfo = self._saved
+        (messagebox.askokcancel, messagebox.showinfo,
+         messagebox.showwarning) = self._saved
         return False
 
 
@@ -1607,6 +1611,16 @@ class AccessoryEditorApp(tk.Tk):
         self._game_status_at = 0.0
 
         self._build_ui()
+        # 统一【应用修改】之后，饰品 / 魂核的逐字段按钮不再显示；控件对象保留，
+        # 因为既有的启用/禁用逻辑与部分测试仍在引用它们（这里只从布局里撤下）。
+        for button in (getattr(self, "level_button", None),
+                       getattr(self, "plus_button", None),
+                       getattr(self, "rarity_button", None),
+                       getattr(self, "grace_button", None),
+                       getattr(self, "soul_level_button", None),
+                       getattr(self, "soul_rarity_button", None)):
+            if button is not None:
+                button.pack_forget()
         self.after(80, self._poll_worker)
         self.after(200, self._poll_game_status)
         self.refresh_saves()
@@ -3787,6 +3801,142 @@ class AccessoryEditorApp(tk.Tk):
         except (tk.TclError, KeyError):
             return None
 
+    # ------------------------------------------- 统一【应用修改】（饰品 / 魂核页签）
+    @staticmethod
+    def _widget_values(widgets) -> list[str]:
+        return [widget.get() for widget in widgets]
+
+    def _selection_snapshot(self) -> dict:
+        """用户此刻在各控件里填的内容（批量应用时每步之前复原）。"""
+        return {
+            "slots": self._widget_values(self.slot_combos),
+            "values": self._widget_values(getattr(self, "value_vars", ())),
+            "soul_slots": self._widget_values(getattr(self, "soul_slot_combos", ())),
+            "soul_values": self._widget_values(getattr(self, "soul_value_vars", ())),
+            "level": self.level_var.get(),
+            "plus": self.plus_var.get(),
+            "rarity": self.rarity_var.get(),
+            "grace": self.grace_combo.get(),
+            "soul_level": self.soul_level_var.get(),
+            "soul_rarity": self.soul_rarity_var.get(),
+        }
+
+    def _selection_restore(self, snapshot: dict) -> None:
+        for widget, value in zip(self.slot_combos, snapshot["slots"]):
+            widget.set(value)
+        for widget, value in zip(getattr(self, "value_vars", ()), snapshot["values"]):
+            widget.set(value)
+        for widget, value in zip(getattr(self, "soul_slot_combos", ()),
+                                 snapshot["soul_slots"]):
+            widget.set(value)
+        for widget, value in zip(getattr(self, "soul_value_vars", ()),
+                                 snapshot["soul_values"]):
+            widget.set(value)
+        self.level_var.set(snapshot["level"])
+        self.plus_var.set(snapshot["plus"])
+        self.rarity_var.set(snapshot["rarity"])
+        self.grace_combo.set(snapshot["grace"])
+        self.soul_level_var.set(snapshot["soul_level"])
+        self.soul_rarity_var.set(snapshot["soul_rarity"])
+
+    @staticmethod
+    def _as_int(text: str) -> int | None:
+        try:
+            return int(text.strip(), 10)
+        except (TypeError, ValueError, AttributeError):
+            return None
+
+    def _accessory_pending(self) -> tuple[list[str], list]:
+        """饰品：本次要应用的改动（只列真正改过的字段；词条槽由收集器自己判定）。"""
+        view = next((item for item in self.accessory_views
+                     if item.slot_index == self.selected_accessory), None)
+        if view is None:
+            return [], []
+        parts: list[str] = ["词条槽的改动（只写真正改过的槽，逐槽见预览）"]
+        calls: list = [self.apply_edits_to_selection]
+        level = self._as_int(self.level_var.get())
+        if level is not None and level != view.level:
+            parts.append(f"等级 {view.level} → {level}")
+            calls.append(self.apply_level_to_selection)
+        plus = self._as_int(self.plus_var.get())
+        if plus is not None and plus != view.plus_value:
+            parts.append(f"+值 {view.plus_value} → {plus}")
+            calls.append(self.apply_plus_to_selection)
+        rarity = self._as_int(self.rarity_var.get())
+        if rarity is not None and rarity != view.rarity:
+            parts.append(f"稀有度 {view.rarity} → {rarity}")
+            calls.append(self.apply_rarity_to_selection)
+        availability = self.grace_availability
+        chosen = self.grace_combo.get().strip()
+        if (availability is not None and availability.allowed and chosen
+                and availability.current_id is not None
+                and not chosen.startswith(f"{availability.current_id:#06x} ")):
+            parts.append(f"恩宠 {availability.describe_current()} → "
+                         f"{chosen.split(' ', 1)[-1]}")
+            calls.append(self.apply_grace_to_selection)
+        return parts, calls
+
+    def _soul_pending(self) -> tuple[list[str], list]:
+        """魂核：本次要应用的改动（魂核没有 +值 与恩宠槽）。"""
+        view = next((item for item in self.soul_views
+                     if item.slot_index == self.selected_soul), None)
+        if view is None:
+            return [], []
+        parts: list[str] = ["词条槽的改动（只写真正改过的槽，逐槽见预览）"]
+        calls: list = [self.apply_soul_edits_to_selection]
+        level = self._as_int(self.soul_level_var.get())
+        if level is not None and level != view.level:
+            parts.append(f"等级 {view.level} → {level}")
+            calls.append(self.apply_soul_level_to_selection)
+        rarity = self._as_int(self.soul_rarity_var.get())
+        if rarity is not None and rarity != view.rarity:
+            parts.append(f"稀有度 {view.rarity} → {rarity}")
+            calls.append(self.apply_soul_rarity_to_selection)
+        return parts, calls
+
+    def _apply_pending(self, pending, title: str, target, require) -> None:
+        """统一【应用修改】：一次确认、一次应用；每步调用前复原用户输入
+        （每个字段自己的处理器结束都会刷新控件）。"""
+        if not require():
+            return
+        parts, calls = pending()
+        if not calls:
+            messagebox.showwarning("提示", "当前没有检测到改动")
+            return
+        if not messagebox.askokcancel(
+            "确认应用修改",
+            "将应用以下改动（内存中，尚未写入存档）：\n\n· "
+            + "\n· ".join(parts)
+            + "\n\n· 只改这些字段，其余字节不动；点【写入存档】前会自动备份。",
+            icon="warning",
+        ):
+            return
+        snapshot = self._selection_snapshot()
+        with _quiet_dialogs():
+            for call in calls:
+                self._selection_restore(snapshot)
+                call()
+        self._status(f"{title}记录 #{target} 的改动已应用到内存数据（尚未写入存档）")
+
+    def apply_all_selection(self) -> None:
+        """饰品页签的统一【应用修改】：词条 + 等级 + +值 + 稀有度 + 恩宠。"""
+        self._apply_pending(self._accessory_pending, "饰品", self.selected_accessory,
+                            self._require_accessory_selection)
+
+    def apply_all_soul(self) -> None:
+        """魂核页签的统一【应用修改】：词条 + 等级 + 稀有度。"""
+        self._apply_pending(self._soul_pending, "魂核", self.selected_soul,
+                            self._require_soul_selection)
+
+    def _require_soul_selection(self) -> bool:
+        if self.decrypted is None:
+            messagebox.showwarning("提示", MSG_NEED_DATA)
+            return False
+        if self.selected_soul is None:
+            messagebox.showwarning("提示", MSG_NEED_SELECTION)
+            return False
+        return True
+
     def apply_current_tab_edits(self) -> None:
         """底部【应用修改】：按**当前页签**分派到该页签自己的处理器。
 
@@ -3800,10 +3950,10 @@ class AccessoryEditorApp(tk.Tk):
                 equipment_tab.apply_all()
                 return
         if tab is self.accessory_tab:
-            self.apply_edits_to_selection()
+            self.apply_all_selection()
             return
         if tab is self.soul_tab:
-            self.apply_soul_edits_to_selection()
+            self.apply_all_soul()
             return
         messagebox.showwarning(
             "提示", "请用当前页签自己的【应用修改】按钮应用这一页的改动。")
