@@ -770,8 +770,11 @@ class EquipmentTabTestCase(UiTestCase):
         tab.slot_combos[0].set(replacement.label)
         tab.value_vars[0].set(str(replacement.value))
         expected = self._expected_bytes(data, layout, tab)
-        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+        with mock.patch.object(ui.messagebox, "askokcancel",
+                               return_value=True) as asked, \
+                mock.patch.object(ui.messagebox, "showwarning") as warned:
             tab.apply_button.invoke()
+        self.assertTrue(asked.called, "统一【应用修改】应当先弹一次确认")
         self.assertFalse(warned.called)
         self.assertEqual(self.app.decrypted, expected)
 
@@ -786,9 +789,12 @@ class EquipmentTabTestCase(UiTestCase):
         tab.slot_combos[0].set(replacement.label)
         tab.value_vars[0].set(str(replacement.value))
         expected = self._expected_bytes(data, layout, tab)
-        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+        with mock.patch.object(ui.messagebox, "askokcancel",
+                               return_value=True) as asked, \
+                mock.patch.object(ui.messagebox, "showwarning") as warned:
             self.app.apply_button.invoke()
-        self.assertFalse(warned.called, "底部【应用修改】不该再弹任何提示")
+        self.assertTrue(asked.called, "统一【应用修改】应当先弹一次确认")
+        self.assertFalse(warned.called, "底部【应用修改】不该再有别的提示")
         self.assertEqual(self.app.decrypted, expected)
         written = _first(editor.list_equipment(self.app.decrypted, big="防具",
                                                layout=layout, item_db=self.item_db),
@@ -801,8 +807,8 @@ class EquipmentTabTestCase(UiTestCase):
         weapon, armor = self.tab("武器"), self.tab("防具")
         with mock.patch.object(self.app, "apply_edits_to_selection") as accessory, \
                 mock.patch.object(self.app, "apply_soul_edits_to_selection") as soul, \
-                mock.patch.object(weapon, "apply_edits") as weapon_apply, \
-                mock.patch.object(armor, "apply_edits") as armor_apply:
+                mock.patch.object(weapon, "apply_all") as weapon_apply, \
+                mock.patch.object(armor, "apply_all") as armor_apply:
             handlers = (accessory, soul, weapon_apply, armor_apply)
             for widget, expected in ((self.app.accessory_tab, accessory),
                                      (self.app.soul_tab, soul),
@@ -1216,3 +1222,69 @@ class EmptySlotGreyedOutTests(UiTestCase):
 
 if __name__ == "__main__":  # pragma: no cover
     unittest.main()
+
+
+class UnifiedApplyTests(EquipmentTabTestCase):
+    """统一【应用修改】：词条 / 等级 / +值 / 稀有度 / 恩宠 一次应用，只写改过的项。"""
+
+    def _apply(self, tab):
+        with mock.patch.object(ui.messagebox, "askokcancel",
+                               return_value=True) as asked:
+            tab.apply_all()
+        return asked
+
+    def test_one_button_applies_an_affix_and_a_level_together(self) -> None:
+        """一次点击同时应用"换词条"和"改等级"，确认框里两项都写明。"""
+        data, layout = self._load_standard()
+        tab = self.tab("防具")
+        self.select("防具", 5)
+        replacement = self._other_candidate(tab, self.armor,
+                                            (self.armor_free.effect_id,))
+        tab.slot_combos[0].set(replacement.label)
+        tab.value_vars[0].set(str(replacement.value))
+        tab.level_var.set("175")
+        asked = self._apply(tab)
+        self.assertTrue(asked.called)
+        summary = asked.call_args[0][1]
+        self.assertIn("等级", summary)
+        written = _first(editor.list_equipment(self.app.decrypted, big="防具",
+                                              layout=layout, item_db=self.item_db),
+                         lambda view: view.slot_index == 5)
+        self.assertEqual(written.effects[0].effect_id, replacement.effect_id)
+        self.assertEqual(written.level, 175)
+
+    def test_an_unchanged_field_is_not_part_of_the_change_set(self) -> None:
+        """输入框里填的是当前值 → 不算改动，只提示"没有检测到改动"。"""
+        data, layout = self._load_standard()
+        tab = self.tab("防具")
+        self.select("防具", 5)
+        view = tab._selected_view()
+        tab.level_var.set(str(view.level))
+        with mock.patch.object(ui.messagebox, "showwarning") as warned, \
+                mock.patch.object(ui.messagebox, "askokcancel",
+                                  return_value=True) as asked:
+            tab.apply_all()
+        self.assertTrue(warned.called, "没有改动时应当提示")
+        self.assertFalse(asked.called, "没有改动时不该弹确认框")
+
+    def test_the_summary_lists_plus_and_rarity_only_when_changed(self) -> None:
+        """+值 / 稀有度 只有真的改了才出现在确认框里。"""
+        data, layout = self._load_standard()
+        tab = self.tab("防具")
+        self.select("防具", 5)
+        view = tab._selected_view()
+        tab.plus_var.set(str(view.plus_value))
+        tab.rarity_var.set(str(view.rarity))
+        with mock.patch.object(ui.messagebox, "showwarning") as warned:
+            tab.apply_all()
+        self.assertTrue(warned.called)
+
+    def test_the_four_separate_buttons_are_gone_from_the_layout(self) -> None:
+        """四个单独按钮不再显示（控件对象仍在，便于 enable/disable 与既有测试）。"""
+        self._load_standard()
+        tab = self.tab("武器")
+        for widget in (tab.level_button, tab.plus_button, tab.rarity_button,
+                       tab.grace_button):
+            with self.subTest(widget=widget):
+                self.assertFalse(widget.winfo_ismapped(),
+                                 "单独按钮不该再出现在界面上")

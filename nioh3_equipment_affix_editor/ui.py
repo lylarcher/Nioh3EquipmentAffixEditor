@@ -239,6 +239,19 @@ EQUIPMENT_FILTER_LABELS = {
 }
 
 
+class _quiet_dialogs:
+    """批量应用期间把每个字段自己的确认/提示框静音（统一的一次确认已经问过）。"""
+
+    def __enter__(self) -> None:
+        self._saved = (messagebox.askokcancel, messagebox.showinfo)
+        messagebox.askokcancel = lambda *a, **k: True
+        messagebox.showinfo = lambda *a, **k: None
+
+    def __exit__(self, *exc: object) -> bool:
+        messagebox.askokcancel, messagebox.showinfo = self._saved
+        return False
+
+
 class EquipmentTab(ttk.Frame):
     """武器 / 防具页签（同一个组件实例化两次，只有 ``big`` 不同）。
 
@@ -370,6 +383,7 @@ class EquipmentTab(ttk.Frame):
         self._build_plus(right)
         self._build_rarity(right)
         self._build_grace(right)
+        self._build_actions(right)
         self._build_create(right)
 
         self.item_var = tk.StringVar(
@@ -415,8 +429,9 @@ class EquipmentTab(ttk.Frame):
         self.level_var = tk.StringVar(value="")
         self.level_entry = ttk.Entry(row, textvariable=self.level_var, width=8)
         self.level_entry.pack(side=tk.LEFT, padx=4)
+        # 单独按钮已撤下：统一由【应用修改】一次应用。控件对象保留给既有的
+        # enable/disable 逻辑与测试复用，不再显示在界面上。
         self.level_button = ttk.Button(row, text="应用等级", command=self.apply_level)
-        self.level_button.pack(side=tk.LEFT, padx=2)
         self.level_status_var = tk.StringVar(
             value=f"选择一条{self.title}记录后，这里会显示它的等级。")
         ttk.Label(self.level_frame, textvariable=self.level_status_var,
@@ -436,7 +451,6 @@ class EquipmentTab(ttk.Frame):
         self.plus_entry = ttk.Entry(row, textvariable=self.plus_var, width=8)
         self.plus_entry.pack(side=tk.LEFT, padx=4)
         self.plus_button = ttk.Button(row, text="应用 +值", command=self.apply_plus)
-        self.plus_button.pack(side=tk.LEFT, padx=2)
         self.plus_status_var = tk.StringVar(
             value=f"选择一条{self.title}记录后，这里会显示它的 +值。")
         ttk.Label(self.plus_frame, textvariable=self.plus_status_var,
@@ -460,8 +474,8 @@ class EquipmentTab(ttk.Frame):
         self.rarity_var = tk.StringVar(value="")
         self.rarity_entry = ttk.Entry(row, textvariable=self.rarity_var, width=8)
         self.rarity_entry.pack(side=tk.LEFT, padx=4)
-        self.rarity_button = ttk.Button(row, text="应用稀有度", command=self.apply_rarity)
-        self.rarity_button.pack(side=tk.LEFT, padx=2)
+        self.rarity_button = ttk.Button(row, text="应用稀有度",
+                                        command=self.apply_rarity)
         self.rarity_status_var = tk.StringVar(
             value=f"选择一条{self.title}记录后，这里会显示它的稀有度。")
         ttk.Label(self.rarity_frame, textvariable=self.rarity_status_var,
@@ -487,13 +501,29 @@ class EquipmentTab(ttk.Frame):
         self.grace_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=4)
         self.grace_button = ttk.Button(row, text="应用恩宠/套装",
                                        command=self.apply_grace)
-        self.grace_button.pack(side=tk.LEFT, padx=2)
         self.grace_status_var = tk.StringVar(
             value=f"选择一条{self.title}记录后，这里会显示它带的恩宠/套装词条。")
         ttk.Label(self.grace_frame, textvariable=self.grace_status_var,
                   foreground="#666666", wraplength=520,
                   justify=tk.LEFT).pack(anchor=tk.W, pady=(4, 0))
         self._set_grace_enabled(False)
+
+    def _build_actions(self, right: ttk.Frame) -> None:
+        """【预览改动】+【应用修改】：本记录的所有改动一次算完。
+
+        词条、等级、+值、稀有度、恩宠全部由这一个按钮应用，不再逐项点小按钮。
+        """
+        self.actions_frame = ttk.Frame(right)
+        self.actions_frame.pack(fill=tk.X, pady=(6, 0))
+        self.preview_button = ttk.Button(self.actions_frame, text="预览改动",
+                                         command=self.preview_edits)
+        self.preview_button.pack(side=tk.LEFT, padx=2)
+        self.apply_button = ttk.Button(self.actions_frame, text="应用修改",
+                                       command=self.apply_all)
+        self.apply_button.pack(side=tk.LEFT, padx=2)
+        ttk.Label(self.actions_frame,
+                  text="词条、等级、+值、稀有度、恩宠一次应用（只写真正改过的项）",
+                  foreground="#666666").pack(side=tk.LEFT, padx=8)
 
     def _build_create(self, right: ttk.Frame) -> None:
         self.create_frame = ttk.LabelFrame(
@@ -516,12 +546,6 @@ class EquipmentTab(ttk.Frame):
                   width=4).pack(side=tk.LEFT, padx=2)
         self.create_button = ttk.Button(row, text="新建到空槽", command=self.create_item)
         self.create_button.pack(side=tk.LEFT, padx=4)
-        self.preview_button = ttk.Button(row, text="预览改动", command=self.preview_edits)
-        self.preview_button.pack(side=tk.LEFT, padx=2)
-        # 本页签自己的【应用修改】：底部那条全局按钮按页签分派，这里也留一个
-        # 就地入口，免得"预览改动旁边没有应用"让人以为只能靠全局按钮。
-        self.apply_button = ttk.Button(row, text="应用修改", command=self.apply_edits)
-        self.apply_button.pack(side=tk.LEFT, padx=2)
         self.create_status_var = tk.StringVar(
             value="实验性功能：需要进游戏实测确认后才算数。用法：在右侧槽位挑好词条，"
                   "选种类并点「新建到空槽」。模板优先取同种类；没有同种类时改用"
@@ -1156,6 +1180,102 @@ class EquipmentTab(ttk.Frame):
             f"（按大类「{self.big}」）；颜色对照 {RARITY_COLOR_HINT}；"
             f"橙色（5）在当前周目不可达。{limits.describe_origin()}")
         self._set_rarity_enabled(True)
+
+    def _snapshot_widgets(self) -> dict:
+        """用户此刻在各控件里填的内容（批量应用期间用它在每步之前复原）。"""
+        return {
+            "slots": [combo.get() for combo in self.slot_combos],
+            "values": [var.get() for var in self.value_vars],
+            "level": self.level_var.get(),
+            "plus": self.plus_var.get(),
+            "rarity": self.rarity_var.get(),
+            "grace": self.grace_var.get(),
+        }
+
+    def _restore_widgets(self, snapshot: dict) -> None:
+        for combo, text in zip(self.slot_combos, snapshot["slots"]):
+            combo.set(text)
+        for var, text in zip(self.value_vars, snapshot["values"]):
+            var.set(text)
+        self.level_var.set(snapshot["level"])
+        self.plus_var.set(snapshot["plus"])
+        self.rarity_var.set(snapshot["rarity"])
+        self.grace_var.set(snapshot["grace"])
+
+    def _pending_changes(self) -> tuple[list[str], list]:
+        """本次要应用的改动：文字说明 + 对应动作（只收真正改过的项）。"""
+        view = self._selected_view()
+        if view is None:
+            return [], []
+        parts: list[str] = []
+        calls: list = []
+        try:
+            edits = self.current_edits()
+        except UiEditError as error:
+            messagebox.showwarning("提示", str(error))
+            return [], []
+        if edits:
+            parts.append(self.describe_edits(view, edits))
+            calls.append(self.apply_edits)
+        level_text = self.level_var.get().strip()
+        if level_text:
+            try:
+                level = int(level_text, 10)
+            except ValueError:
+                level = None
+            if level is not None and level != view.level:
+                parts.append(f"等级 {view.level} → {level}")
+                calls.append(self.apply_level)
+        plus_text = self.plus_var.get().strip()
+        if plus_text:
+            try:
+                plus = int(plus_text, 10)
+            except ValueError:
+                plus = None
+            if plus is not None and plus != view.plus_value:
+                parts.append(f"+值 {view.plus_value} → {plus}")
+                calls.append(self.apply_plus)
+        rarity_text = self.rarity_var.get().strip()
+        if rarity_text:
+            try:
+                rarity = int(rarity_text, 10)
+            except ValueError:
+                rarity = None
+            if rarity is not None and rarity != view.rarity:
+                parts.append(f"稀有度 {view.rarity} → {rarity}")
+                calls.append(self.apply_rarity)
+        current_grace = self.grace_name(view)
+        chosen_grace = self.grace_var.get().strip()
+        if chosen_grace and chosen_grace != current_grace:
+            parts.append(f"恩宠/套装 {current_grace or '（无）'} → {chosen_grace}")
+            calls.append(self.apply_grace)
+        return parts, calls
+
+    def apply_all(self) -> None:
+        """统一入口：词条 + 等级 + +值 + 稀有度 + 恩宠，一次确认、一次应用。"""
+        if self._require_view() is None:
+            return
+        parts, calls = self._pending_changes()
+        if not calls:
+            messagebox.showwarning("提示", "当前没有检测到改动")
+            return
+        if not messagebox.askokcancel(
+            "确认应用修改",
+            "将应用以下改动（内存中，尚未写入存档）：\n\n· "
+            + "\n· ".join(parts)
+            + "\n\n· 只改这些字段，其余字节不动；点【写入存档】前会自动备份。",
+            icon="warning",
+        ):
+            return
+        # 每一步 apply 结束都会 reload（把输入框刷成记录当前值），所以调用前先把
+        # 用户填写的快照放回去，否则后一步的输入会被前一步的刷新冲掉。
+        snapshot = self._snapshot_widgets()
+        with _quiet_dialogs():
+            for call in calls:
+                self._restore_widgets(snapshot)
+                call()
+        self.app._status(
+            f"{self.title}记录 #{self.selected} 的改动已应用到内存数据（尚未写入存档）")
 
     def apply_rarity(self) -> None:
         view = self._require_view()
@@ -3677,7 +3797,7 @@ class AccessoryEditorApp(tk.Tk):
         tab = self._current_tab()
         for equipment_tab in self.equipment_tabs:
             if tab is equipment_tab:
-                equipment_tab.apply_edits()
+                equipment_tab.apply_all()
                 return
         if tab is self.accessory_tab:
             self.apply_edits_to_selection()
