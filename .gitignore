@@ -4,7 +4,7 @@ __pycache__/
 *.pyo
 
 # Editor state
-_nioh3_accessory_backup/
+_nioh3_equipment_affix_backup/
 state/
 
 # Test scratch

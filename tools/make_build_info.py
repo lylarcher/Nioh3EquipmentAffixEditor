@@ -278,11 +278,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"警告: 找不到加密组件 {info.crypto_exe}，其校验和记为 unknown",
               file=sys.stderr)
 
-    from nioh3_equipment_affix_editor.version import version_banner
+    from nioh3_equipment_affix_editor.version import version_banner, version_lines
 
     banner = version_banner(info)
+    # 文本报告是内部诊断文件，路径不缩写：缩写只服务于界面宽度
+    # （界面仍然缩写，见 version_lines 的 elide 参数）。
+    text_banner = "\n".join(version_lines(info, elide=False))
     written = write_artifacts(info, module_path=arguments.module_path,
-                              out_dir=arguments.out_dir, banner=banner)
+                              out_dir=arguments.out_dir, banner=text_banner)
     # The generated module must reproduce the banner the app renders.
     verify_module(written["module"], info)
     if arguments.quiet:

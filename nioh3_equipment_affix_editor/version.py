@@ -243,22 +243,39 @@ def reset_cache() -> None:
 # Rendering
 # --------------------------------------------------------------------------
 
-def _elide(text: str, width: int = _BANNER_WIDTH) -> str:
-    """Shorten ``text`` to ``width`` display columns, appending an ellipsis."""
+def _take(text: str, budget: int, *, from_start: bool) -> str:
+    """Longest prefix/suffix of ``text`` that fits ``budget`` display columns."""
     import unicodedata
 
-    if _display_width(text) <= width:
-        return text
-    budget = max(0, width - 3)
+    chars = text if from_start else reversed(text)
     kept: list[str] = []
     used = 0
-    for char in text:
+    for char in chars:
         step = 2 if unicodedata.east_asian_width(char) in "WF" else 1
         if used + step > budget:
             break
         kept.append(char)
         used += step
-    return "".join(kept) + "..."
+    if not from_start:
+        kept.reverse()
+    return "".join(kept)
+
+
+def _elide(text: str, width: int = _BANNER_WIDTH, *, enabled: bool = True) -> str:
+    """Shorten ``text`` to ``width`` display columns, keeping the tail visible.
+
+    The tail is what identifies the file (``...\\bin\\Nioh_Savefile_decrypt.exe``),
+    so the abbreviation keeps a short head plus as much of the end as fits; a
+    leading-only cut would hide exactly the part the reader needs.  ``enabled=False``
+    returns the path untouched — the diagnostic ``BUILD-INFO.txt`` records full paths.
+    """
+    if not enabled or _display_width(text) <= width:
+        return text
+    budget = max(0, width - 3)
+    head_budget = min(24, budget // 3)
+    tail_budget = budget - head_budget
+    return _take(text, head_budget, from_start=True) + "..." + _take(
+        text, tail_budget, from_start=False)
 
 
 def _display_width(text: str) -> int:
@@ -279,6 +296,7 @@ def version_lines(
     *,
     location: str | Path | None = None,
     crypto_exe: str | Path | None = None,
+    elide: bool = True,
 ) -> tuple[str, ...]:
     """Human-readable version block, one entry per line.
 
@@ -303,8 +321,8 @@ def version_lines(
     lines = [
         f"Nioh 3 Equipment Affix Editor v{info.version}",
         f"{_pad_to('commit', label_width)}: {info.commit}{info.dirty_suffix}",
-        f"{_pad_to('来源', label_width)}: {_elide(str(runtime_root))}",
-        f"{_pad_to('加密组件', label_width)}: {_elide(str(runtime_crypto))}",
+        f"{_pad_to('来源', label_width)}: {_elide(str(runtime_root), enabled=elide)}",
+        f"{_pad_to('加密组件', label_width)}: {_elide(str(runtime_crypto), enabled=elide)}",
         f"{_pad_to('构建时间', label_width)}: {built_at}",
         f"{_pad_to('语言', label_width)}: {info.language}",
     ]

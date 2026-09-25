@@ -677,7 +677,7 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertIn("仅供测试学习用", out)
         self.assertIn('"dry_run": true', out)
         self.assertEqual(self.save_path.read_bytes(), before)
-        self.assertFalse((self.root / "_nioh3_accessory_backup").exists())
+        self.assertFalse((self.root / "_nioh3_equipment_affix_backup").exists())
 
     def test_edit_states_the_write_requirement(self) -> None:
         """Both the notice and the current gate state must be visible."""
@@ -718,7 +718,7 @@ class EndToEndCliTests(unittest.TestCase):
         self.assertIn("标题界面", err)
         self.assertIn("--force-while-running", err)
         self.assertEqual(self.save_path.read_bytes(), before)
-        self.assertFalse((self.root / "_nioh3_accessory_backup").exists())
+        self.assertFalse((self.root / "_nioh3_equipment_affix_backup").exists())
 
     def test_success_message_warns_about_overwriting(self) -> None:
         code, out, err = run_cli([
@@ -736,7 +736,7 @@ class EndToEndCliTests(unittest.TestCase):
         view = next(v for v in self._reload() if v.slot_index == 3)
         self.assertEqual(view.effects[2].effect_id, self.affix.effect_id)
         self.assertEqual(view.effects[2].value, self.affix.value)
-        self.assertTrue(list((self.root / "_nioh3_accessory_backup").rglob("backup-manifest.json")))
+        self.assertTrue(list((self.root / "_nioh3_equipment_affix_backup").rglob("backup-manifest.json")))
 
     def test_backup_command(self) -> None:
         code, out, err = run_cli(["backup"])

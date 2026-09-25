@@ -65,7 +65,7 @@ __all__ = [
 
 SAVE_QUIESCENCE_SECONDS = 0.2
 SAVE_SLOT_DIRECTORY_PATTERN = re.compile(r"^SAVEDATA(?P<index>\d{2})$")
-BACKUP_SUBDIRECTORY_NAME = "_nioh3_accessory_backup"
+BACKUP_SUBDIRECTORY_NAME = "_nioh3_equipment_affix_backup"
 BACKUP_MANIFEST_SCHEMA = "nioh3-accessory-editor/backup/v2"
 SAVE_SCHEMA_PROFILE = "nioh3-pc-usr"
 

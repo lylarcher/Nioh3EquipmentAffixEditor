@@ -149,8 +149,14 @@ PYTHON_VERSION = '3.11.9'
         """来源 must be where the exe runs from, not where it was built."""
         text = version_banner()
         runtime_root = paths.application_root()
+        crypto = paths.default_crypto_exe()
         self.assertIn(str(runtime_root), text)
-        self.assertIn(str(paths.default_crypto_exe()), text)
+        # 组件路径偏长时横幅只缩写中间一段（version._elide 保留尾部）：
+        # 行首仍是这台机器的运行目录，行尾必须是组件文件名。
+        crypto_line = next(line for line in text.splitlines()
+                           if line.startswith("加密组件"))
+        self.assertTrue(crypto_line.endswith(crypto.name), crypto_line)
+        self.assertIn(str(runtime_root)[:12], crypto_line)
         # The build-time root is never printed: it names the build machine.
         self.assertNotIn(r"D:\ci\checkout", text)
         self.assertNotIn("构建来源", text)
@@ -185,7 +191,8 @@ class BannerRenderingTests(unittest.TestCase):
         self.assertIn(f"v{info.version}", text)
         self.assertIn(info.commit, text)
         self.assertIn(str(paths.application_root()), text)
-        self.assertIn(str(paths.default_crypto_exe()), text)
+        # 组件路径偏长时中间会被缩写，但文件名必须仍然可见
+        self.assertIn(paths.default_crypto_exe().name, text)
         self.assertIn(info.built_at, text)
         self.assertIn(info.language, text)
         self.assertNotIn(info.built_from, text)  # 构建机路径一律不显示
@@ -394,7 +401,8 @@ class BannerIsPrintedByTheCliTests(unittest.TestCase):
         text = buffer.getvalue()
         info = version_info()
         self.assertIn(info.commit, text)
-        self.assertIn(info.crypto_exe, text)
+        # 组件路径偏长时中间会被缩写，但文件名必须仍然可见
+        self.assertIn(Path(info.crypto_exe).name, text)
         self.assertIn(info.language, text)
         # The banner must not be re-wrapped by argparse's help formatter.
         self.assertIn("commit    :", text)

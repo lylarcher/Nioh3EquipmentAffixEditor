@@ -17,6 +17,19 @@
 
 ---
 
+## 未发布：运行时备份目录改名
+
+- 自动备份的目录名跟着产品名一起改：`_nioh3_accessory_backup/` →
+  **`_nioh3_equipment_affix_backup/`**（`savefile.BACKUP_SUBDIRECTORY_NAME`、
+  `config.py` 说明、`.gitignore`、两份 README 与相关测试同步）。
+- **旧目录不会被自动识别**：以前版本留下的 `_nioh3_accessory_backup/` 里的历史备份，
+  本版本不会读、也不会列出来（工具只认新目录名）。需要找回的话，把旧目录改名成
+  `_nioh3_equipment_affix_backup/`，或把里面的内容移过去即可。
+- 备份目录只管"自动备份的落点"，与存档本身、物品记录格式都无关；改名前后的备份文件
+  内容格式相同。
+
+---
+
 ## 未发布：产品改名（Nioh3AccessoryEditor → Nioh3EquipmentAffixEditor）
 
 - 工具已经不只改饰品（还能改武器 / 防具 / 魂核），程序名不再叫「饰品词条修改器」：

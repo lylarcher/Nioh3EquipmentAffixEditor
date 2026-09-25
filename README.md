@@ -288,7 +288,7 @@ Rules that make this safe to keep next to your own files:
 * If the folder is read-only (e.g. `Program Files`), the program still runs and
   simply reads resources from inside the executable instead of writing them.
 * Keep the exe in a writable folder of your choice; backups are written to the
-  same folder (`_nioh3_accessory_backup/`) unless the config says otherwise.
+  same folder (`_nioh3_equipment_affix_backup/`) unless the config says otherwise.
 
 The executable itself unpacks its Python runtime into the usual per-session
 `%TEMP%\_MEIxxxx` directory (standard one-file behaviour, deleted on exit); the
@@ -363,7 +363,7 @@ Where backups go — `<state root>` is `backup_root` from `config/editor.json`, 
 the folder holding the exe (or the current directory when run from source):
 
 ```text
-<state root>/_nioh3_accessory_backup/
+<state root>/_nioh3_equipment_affix_backup/
     account-<steam id>/          # e.g. account-76561198000000000
         slot-<NN>/               # e.g. slot-03, matching SAVEDATA03
             SAVEDATA-<YYYYmmdd-HHMMSS>-<uuid8>-plain.bin
@@ -957,7 +957,7 @@ touches it, and the +値 row never touches the level.
   CLI equivalent is `--at-title-screen` (`--force-while-running` is the older name
   for the same acknowledgement). Nothing is written silently — a running game
   without the acknowledgement is a refusal, not a warning.
-* Backups: `<state root>/_nioh3_accessory_backup/account-<id>/slot-<NN>/` holds a
+* Backups: `<state root>/_nioh3_equipment_affix_backup/account-<id>/slot-<NN>/` holds a
   decrypted `SAVEDATA-<timestamp>-<random>-plain.bin` plus `backup-manifest.json`
   (schema, account, slot, main-save SHA-256, plaintext SHA-256); see
   [Backup and restore](#backup-and-restore).

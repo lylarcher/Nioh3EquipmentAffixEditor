@@ -96,7 +96,7 @@ class EditorConfig:
         return (base / raw).resolve()
 
     def resolved_backup_root(self, root: Path | None = None) -> Path:
-        """Directory that holds ``_nioh3_accessory_backup``."""
+        """Directory that holds ``_nioh3_equipment_affix_backup``."""
         if self.backup_root is None:
             return root if root is not None else paths.default_state_root()
         raw = Path(self.backup_root).expanduser()

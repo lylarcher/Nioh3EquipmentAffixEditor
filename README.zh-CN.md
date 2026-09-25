@@ -282,7 +282,7 @@ python tools\inspect_save.py --save "D:\...\SAVEDATA00\SAVEDATA.BIN" --json repo
 * 如果该文件夹是只读的（例如 `Program Files`），程序仍会运行，
   只是改为从可执行程序内部读取资源，而不是写出它们。
 * 把 exe 放在你选择的可写文件夹里；备份会写到
-  同一个文件夹（`_nioh3_accessory_backup/`），除非配置另有指定。
+  同一个文件夹（`_nioh3_equipment_affix_backup/`），除非配置另有指定。
 
 可执行程序本身会把它的 Python 运行时解包到每会话惯用的
 `%TEMP%\_MEIxxxx` 目录（单文件程序的标准行为，退出时删除）；
@@ -356,7 +356,7 @@ python tools/make_icon.py --preview build\icon-preview.png
 就是存放 exe 的文件夹（从源码运行时则是当前目录）：
 
 ```text
-<state root>/_nioh3_accessory_backup/
+<state root>/_nioh3_equipment_affix_backup/
     account-<steam id>/          # 例如 account-76561198000000000
         slot-<NN>/               # 例如 slot-03，对应 SAVEDATA03
             SAVEDATA-<YYYYmmdd-HHMMSS>-<uuid8>-plain.bin
@@ -933,7 +933,7 @@ python tools/set_plus.py --record 28 --value 13 --write    # 真正写入（自�
   勾选在每次写入后即作废，所以下一次写入会再问一次。CLI 的等价选项是
   `--at-title-screen`（`--force-while-running` 是同一个确认的旧名）。
   不存在静默写入——游戏在运行而没有这个确认就是拒绝，而不是警告。
-* 备份：`<state root>/_nioh3_accessory_backup/account-<id>/slot-<NN>/` 保存一份
+* 备份：`<state root>/_nioh3_equipment_affix_backup/account-<id>/slot-<NN>/` 保存一份
   解密后的 `SAVEDATA-<timestamp>-<random>-plain.bin` 以及 `backup-manifest.json`
   （schema、账号、存档位、主存档 SHA-256、明文 SHA-256）；见
   [备份与恢复](#备份与恢复)。

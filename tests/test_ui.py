@@ -118,7 +118,9 @@ class ConstructionTests(UiTestCase):
         title, body = informed.call_args[0]
         self.assertEqual(title, "版本信息")
         # 构建来源（构建机路径）不在对话框里；出现的是运行目录。
-        for expected in (info.commit, str(ui.resource_root()), info.crypto_exe,
+        # 组件路径偏长时中间会被缩写（version._elide 保留尾部），文件名必须仍然可见。
+        for expected in (info.commit, str(ui.resource_root()),
+                         Path(info.crypto_exe).name,
                          info.language, "完整 commit", "分支"):
             self.assertIn(expected, body)
 
@@ -568,7 +570,7 @@ class WriteFlowTests(UiTestCase):
                 mock.patch.object(ui.messagebox, "askyesno") as asked:
             self.app.restore_save()
         self.assertIn("没有可用备份", informed.call_args[0][0])
-        self.assertIn("_nioh3_accessory_backup", informed.call_args[0][1])
+        self.assertIn("_nioh3_equipment_affix_backup", informed.call_args[0][1])
         self.assertIn("account-76561198000000001", informed.call_args[0][1])
         self.assertIn("slot-02", informed.call_args[0][1])
         asked.assert_not_called()
