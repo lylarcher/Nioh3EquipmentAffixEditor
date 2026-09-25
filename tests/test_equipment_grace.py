@@ -343,10 +343,19 @@ class GraceRefusalTests(unittest.TestCase):
 
     def test_a_star_slot_still_travels_with_its_star_bit(self) -> None:
         """顺带钉住：★ 词条仍然可写，且种类码/★ 位照旧跟随词条。"""
+        # 槽 1 先放一条可写词条：当前周目不允许往空槽写东西（空槽不可改），
+        # 填的这条与 AFFIX / STAR_AFFIX 不同种类，替换它不会引入"同种类两条"。
+        codes = editor.load_affix_category_codes()
+        filler = next(
+            entry for entry in sorted(MELEE.db.all(), key=lambda item: item.effect_id)
+            if not entry.is_fixed and not entry.is_star
+            and "近战" in MELEE.tags_of(entry.effect_id)
+            and entry.category not in (AFFIX.category, STAR_AFFIX.category, "其他"))
         record = support.build_record(
             record_type=KATANA.item_id, level=170, rarity=4,
             effects=((AFFIX.effect_id, AFFIX.value, GRACE_METADATA),
-                     (0, 0, 0), (0, 0, 0), (0, 0, 0),
+                     (filler.effect_id, filler.value, codes[filler.category]),
+                     (0, 0, 0), (0, 0, 0),
                      (GRACE_A.effect_id, GRACE_A.value, GRACE_METADATA)),
         )
         data = save_with(record)

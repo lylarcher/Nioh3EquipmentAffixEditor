@@ -170,6 +170,31 @@ def affix_value_editable(entry) -> bool:
     return entry.value_min != entry.value_max
 
 
+#: 空槽位不可写时写在槽位标签上的理由（开关见 ``limits.EMPTY_SLOT_EDITABLE``）。
+EMPTY_SLOT_HINT = "空槽位在当前周目不可修改（四周目 / DLC2 开放后可能启用）"
+
+
+def apply_empty_slot_state(combo, label_var, value_entry, value_var) -> bool:
+    """把"空槽位"这一格刷成当前周目该有的样子，返回它还能不能写。
+
+    用户口径：空槽位（既没有词条、也没有值）在当前最高周目（三周目）下**不可修改**；
+    四周目 / DLC2 开放后可能启用。界面这里只是把它置灰并写明理由 —— **真正的闸门在
+    引擎**（``editor._assert_no_empty_slot_writes``），界面漏判也不会写进去。
+
+    "清空一个已有词条的槽"不算修改空槽，那条路径不经过这里。
+    """
+    value_var.set("")
+    if limits.EMPTY_SLOT_EDITABLE:
+        combo.state(["!disabled"])
+        value_entry.state(["!disabled"])
+        label_var.set("")
+        return True
+    combo.state(["disabled"])
+    value_entry.state(["disabled"])
+    label_var.set(EMPTY_SLOT_HINT)
+    return False
+
+
 GAME_STATUS_CLOSED = "游戏状态：未检测到仁王3 进程 —— 可以写入存档"
 GAME_STATUS_RUNNING = (
     "游戏状态：{names} 正在运行 —— 写入会被拒绝；"
@@ -843,16 +868,16 @@ class EquipmentTab(ttk.Frame):
             if index >= len(view.effects):
                 combo.configure(values=(EMPTY_LABEL,))
                 combo.set(EMPTY_LABEL)
-                combo.state(["!disabled"])
-                self.slot_labels[index].set("")
-                self._show_slot_value(index, None, editable=False)
+                apply_empty_slot_state(combo, self.slot_labels[index],
+                                       self.value_entries[index],
+                                       self.value_vars[index])
                 continue
             effect = view.effects[index]
             if effect.is_empty:
                 combo.set(EMPTY_LABEL)
-                combo.state(["!disabled"])
-                self.slot_labels[index].set("")
-                self._show_slot_value(index, None, editable=False)
+                apply_empty_slot_state(combo, self.slot_labels[index],
+                                       self.value_entries[index],
+                                       self.value_vars[index])
                 continue
             entry = pool.db.lookup(effect.effect_id) if pool is not None else None
             # 先查恩宠/套装名表：名表条目的 0x40 是它自己的标记，不是"同名固定词条"，
@@ -2735,9 +2760,12 @@ class AccessoryEditorApp(tk.Tk):
         for index, effect in enumerate(view.effects):
             self.soul_value_entries[index].state(["!disabled"])
             if effect.is_empty:
+                # 空槽位在当前周目不可修改（见 limits.EMPTY_SLOT_EDITABLE）。
                 self.soul_slot_combos[index].set(EMPTY_LABEL)
-                self.soul_slot_labels[index].set("")
-                self.soul_slot_combos[index].state(["!disabled"])
+                apply_empty_slot_state(self.soul_slot_combos[index],
+                                       self.soul_slot_labels[index],
+                                       self.soul_value_entries[index],
+                                       self.soul_value_vars[index])
                 continue
             entry = self.soul_db.lookup(effect.effect_id)
             label = entry.label if entry else f"{effect.effect_id:#06x} (非表内词条)"
@@ -3377,9 +3405,13 @@ class AccessoryEditorApp(tk.Tk):
         for index, effect in enumerate(view.effects):
             self.value_entries[index].state(["!disabled"])
             if effect.is_empty:
+                # 空槽位在当前周目不可修改（见 limits.EMPTY_SLOT_EDITABLE）：
+                # 下拉与数值框都置灰，并在标签上写明理由。
                 self.slot_combos[index].set(EMPTY_LABEL)
-                self.slot_labels[index].set("")
-                self.slot_combos[index].state(["!disabled"])
+                apply_empty_slot_state(self.slot_combos[index],
+                                       self.slot_labels[index],
+                                       self.value_entries[index],
+                                       self.value_vars[index])
                 continue
             entry = self.affix_db.lookup(effect.effect_id)
             if view.slot_is_fixed(index, self.affix_db, grace_db=self.grace_db):

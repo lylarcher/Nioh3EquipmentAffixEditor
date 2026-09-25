@@ -325,12 +325,14 @@ class EditCollectionTests(UiTestCase):
     def test_picking_a_new_affix_writes_id_and_value_only(self) -> None:
         self._select()
         other = self.free_affixes[1]
-        self.app.slot_combos[2].set(other.label)
+        # 目标必须是**非空**槽：当前周目不允许往空槽写词条（见 limits.EMPTY_SLOT_EDITABLE），
+        # 夹具里只有槽 1（slot_index 0）有词条。
+        self.app.slot_combos[0].set(other.label)
         edits = self.app._current_edits()
         self.assertEqual(len(edits), 1)
         edit = edits[0]
         self.assertEqual(edit["record_index"], 3)
-        self.assertEqual(edit["slot_index"], 2)
+        self.assertEqual(edit["slot_index"], 0)
         self.assertEqual(edit["effect_id"], other.effect_id)
         self.assertEqual(edit["value"], other.value)
         # metadata is deliberately not touched: its bit layout is unverified.
@@ -415,11 +417,12 @@ class EditCollectionTests(UiTestCase):
     def test_apply_updates_memory_and_reselects(self) -> None:
         self._select()
         other = self.free_affixes[1]
-        self.app.slot_combos[3].set(other.label)
+        # 同样只改非空槽（空槽不可写：当前周目口径）。
+        self.app.slot_combos[0].set(other.label)
         self.app.apply_edits_to_selection()
         view = next(v for v in self.app.accessory_views if v.slot_index == 3)
-        self.assertEqual(view.effects[3].effect_id, other.effect_id)
-        self.assertEqual(view.effects[3].value, other.value)
+        self.assertEqual(view.effects[0].effect_id, other.effect_id)
+        self.assertEqual(view.effects[0].value, other.value)
         self.assertEqual(self.app.selected_accessory, 3)
         self.assertIn("尚未写入存档", self.app.status_var.get())
 

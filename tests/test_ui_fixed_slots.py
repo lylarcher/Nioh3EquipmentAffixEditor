@@ -74,14 +74,29 @@ class FixedSlotTests(unittest.TestCase):
             tree.selection.return_value = (str(view.slot_index),)
             self.app._on_accessory_selected()
 
+    def _editable_affix(self):
+        """一条真实可写词条，且**有取值区间**（数值框才会是"可改"状态）。
+
+        当前周目不允许往空槽写东西（``limits.EMPTY_SLOT_EDITABLE``），所以"其它槽
+        仍然可改"这类用例的非固定槽必须先有一条真实词条。
+        """
+        return next(item for item in self.app.affix_db.all()
+                    if not item.is_fixed and item.has_value_range
+                    and item.value_min != item.value_max)
+
+    def _occupied(self, filler, *, metadata: int = 0x40):
+        return [_Effect(filler.effect_id, filler.value, metadata)
+                for _ in range(ui.EFFECT_COUNT)]
+
     def _show(self, fixed: set[int]):
         """Put a view on screen with ``fixed`` slots and select it."""
+        filler = self._editable_affix()
         effects = []
         for index in range(ui.EFFECT_COUNT):
             if index in fixed:
                 effects.append(_Effect(0x53D4, 1, 0x40))
             else:
-                effects.append(_Effect(ui.EMPTY_EFFECT_ID, 0))
+                effects.append(_Effect(filler.effect_id, filler.value, 0x40))
         view = _View(3, effects, fixed)
         self._select(view)
         return view
@@ -108,8 +123,9 @@ class FixedSlotTests(unittest.TestCase):
     def test_a_slot_that_was_fixed_is_edited_again_on_the_next_record(self) -> None:
         self._show({0})
         self.assertIn("disabled", str(self.app.value_entries[0].state()))
-        # Next record: 槽1 is an ordinary, editable, empty slot again.
-        other = _View(4, [_Effect(ui.EMPTY_EFFECT_ID, 0)] * ui.EFFECT_COUNT, set())
+        # Next record: 槽1 是一条普通的、可改的词条（不再是固定槽）。
+        filler = self._editable_affix()
+        other = _View(4, self._occupied(filler, metadata=0x40), set())
         self._select(other)
         self.assertNotIn("disabled", str(self.app.value_entries[0].state()))
         self.assertNotIn("disabled", str(self.app.slot_combos[0].state()))

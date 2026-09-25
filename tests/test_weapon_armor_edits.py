@@ -136,6 +136,68 @@ def effect(entry, *, metadata: int = 0) -> tuple[int, int, int]:
     return (entry.effect_id, entry.value, metadata)
 
 
+def writable_affix(pool: equipmentdb.EquipmentPool, item: equipmentdb.EquipmentItem,
+                   *, exclude_categories: tuple[str, ...] = ()):
+    """给这件装备挑一条"标签相容、非固定、非星号"的可写词条。
+
+    用途：**当前周目不允许往空槽写词条或数值**（``limits.EMPTY_SLOT_EDITABLE``），
+    所以凡是"改某一槽"的用例，目标槽必须先有一条真实存在的词条。这里挑出来的就是
+    那条"先填进去"的词条。
+    """
+    for entry in sorted(pool.db.all(), key=lambda item: item.effect_id):
+        if entry.is_fixed or entry.is_star:
+            continue
+        if entry.category in exclude_categories:
+            continue
+        if editor.equipment_affix_allowed(pool, item, entry.effect_id):
+            return entry
+    raise AssertionError(f"{pool.label} 里没有能写在 {item.label} 上的可写词条")
+
+
+def writable_affix_with_range(pool: equipmentdb.EquipmentPool,
+                             item: equipmentdb.EquipmentItem,
+                             *, exclude_categories: tuple[str, ...] = ()):
+    """像 :func:`writable_affix`，但要求它**有真正的取值区间**。
+
+    "把某个槽的值改掉"的用例需要它：只有区间词条才能写一个与当前值不同的合法值
+    （固定取值的词条只能写它自己那个值）。
+    """
+    for entry in sorted(pool.db.all(), key=lambda item_: item_.effect_id):
+        if entry.is_fixed or entry.is_star:
+            continue
+        if entry.category in exclude_categories:
+            continue
+        if not entry.has_value_range or entry.value_min == entry.value_max:
+            continue
+        if editor.equipment_affix_allowed(pool, item, entry.effect_id):
+            return entry
+    raise AssertionError(f"{pool.label} 里没有能写在 {item.label} 上的区间词条")
+
+
+def alternative_value(entry) -> int:
+    """该词条区间内一个与它自身默认值不同的值（写它才能证明"值真的被改了"）。"""
+    for value in range(entry.value_min, entry.value_max + 1):
+        if value != entry.value:
+            return value
+    raise AssertionError(f"{entry.label} 的区间里没有第二个值")
+
+
+def record_with_filled_slot(item: equipmentdb.EquipmentItem,
+                            pool: equipmentdb.EquipmentPool, *, slot: int = 1,
+                            level: int = 170, rarity: int = 4, plus: int = 0,
+                            metadata: int = 0,
+                            exclude_categories: tuple[str, ...] = ()) -> bytes:
+    """一条在 ``slot`` 上放好可写词条的记录（空槽不可写的夹具前提）。
+
+    前面的槽保持为空（写 ``EMPTY_EFFECT_ID``），这样"这条记录只有 ``slot`` 非空"
+    这件事在测试里是显式的。
+    """
+    entry = writable_affix(pool, item, exclude_categories=exclude_categories)
+    filler = (records.EMPTY_EFFECT_ID, 0, 0)
+    effects = tuple(filler for _ in range(slot)) + (effect(entry, metadata=metadata),)
+    return record(item, level=level, rarity=rarity, plus=plus, effects=effects)
+
+
 class ListingTestCase(unittest.TestCase):
     """一块合成存档：刀 / 弓 / 手臂甲 / 腿部甲 / 一件饰品 / 一把火枪。"""
 
@@ -333,15 +395,21 @@ class EquipmentTagRuleTests(ListingTestCase):
     def test_a_melee_affix_goes_onto_a_katana(self) -> None:
         target = next(entry for entry in MELEE.db.all()
                       if not entry.is_fixed and "近战" in MELEE.tags_of(entry.effect_id))
+        # 目标槽必须是**非空**槽（当前周目不允许往空槽写东西），所以夹具先在槽 1
+        # 放一条可写词条；填进去的那条与 target 不同种类，避免撞上"一个种类一条词条"。
+        save = save_with({3: record_with_filled_slot(
+            KATANA, MELEE, slot=1, metadata=0x1000,
+            exclude_categories=(target.category,))})
+        layout = records.locate_layout(save)
         patched = apply_equipment_edits(
-            self.save, [{"record_index": 3, "slot_index": 1,
-                         "effect_id": target.effect_id, "value": target.value}],
-            layout=self.layout)
-        view = next(view for view in list_weapons(patched, layout=self.layout)
+            save, [{"record_index": 3, "slot_index": 1,
+                    "effect_id": target.effect_id, "value": target.value}],
+            layout=layout)
+        view = next(view for view in list_weapons(patched, layout=layout)
                     if view.slot_index == 3)
         self.assertEqual(view.effects[1].effect_id, target.effect_id)
         # 除了目标槽所在记录，别的字节一个都不许变。
-        changed = {index for index, (old, new) in enumerate(zip(self.save, patched))
+        changed = {index for index, (old, new) in enumerate(zip(save, patched))
                    if old != new}
         allowed = {view.offset + records.EFFECT_START + 1 * records.EFFECT_STRIDE + step
                    for step in range(records.EFFECT_STRIDE)}
@@ -355,10 +423,19 @@ class EquipmentTagRuleTests(ListingTestCase):
         self.assertIn("远程武器", message)
 
     def test_a_bow_affix_goes_onto_a_bow_but_not_onto_a_gun(self) -> None:
-        plan = self._plan(self.save, self.layout, 4, 1, self.bow_affix)
+        # 弓这边要写成功，所以槽 1 先放一条可写词条（空槽不可写）；火枪那边是
+        # "标签没有交集"的拒绝路径，标签规则先于空槽规则报错，不需要填。
+        save = save_with({
+            4: record_with_filled_slot(
+                BOW, RANGED, slot=1,
+                exclude_categories=(self.bow_affix.category,)),
+            7: record(GUN, level=170),
+        })
+        layout = records.locate_layout(save)
+        plan = self._plan(save, layout, 4, 1, self.bow_affix)
         self.assertEqual(plan[0].after[1].effect_id, self.bow_affix.effect_id)
         with self.assertRaises(EditorError) as caught:
-            self._plan(self.save, self.layout, 7, 1, self.bow_affix)
+            self._plan(save, layout, 7, 1, self.bow_affix)
         message = str(caught.exception)
         self.assertIn(GUN.label, message)
         self.assertIn("弓", message)
@@ -366,10 +443,18 @@ class EquipmentTagRuleTests(ListingTestCase):
         self.assertIn("火枪", message)
 
     def test_an_arm_affix_is_refused_on_a_leg_piece(self) -> None:
-        plan = self._plan(self.save, self.layout, 5, 1, self.arm_affix)
+        # 手臂甲这边要写成功 → 槽 1 先填非空；腿部甲是"没有交集"的拒绝路径。
+        save = save_with({
+            5: record_with_filled_slot(
+                ARM_PART, ARMOR, slot=1,
+                exclude_categories=(self.arm_affix.category,)),
+            6: record(LEG_PART, level=150),
+        })
+        layout = records.locate_layout(save)
+        plan = self._plan(save, layout, 5, 1, self.arm_affix)
         self.assertEqual(plan[0].after[1].effect_id, self.arm_affix.effect_id)
         with self.assertRaises(EditorError) as caught:
-            self._plan(self.save, self.layout, 6, 1, self.arm_affix)
+            self._plan(save, layout, 6, 1, self.arm_affix)
         self.assertIn("没有交集", str(caught.exception))
         self.assertIn("腿部", str(caught.exception))
 
@@ -378,9 +463,17 @@ class EquipmentTagRuleTests(ListingTestCase):
         shared = affix_tagged(MELEE, "近战", "手臂")
         self.assertTrue(editor.equipment_affix_allowed(MELEE, KATANA, shared.effect_id))
         self.assertTrue(editor.equipment_affix_allowed(ARMOR, ARM_PART, shared.effect_id))
+        # 两边的槽 1 都要先是非空槽（空槽不可写）；填的词条与 shared 不同种类。
+        save = save_with({
+            3: record_with_filled_slot(KATANA, MELEE, slot=1,
+                                       exclude_categories=(shared.category,)),
+            5: record_with_filled_slot(ARM_PART, ARMOR, slot=1,
+                                       exclude_categories=(shared.category,)),
+        })
+        layout = records.locate_layout(save)
         for record_index in (3, 5):
             with self.subTest(record_index=record_index):
-                plan = self._plan(self.save, self.layout, record_index, 1, shared)
+                plan = self._plan(save, layout, record_index, 1, shared)
                 self.assertEqual(plan[0].after[1].effect_id, shared.effect_id)
 
     def test_the_predicate_is_a_plain_token_intersection(self) -> None:
@@ -407,8 +500,12 @@ class EquipmentTagRuleTests(ListingTestCase):
     def test_only_the_edited_slot_is_judged(self) -> None:
         """只在新引入违规时拒绝：历史状态里的错配不拦住别的改动。"""
         stray = affix_tagged(MELEE, "近战")  # 只标近战，本来不该出现在弓上
+        # 槽 1 也要先是非空槽，否则"改另一个槽"这条会被空槽规则挡住（当前周目）。
+        filler = writable_affix(RANGED, BOW,
+                                exclude_categories=(self.bow_affix.category,))
         save = save_with({4: record(
-            BOW, effects=(effect(stray, metadata=0x1000),))})
+            BOW, effects=(effect(stray, metadata=0x1000),
+                          effect(filler, metadata=0x1000)))})
         layout = records.locate_layout(save)
         # ① 改另一个槽：允许（错配是历史状态，不是这次引入的）
         plan = self._plan(save, layout, 4, 1, self.bow_affix)
@@ -462,17 +559,29 @@ class ExistingRulesOnEquipmentTests(ListingTestCase):
     def test_a_pre_existing_duplicate_is_not_blocked(self) -> None:
         first, second = two_affixes_of_one_category(MELEE)
         code = CODES[first.category]
+        # 第三个槽也要是非空槽（当前周目不允许往空槽写数值），并且它得是区间词条，
+        # 这样"只改数值"才有第二个合法值可写。
+        filler = writable_affix_with_range(MELEE, KATANA)
         save = save_with({3: record(KATANA, effects=(
-            effect(first, metadata=code), effect(second, metadata=code)))})
+            effect(first, metadata=code), effect(second, metadata=code),
+            effect(filler, metadata=CODES[filler.category])))})
         layout = records.locate_layout(save)
+        new_value = alternative_value(filler)
         plan = plan_equipment_edits(
-            save, [{"record_index": 3, "slot_index": 2, "value": 12}], layout=layout)
-        self.assertEqual(plan[0].after[2].value, 12)
+            save, [{"record_index": 3, "slot_index": 2, "value": new_value}],
+            layout=layout)
+        self.assertEqual(plan[0].after[2].value, new_value)
 
     def test_a_new_category_duplicate_is_refused_end_to_end(self) -> None:
         first, second = two_affixes_of_one_category(MELEE)
+        code = CODES[first.category]
+        # 槽 1 先放一条非空词条（空槽不可写），它不在 first 的种类里，替换它才不会
+        # 平白引入重复。
+        filler = writable_affix_with_range(
+            MELEE, KATANA, exclude_categories=(first.category,))
         save = save_with({3: record(KATANA, effects=(
-            effect(first, metadata=CODES[first.category]),))})
+            effect(first, metadata=code),
+            effect(filler, metadata=CODES[filler.category])))})
         layout = records.locate_layout(save)
         with self.assertRaises(EditorError) as caught:
             apply_equipment_edits(
@@ -482,19 +591,26 @@ class ExistingRulesOnEquipmentTests(ListingTestCase):
         self.assertIn("每个种类只能有一个词条", str(caught.exception))
         # 被拒绝之后原存档照样可用：换一个不引入重复的写法就能写成功。
         patched = apply_equipment_edits(
-            save, [{"record_index": 3, "slot_index": 1, "value": 12}], layout=layout)
+            save, [{"record_index": 3, "slot_index": 1,
+                    "value": alternative_value(filler)}], layout=layout)
         self.assertNotEqual(patched, save)
 
     def test_the_category_code_travels_with_the_new_affix(self) -> None:
         target = next(entry for entry in MELEE.db.all()
                       if not entry.is_fixed and not entry.is_star)
+        # 目标槽 1 先填一条可写词条（空槽不可写）；填的与 target 不同种类，
+        # 免得撞上"一个种类一条词条"。
+        save = save_with({3: record_with_filled_slot(
+            KATANA, MELEE, slot=1,
+            exclude_categories=(target.category,))})
+        layout = records.locate_layout(save)
         patched = apply_equipment_edits(
-            self.save, [{"record_index": 3, "slot_index": 1,
-                         "effect_id": target.effect_id, "value": target.value},
-                        {"record_index": 3, "slot_index": 2,
-                         "effect_id": records.EMPTY_EFFECT_ID}],
-            layout=self.layout)
-        view = next(view for view in list_weapons(patched, layout=self.layout)
+            save, [{"record_index": 3, "slot_index": 1,
+                    "effect_id": target.effect_id, "value": target.value},
+                   {"record_index": 3, "slot_index": 2,
+                    "effect_id": records.EMPTY_EFFECT_ID}],
+            layout=layout)
+        view = next(view for view in list_weapons(patched, layout=layout)
                     if view.slot_index == 3)
         written = view.effects[1]
         self.assertEqual(written.metadata & editor.CATEGORY_CODE_MASK,
@@ -548,23 +664,28 @@ class ExistingRulesOnEquipmentTests(ListingTestCase):
     def test_the_grace_rule_is_wired_into_the_equipment_path(self) -> None:
         """端到端路径确实接了恩宠规则：用一个哨兵证明接线（而不是靠写不进的 id）。"""
         grace_db = support.load_grace_table()
+        # 槽 1 先填非空（空槽不可写），否则被空槽规则先拦下，测不到恩宠接线。
+        save = save_with({3: record_with_filled_slot(
+            KATANA, MELEE, slot=1,
+            exclude_categories=(self.melee_affix.category,))})
+        layout = records.locate_layout(save)
         sentinel = EditorError("恩宠规则被调用了（测试哨兵）")
         with mock.patch.object(editor, "assert_single_grace",
                                side_effect=sentinel) as wired:
             with self.assertRaises(EditorError) as caught:
                 plan_equipment_edits(
-                    self.save, [{"record_index": 3, "slot_index": 1,
-                                 "effect_id": self.melee_affix.effect_id,
-                                 "value": self.melee_affix.value}],
-                    layout=self.layout, grace_db=grace_db)
+                    save, [{"record_index": 3, "slot_index": 1,
+                            "effect_id": self.melee_affix.effect_id,
+                            "value": self.melee_affix.value}],
+                    layout=layout, grace_db=grace_db)
         self.assertIs(caught.exception, sentinel)
         self.assertEqual(wired.call_count, 1)
         self.assertIs(wired.call_args.args[1], grace_db)
         # 不给 grace_db 时这条规则不参与（与饰品路径同一个口径）。
         plan = plan_equipment_edits(
-            self.save, [{"record_index": 3, "slot_index": 1,
-                         "effect_id": self.melee_affix.effect_id,
-                         "value": self.melee_affix.value}], layout=self.layout)
+            save, [{"record_index": 3, "slot_index": 1,
+                    "effect_id": self.melee_affix.effect_id,
+                    "value": self.melee_affix.value}], layout=layout)
         self.assertEqual(plan[0].after[1].effect_id, self.melee_affix.effect_id)
 
 

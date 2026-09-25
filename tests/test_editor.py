@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from nioh3_equipment_affix_editor import editor as editor_module
+from nioh3_equipment_affix_editor import limits
 from nioh3_equipment_affix_editor import records
 from nioh3_equipment_affix_editor import savefile as savefile_module
 from nioh3_equipment_affix_editor.affixdb import (
@@ -79,6 +80,18 @@ class EditorTestCase(unittest.TestCase):
         cls.fixed_affix = cls.fixed_affixes[0]
         cls.affix_a = cls.free_affixes[0]
         cls.affix_b = cls.free_affixes[1]
+        #: 三个非固定、非星号、且**种类互不相同**的词条。当前周目不允许往空槽写东
+        #: 西，所以"同一记录两条编辑"的用例必须落在两个非空槽上；而一个物品上同一
+        #: 「种类」只能有一条词条，于是这两条词条的种类必须不同。
+        cls.distinct_affixes: list = []
+        _categories: set[str] = set()
+        for _entry in cls.free_affixes:
+            if _entry.is_star or _entry.category in _categories:
+                continue
+            _categories.add(_entry.category)
+            cls.distinct_affixes.append(_entry)
+            if len(cls.distinct_affixes) == 3:
+                break
         cls.record_3 = support.build_record(
             record_type=ITEM_TYPE, level=150, rarity=4,
             effects=((cls.affix_a.effect_id, 20, 0x40),),
@@ -1145,7 +1158,7 @@ class PlanTests(EditorTestCase):
     def test_plan_reports_before_and_after(self) -> None:
         plans = plan_edits(
             self.plain,
-            [{"record_index": 3, "slot_index": 2,
+            [{"record_index": 3, "slot_index": 0,
               "effect_id": self.affix_b.effect_id,
                         "value": self.affix_b.value}],
             affix_db=self.db,
@@ -1153,17 +1166,29 @@ class PlanTests(EditorTestCase):
         self.assertEqual(len(plans), 1)
         plan = plans[0]
         self.assertEqual(plan.record_index, 3)
-        self.assertTrue(plan.before[2].is_empty)
-        self.assertEqual(plan.after[2].effect_id, self.affix_b.effect_id)
-        self.assertEqual(plan.after[2].value, self.affix_b.value)
+        self.assertEqual(plan.before[0].effect_id, self.affix_a.effect_id)
+        self.assertEqual(plan.after[0].effect_id, self.affix_b.effect_id)
+        self.assertEqual(plan.after[0].value, self.affix_b.value)
 
     def test_plan_groups_edits_per_record(self) -> None:
+        # 两条编辑都落在**非空**槽上：当前周目不允许往空槽写词条或数值（见
+        # EmptySlotRuleTests）；三个词条种类互不相同，满足"一个种类一条词条"。
+        first, second, target = self.distinct_affixes
+        record_3 = support.build_record(
+            record_type=ITEM_TYPE, level=150, rarity=4,
+            effects=((first.effect_id, first.value, 0x40),
+                     (second.effect_id, second.value, 0x00)),
+        )
+        plain = support.build_plain_save(
+            records_by_slot={3: record_3, 11: self.record_11}
+        )
         plans = plan_edits(
-            self.plain,
+            plain,
             [
                 {"record_index": 3, "slot_index": 0, "value": 1},
-                {"record_index": 11, "slot_index": 1, "value": 2},
-                {"record_index": 3, "slot_index": 4, "value": 3},
+                {"record_index": 3, "slot_index": 1,
+                 "effect_id": target.effect_id, "value": target.value},
+                {"record_index": 11, "slot_index": 0, "value": 2},
             ],
             affix_db=self.db,
         )
@@ -1244,19 +1269,79 @@ class PlanTests(EditorTestCase):
             )
 
 
+class EmptySlotRuleTests(EditorTestCase):
+    """当前周目：空槽位不可写（``limits.EMPTY_SLOT_EDITABLE``）。
+
+    注意"清空一个已有词条的槽"不算修改空槽，任何时候都允许。
+    """
+
+    def test_writing_into_an_empty_slot_is_refused(self) -> None:
+        with self.assertRaises(EditorError) as caught:
+            plan_edits(
+                self.plain,
+                [{"record_index": 3, "slot_index": 1,
+                  "effect_id": self.affix_b.effect_id,
+                  "value": self.affix_b.value}],
+                affix_db=self.db,
+            )
+        message = str(caught.exception)
+        self.assertIn("空槽位", message)
+        self.assertIn("#3 槽1", message)
+
+    def test_clearing_a_filled_slot_is_still_allowed(self) -> None:
+        patched = apply_edits(
+            self.plain,
+            [{"record_index": 3, "slot_index": 0, "effect_id": EMPTY_EFFECT_ID}],
+            affix_db=self.db,
+        )
+        self.assertTrue(list_accessories(patched)[0].effects[0].is_empty)
+
+    def test_the_switch_opens_the_option_for_a_later_playthrough(self) -> None:
+        """开关打开（四周目/DLC2 之后）时，往空槽写词条应当恢复可行。"""
+        with mock.patch.object(limits, "EMPTY_SLOT_EDITABLE", True):
+            plan = plan_edits(
+                self.plain,
+                [{"record_index": 3, "slot_index": 1,
+                  "effect_id": self.affix_b.effect_id,
+                  "value": self.affix_b.value}],
+                affix_db=self.db,
+            )
+        self.assertEqual(plan[0].after[1].effect_id, self.affix_b.effect_id)
+
+    def test_a_value_only_edit_on_an_empty_slot_is_refused_too(self) -> None:
+        """空槽没有词条，值没有意义 —— 只改值也不行（fail-closed）。"""
+        with self.assertRaises(EditorError) as caught:
+            plan_edits(
+                self.plain,
+                [{"record_index": 3, "slot_index": 1, "value": 7}],
+                affix_db=self.db,
+            )
+        message = str(caught.exception)
+        self.assertIn("空槽位", message)
+        self.assertIn("数值", message)
+
+    def test_clearing_stays_allowed_while_the_switch_is_off(self) -> None:
+        plan = plan_edits(
+            self.plain,
+            [{"record_index": 3, "slot_index": 0, "effect_id": EMPTY_EFFECT_ID}],
+            affix_db=self.db,
+        )
+        self.assertTrue(plan[0].after[0].is_empty)
+
+
 class ApplyTests(EditorTestCase):
     def test_apply_writes_the_edit_and_keeps_everything_else(self) -> None:
         patched = apply_edits(
             self.plain,
-            [{"record_index": 3, "slot_index": 3,
+            [{"record_index": 3, "slot_index": 0,
               "effect_id": self.ranged_affix.effect_id,
                         "value": self.ranged_affix.value_min}],
             affix_db=self.db,
         )
         self.assertEqual(len(patched), len(self.plain))
         views = {view.slot_index: view for view in list_accessories(patched)}
-        self.assertEqual(views[3].effects[3].effect_id, self.ranged_affix.effect_id)
-        self.assertEqual(views[3].effects[3].value, self.ranged_affix.value_min)
+        self.assertEqual(views[3].effects[0].effect_id, self.ranged_affix.effect_id)
+        self.assertEqual(views[3].effects[0].value, self.ranged_affix.value_min)
         self.assertEqual(views[11].effects[0].effect_id, self.affix_b.effect_id)
 
     def test_apply_only_touches_the_target_record(self) -> None:
@@ -1274,7 +1359,7 @@ class ApplyTests(EditorTestCase):
         self.assertEqual(patched[target + 0xE8:], self.plain[target + 0xE8:])
 
     def test_apply_is_idempotent(self) -> None:
-        edits = [{"record_index": 3, "slot_index": 1, "value": 5}]
+        edits = [{"record_index": 3, "slot_index": 0, "value": 5}]
         once = apply_edits(self.plain, edits, affix_db=self.db)
         twice = apply_edits(once, edits, affix_db=self.db)
         self.assertEqual(once, twice)
@@ -1284,14 +1369,14 @@ class ApplyTests(EditorTestCase):
             self.plain,
             [
                 {"record_index": 3, "slot_index": 0, "effect_id": EMPTY_EFFECT_ID},
-                {"record_index": 3, "slot_index": 6,
+                {"record_index": 11, "slot_index": 0,
                  "effect_id": self.affix_b.effect_id, "value": 12},
             ],
             affix_db=self.db,
         )
-        slots = list_accessories(patched)[0].effects
-        self.assertTrue(slots[0].is_empty)
-        self.assertEqual(slots[6].effect_id, self.affix_b.effect_id)
+        views = list_accessories(patched)
+        self.assertTrue(views[0].effects[0].is_empty)
+        self.assertEqual(views[1].effects[0].effect_id, self.affix_b.effect_id)
 
     def test_apply_unchecked_write_is_detected(self) -> None:
         """A silently dropped edit must abort instead of reporting success."""
@@ -1380,7 +1465,7 @@ class CommitTests(EditorTestCase):
         descriptor, crypto = self._make_save()
         patched = apply_edits(
             self.plain,
-            [{"record_index": 11, "slot_index": 5,
+            [{"record_index": 11, "slot_index": 0,
               "effect_id": self.ranged_affix.effect_id,
                         "value": self.ranged_affix.value_min}],
             affix_db=self.db,
@@ -1396,8 +1481,8 @@ class CommitTests(EditorTestCase):
         reloaded = open_save(descriptor, crypto)
         self.assertTrue(save_checksum_is_valid(reloaded))
         views = {view.slot_index: view for view in list_accessories(reloaded)}
-        self.assertEqual(views[11].effects[5].value, self.ranged_affix.value_min)
-        self.assertEqual(views[11].effects[5].effect_id, self.ranged_affix.effect_id)
+        self.assertEqual(views[11].effects[0].value, self.ranged_affix.value_min)
+        self.assertEqual(views[11].effects[0].effect_id, self.ranged_affix.effect_id)
         self.assertEqual(views[3].effects[0].effect_id, self.affix_a.effect_id)
 
     def test_commit_records_the_checksum_change(self) -> None:

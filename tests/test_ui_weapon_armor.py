@@ -13,7 +13,7 @@ from __future__ import annotations
 import unittest
 from unittest import mock
 
-from nioh3_equipment_affix_editor import editor, equipmentdb, records, ui
+from nioh3_equipment_affix_editor import editor, equipmentdb, limits, records, ui
 from nioh3_equipment_affix_editor.affixdb import AffixDb, GraceDb
 from nioh3_equipment_affix_editor.editor import EditorError
 from tests import support
@@ -1111,6 +1111,107 @@ class AccessoryAndSoulValueRefreshTests(UiTestCase):
         self.app._on_accessory_selected()
         self.assertEqual(self.app.value_vars[0].get(), str(second.value))
         self.assertEqual(self.app.value_vars[1].get(), "")
+
+
+@unittest.skipUnless(TK_AVAILABLE, f"Tk unavailable ({TK_ERROR})")
+class EmptySlotGreyedOutTests(UiTestCase):
+    """空槽位不可改（当前周目）：下拉与数值框置灰 + 标签写明理由。
+
+    与引擎侧的 ``tests.test_editor.EmptySlotRuleTests`` 配对 —— 界面只是便利，
+    真正的闸门在 ``editor._assert_no_empty_slot_writes``（开关见
+    ``limits.EMPTY_SLOT_EDITABLE``）。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.item_db = equipmentdb.load_equipment_item_db()
+        cls.melee = equipmentdb.load_pool(equipmentdb.POOL_MELEE)
+        cls.katana = _first(cls.item_db.all(), lambda e: e.small == "刀")
+        cls.affix = _first(cls.melee.db.all(), lambda e: not e.is_fixed)
+        cls.other = _first(cls.melee.db.all(),
+                           lambda e: not e.is_fixed
+                           and e.effect_id != cls.affix.effect_id)
+
+    def _load(self, *, slot_one_filled: bool):
+        effects = [(self.affix.effect_id, self.affix.value, PLAIN)]
+        if slot_one_filled:
+            effects.append((self.other.effect_id, self.other.value, PLAIN))
+        data = support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=self.katana.item_id, level=170,
+                                    rarity=4, effects=tuple(effects)),
+        })
+        layout = records.locate_layout(data)
+        self.app._populate_accessories(
+            (data, ui.list_accessories(
+                data, layout=layout,
+                known_ids=ui.accessory_catalog_ids(self.app.affix_db)),
+             True, layout))
+        tab = next(tab for tab in self.app.equipment_tabs if tab.big == "武器")
+        tab.tree.selection_set("3")
+        tab._on_selected()
+        return tab
+
+    def test_an_empty_slot_is_disabled_with_a_reason(self) -> None:
+        tab = self._load(slot_one_filled=False)
+        for index in range(1, ui.EFFECT_COUNT):
+            with self.subTest(index=index):
+                self.assertIn("disabled", tab.slot_combos[index].state())
+                self.assertIn("disabled", tab.value_entries[index].state())
+                self.assertIn("空槽位", tab.slot_labels[index].get())
+        # 有词条的槽照旧可改：下拉是启用的，标签也不是空槽那条理由。
+        # （数值框是否可改由"词条有没有区间"单独决定，与空槽规则无关。）
+        self.assertNotIn("disabled", tab.slot_combos[0].state())
+        self.assertNotIn("空槽位", tab.slot_labels[0].get())
+
+    def test_switching_records_refreshes_the_greying(self) -> None:
+        tab = self._load(slot_one_filled=True)
+        self.assertNotIn("disabled", tab.slot_combos[1].state())
+        # 再选一条槽 1 为空的记录：状态必须跟着刷新，不能残留成"可改"。
+        data = support.build_plain_save(records_by_slot={
+            4: support.build_record(record_type=self.katana.item_id, level=170,
+                                    rarity=4,
+                                    effects=((self.affix.effect_id,
+                                              self.affix.value, PLAIN),)),
+        })
+        layout = records.locate_layout(data)
+        self.app._populate_accessories(
+            (data, ui.list_accessories(
+                data, layout=layout,
+                known_ids=ui.accessory_catalog_ids(self.app.affix_db)),
+             True, layout))
+        tab.tree.selection_set("4")
+        tab._on_selected()
+        self.assertIn("disabled", tab.slot_combos[1].state())
+        self.assertIn("空槽位", tab.slot_labels[1].get())
+
+    def test_the_switch_opens_the_empty_slot_again(self) -> None:
+        """四周目 / DLC2 之后把开关打开，空槽恢复可写（界面跟着开关走）。"""
+        with mock.patch.object(limits, "EMPTY_SLOT_EDITABLE", True):
+            tab = self._load(slot_one_filled=False)
+        for index in range(1, ui.EFFECT_COUNT):
+            with self.subTest(index=index):
+                self.assertNotIn("disabled", tab.slot_combos[index].state())
+                self.assertEqual(tab.slot_labels[index].get(), "")
+
+    def test_the_accessory_tab_greys_out_empty_slots_too(self) -> None:
+        db = self.app.affix_db
+        first = next(e for e in db.all() if not e.is_fixed)
+        data = support.build_plain_save(records_by_slot={
+            3: support.build_record(record_type=0x4001, level=150, rarity=5,
+                                    effects=((first.effect_id, first.value, 0x40),)),
+        })
+        layout = records.locate_layout(data)
+        self.app._populate_accessories(
+            (data, ui.list_accessories(data, layout=layout,
+                                       known_ids=ui.accessory_catalog_ids(db)),
+             True, layout))
+        self.app.tree.selection_set("3")
+        self.app._on_accessory_selected()
+        self.assertIn("disabled", self.app.slot_combos[1].state())
+        self.assertIn("disabled", self.app.value_entries[1].state())
+        self.assertIn("空槽位", self.app.slot_labels[1].get())
+        self.assertNotIn("disabled", self.app.slot_combos[0].state())
 
 
 if __name__ == "__main__":  # pragma: no cover

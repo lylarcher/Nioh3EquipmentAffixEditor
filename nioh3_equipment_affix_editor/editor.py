@@ -1952,6 +1952,48 @@ def assert_single_grace(plans: tuple[EditPlan, ...], grace_db: GraceDb) -> None:
         )
 
 
+def _empty_slot_writes(views: Mapping[int, object], edits) -> list[str]:
+    """列出"往空槽里写词条"的编辑（当前周目不允许，见 ``limits.EMPTY_SLOT_EDITABLE``）。
+
+    判定：目标槽**现在**是空的，而这次编辑要写入一个非空词条。清空一个已有词条的槽
+    （写入 ``EMPTY_EFFECT_ID``）不算"修改空槽"，一律放行。
+    """
+    refusals: list[str] = []
+    for edit in edits:
+        if not isinstance(edit, dict):
+            continue
+        record_index = edit.get("record_index")
+        slot_index = edit.get("slot_index")
+        if (not isinstance(record_index, int) or isinstance(record_index, bool)
+                or not isinstance(slot_index, int) or isinstance(slot_index, bool)):
+            continue
+        view = views.get(record_index)
+        effects = getattr(view, "effects", ())
+        if view is None or not 0 <= slot_index < len(effects):
+            continue
+        if not effects[slot_index].is_empty:
+            continue  # 非空槽照旧可改（含清空）
+        effect_id = edit.get("effect_id")
+        writes_affix = isinstance(effect_id, int) and not isinstance(effect_id, bool) \
+            and effect_id != records.EMPTY_EFFECT_ID
+        # 只改数值也不行：空槽没有词条，值没有意义（用户口径，fail-closed）。
+        writes_value = "value" in edit and edit.get("value") is not None
+        if writes_affix or writes_value:
+            refusals.append(f"#{record_index} 槽{slot_index}")
+    return refusals
+
+
+def _assert_no_empty_slot_writes(refusals: list[str]) -> None:
+    """当前周目：空槽位不可修改（开关在 ``limits.EMPTY_SLOT_EDITABLE``）。"""
+    if not refusals or limits.EMPTY_SLOT_EDITABLE:
+        return
+    raise EditorError(
+        "空槽位在当前周目（三周目）不可修改，不能往空槽里写入词条或数值："
+        + "、".join(refusals)
+        + "。清空一个已有词条的槽仍然允许；四周目 / DLC2 开放后这项限制可能解除。"
+    )
+
+
 def plan_edits(
     decrypted: bytes,
     edits: tuple[dict[str, int], ...] | list[dict[str, int]],
@@ -2051,6 +2093,7 @@ def plan_edits(
     assert_single_affix_per_category(tuple(plans), affix_db)
     if grace_db is not None:
         assert_single_grace(tuple(plans), grace_db)
+    _assert_no_empty_slot_writes(_empty_slot_writes(known, normalized))
     return tuple(plans)
 
 
@@ -2132,6 +2175,7 @@ def plan_soul_edits(
             )
         )
     assert_single_affix_per_category(tuple(plans), soul_db)
+    _assert_no_empty_slot_writes(_empty_slot_writes(cores, normalized))
     return tuple(plans)
 
 
@@ -2336,6 +2380,7 @@ def plan_equipment_edits(
     if grace_db is not None:
         # 一件武器/防具只能有一个恩宠/套装：这条与饰品同口径，不因为是恩宠就放松。
         assert_single_grace(tuple(plans), grace_db)
+    _assert_no_empty_slot_writes(_empty_slot_writes(known, edits))
     return tuple(plans)
 
 

@@ -52,6 +52,7 @@ __all__ = [
     "PLUS_CAP_BY_BIG",
     "RARITY_CAP_BY_BIG",
     "RARITY_COLOR_BY_VALUE",
+    "EMPTY_SLOT_EDITABLE",
     "DEFAULT_PLUS_CAP",
     "DEFAULT_RARITY_CAP",
     "CAP_ORIGIN",
@@ -92,6 +93,15 @@ RARITY_CAP_BY_BIG: dict[str, int] = {
 #: 表里查不到的大类退回这两个文档值（与"多数物品"的口径一致）。
 DEFAULT_PLUS_CAP = 30
 DEFAULT_RARITY_CAP = 4
+
+#: 空槽位是否**可以写入词条**（当前周目：**不可以**）。
+#:
+#: 用户口径（2026-09）：空槽位（既没有词条、也没有值）在当前最高周目（三周目）下
+#: 不可修改；等 DLC2 / 四周目开放后如果游戏允许，把这里改成 ``True`` 即可
+#: （只改这一处，引擎与界面都读它）。
+#:
+#: 注意：**清空一个已有词条的槽不算"修改空槽"**，任何时候都允许。
+EMPTY_SLOT_EDITABLE = False
 
 #: 稀有度数值 -> 游戏内颜色（用户实测口径，0..5 一一对应）。
 #:
