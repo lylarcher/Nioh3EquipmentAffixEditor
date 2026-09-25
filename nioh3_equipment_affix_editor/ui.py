@@ -397,7 +397,6 @@ class EquipmentTab(ttk.Frame):
         self._build_rarity(right)
         self._build_grace(right)
         self._build_actions(right)
-        self._build_create(right)
 
         self.item_var = tk.StringVar(
             value=f"选择一条{self.title}记录后，这里会显示它是什么装备。")
@@ -410,6 +409,12 @@ class EquipmentTab(ttk.Frame):
         # This tab wires its own scrolling column (see ``register=False`` above),
         # now that every child of the column exists.
         self.app._bind_wheel_to_children(right, right.master)
+
+        # 无中生有自成一块：与上方"选记录 → 改词条 / 等级 / +值 / 稀有度"的编辑区
+        # 用分隔线隔开，避免误触 —— 它新建一条记录，而【应用修改】只作用于当前选中的
+        # 已有记录（这里也写在框内的说明里）。
+        ttk.Separator(self, orient=tk.HORIZONTAL).pack(fill=tk.X, padx=8, pady=(8, 0))
+        self._build_create(self)
 
     def _build_note(self, right: ttk.Frame) -> None:
         note = (
@@ -539,10 +544,11 @@ class EquipmentTab(ttk.Frame):
                   text="词条、等级、+值、稀有度、恩宠一次应用（只写真正改过的项）",
                   foreground="#666666").pack(side=tk.LEFT, padx=8)
 
-    def _build_create(self, right: ttk.Frame) -> None:
+    def _build_create(self, parent: ttk.Frame) -> None:
+        # 独立大块：标题 + 分隔线由调用方给出，这里只管内容。
         self.create_frame = ttk.LabelFrame(
-            right, text="无中生有（实验性：需要进游戏实测确认）", padding=(6, 4))
-        self.create_frame.pack(fill=tk.X, pady=(6, 0))
+            parent, text="无中生有（实验性：需要进游戏实测确认）", padding=(6, 4))
+        self.create_frame.pack(fill=tk.X, padx=8, pady=(6, 8))
         row = ttk.Frame(self.create_frame)
         row.pack(fill=tk.X)
         ttk.Label(row, text="种类:").pack(side=tk.LEFT)
@@ -558,11 +564,21 @@ class EquipmentTab(ttk.Frame):
         self.create_plus_var = tk.StringVar(value="0")
         ttk.Entry(row, textvariable=self.create_plus_var,
                   width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Label(row, text="稀有度:").pack(side=tk.LEFT)
+        # 留空 = 沿用模板；取值范围按本大类上限（武器 / 防具 / 饰品 ≤4，魂核 ≤3）。
+        self.create_rarity_var = tk.StringVar(value="")
+        self.create_rarity_combo = ttk.Combobox(
+            row, state="readonly", width=3, textvariable=self.create_rarity_var,
+            values=("",) + tuple(str(value)
+                                 for value in range(0, limits.rarity_cap(self.big) + 1)))
+        self.create_rarity_combo.pack(side=tk.LEFT, padx=2)
         self.create_button = ttk.Button(row, text="新建到空槽", command=self.create_item)
         self.create_button.pack(side=tk.LEFT, padx=4)
         self.create_status_var = tk.StringVar(
-            value="实验性功能：需要进游戏实测确认后才算数。用法：在右侧槽位挑好词条，"
-                  "选种类并点「新建到空槽」。模板优先取同种类；没有同种类时改用"
+            value="实验性功能：需要进游戏实测确认后才算数。这里新建的是**一条新记录**，"
+                  "上方【应用修改】只作用于当前选中的已有记录，两者互不影响。"
+                  "用法：在右侧槽位挑好词条，选种类并点「新建到空槽」；"
+                  "稀有度留空表示沿用模板。模板优先取同种类；没有同种类时改用"
                   "同类型（小类）记录并清空不适用的槽，原因会写在这里。")
         ttk.Label(self.create_frame, textvariable=self.create_status_var,
                   foreground="#666666", wraplength=560,
@@ -1513,14 +1529,16 @@ class EquipmentTab(ttk.Frame):
         try:
             level = int(self.create_level_var.get().strip(), 10)
             plus = int(self.create_plus_var.get().strip() or "0", 10)
+            rarity_text = self.create_rarity_var.get().strip()
+            rarity = int(rarity_text, 10) if rarity_text else None
             effects = self._chosen_effects()
         except (ValueError, EditorError) as error:
-            messagebox.showwarning("提示", str(error) or "等级 / +值必须是整数")
+            messagebox.showwarning("提示", str(error) or "等级 / +值 / 稀有度必须是整数")
             return
         try:
             plan = plan_create_equipment(
                 self.app.decrypted, record_type=item.item_id, level=level, plus=plus,
-                effects=effects, item_db=self.item_db,
+                rarity=rarity, effects=effects, item_db=self.item_db,
                 pools=self.app.equipment_pools, grace_db=self.app.grace_db,
                 layout=self.app.layout,
             )
@@ -2061,9 +2079,9 @@ class AccessoryEditorApp(tk.Tk):
         self._set_kind_enabled(False)
 
         # 需求(5): 无中生有 —— 用当前槽位里选好的词条新建一件，写进空槽。
+        # 独立大块：与上方编辑区隔开，避免误触（见下方 pack 处）。
         self.create_frame = ttk.LabelFrame(
-            right, text="无中生有（新建一件放进空槽）", padding=(6, 4))
-        self.create_frame.pack(fill=tk.X, pady=(6, 0))
+            self.accessory_tab, text="无中生有（实验性：新建一件放进空槽）", padding=(6, 4))
         create_row = ttk.Frame(self.create_frame)
         create_row.pack(fill=tk.X)
         ttk.Label(create_row, text="种类:").pack(side=tk.LEFT)
@@ -2115,6 +2133,10 @@ class AccessoryEditorApp(tk.Tk):
         self.item_label.pack(anchor=tk.W, pady=(6, 0))
 
         mid.add(right_scroll, weight=3)
+
+        ttk.Separator(self.accessory_tab, orient=tk.HORIZONTAL).pack(
+            fill=tk.X, padx=8, pady=(8, 0))
+        self.create_frame.pack(fill=tk.X, padx=8, pady=(6, 8))
 
         self._build_soul_tab()
         # Both editor columns exist now: let the wheel scroll whichever one the
@@ -2645,9 +2667,8 @@ class AccessoryEditorApp(tk.Tk):
         self.soul_kind_choices: dict[str, object] = {}
         self.soul_by_label = {entry.label: entry for entry in self.soul_db.all()}
 
-        soul_create = ttk.LabelFrame(right, text="无中生有（新建一个魂核放进空槽）",
-                                     padding=(6, 4))
-        soul_create.pack(fill=tk.X, pady=(6, 0))
+        soul_create = ttk.LabelFrame(
+            self.soul_tab, text="无中生有（实验性：新建一个魂核放进空槽）", padding=(6, 4))
         soul_create_row = ttk.Frame(soul_create)
         soul_create_row.pack(fill=tk.X)
         ttk.Label(soul_create_row, text="种类:").pack(side=tk.LEFT)
@@ -2669,6 +2690,9 @@ class AccessoryEditorApp(tk.Tk):
         # Without this the whole 魂核 editor column never appears in its panedwindow:
         # the tree showed up, the 词条槽/等级/种类/新建 rows did not.
         mid.add(right_scroll, weight=3)
+        ttk.Separator(self.soul_tab, orient=tk.HORIZONTAL).pack(
+            fill=tk.X, padx=8, pady=(8, 0))
+        soul_create.pack(fill=tk.X, padx=8, pady=(6, 8))
         self._set_soul_controls(False)
         if self.soul_db_error:
             self.soul_kind_status_var.set(

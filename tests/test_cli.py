@@ -327,11 +327,13 @@ class EndToEndCliTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.db = AffixDb()
         cls.affix = next(entry for entry in cls.db.all() if not entry.is_fixed)
+        # 空槽位在当前周目（三周目）不可写，所以这里让记录 3 的槽 0..3 都带上
+        # 一条可写词条：这些端到端用例要测的是"改已有槽"，不是"往空槽里加词条"。
         cls.plain = support.build_plain_save(
             records_by_slot={
                 3: support.build_record(
                     record_type=0x4001,
-                    effects=((cls.affix.effect_id, 20, 0x40),),
+                    effects=((cls.affix.effect_id, 20, 0x40),) * 4,
                 )
             }
         )
