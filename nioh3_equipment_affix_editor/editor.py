@@ -1928,6 +1928,79 @@ def assert_single_affix_per_category(plans: tuple[EditPlan, ...], db: AffixDb,
             )
 
 
+def new_record_violations(
+    current: bytes,
+    baseline: bytes | None,
+    *,
+    affix_db: AffixDb,
+    soul_db: AffixDb | None = None,
+    pools: Mapping[str, object] | None = None,
+    grace_db: GraceDb | None = None,
+    item_db: object | None = None,
+    layout: records.InventoryLayout | None = None,
+) -> tuple[str, ...]:
+    """写入前的最后一道闸门：只报**这次新引入**的违规。
+
+    逐条记录把"基线（刚读取时）"当作 ``before``、"现在内存里"当作 ``after``，
+    复用 :func:`assert_single_affix_per_category` / :func:`assert_single_grace`
+    的既有判定 —— "一个种类一个词条"（其他除外、★+同名固定例外）与"一件一个
+    恩宠/套装"这两条规则**只拦新引入的**，预先存在的异常照旧不拦。
+
+    即使有别的路径绕过了【应用修改】，也不会把新违规写进存档。
+    """
+    if baseline is None or not current:
+        return ()
+    table = _category_codes()
+    found: list[str] = []
+    slot_count = layout.slot_count if layout is not None else records.SLOT_COUNT
+    for index in range(slot_count):
+        now = records.read_item_record(current, index, layout=layout)
+        was = records.read_item_record(baseline, index, layout=layout)
+        if now is None or was is None:
+            continue
+        after = tuple(slot for slot in records.read_effect_slots(now.record)
+                      if not slot.is_empty)
+        before = tuple(slot for slot in records.read_effect_slots(was.record)
+                       if not slot.is_empty)
+        if after == before:
+            continue
+        db = _state_db(now.record_type, affix_db, soul_db, pools, item_db)
+        if db is None:
+            continue
+        plan = types.SimpleNamespace(record_index=index, before=before, after=after)
+        checks = [lambda: assert_single_affix_per_category((plan,), db, table)]
+        if grace_db is not None:
+            checks.append(lambda: assert_single_grace((plan,), grace_db))
+        for check in checks:
+            try:
+                check()
+            except EditorError as error:
+                found.append(str(error))
+    return tuple(found)
+
+
+def _state_db(
+    record_type: int,
+    affix_db: AffixDb,
+    soul_db: AffixDb | None,
+    pools: Mapping[str, object] | None,
+    item_db: object | None,
+) -> AffixDb | None:
+    """Pick the affix table that governs this record (武器/防具/饰品/魂核)。"""
+    item = item_db.lookup(record_type) if item_db is not None else None
+    if item is None:
+        return affix_db
+    big = getattr(item, "big", "")
+    if big == "魂核":
+        return soul_db if soul_db is not None else None
+    if big == "饰品":
+        return affix_db
+    if big in ("武器", "防具") and pools:
+        pool = pools.get(equipmentdb.pool_of_item(item))
+        return getattr(pool, "db", None) if pool is not None else None
+    return affix_db
+
+
 def assert_single_grace(plans: tuple[EditPlan, ...], grace_db: GraceDb) -> None:
     """Refuse a plan that would leave **two** 恩宠/套装 affixes in one record.
 

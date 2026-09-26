@@ -50,6 +50,7 @@ from .editor import (
     equipment_affix_allowed,
     find_free_slots,
     plan_creation,
+    new_record_violations,
     apply_edits,
     apply_grace_edit,
     apply_kind_swaps,
@@ -240,20 +241,37 @@ EQUIPMENT_FILTER_LABELS = {
 
 
 class _quiet_dialogs:
-    """批量应用期间把每个字段自己的确认/提示框静音（统一的一次确认已经问过）。"""
+    """批量应用期间把每个字段自己的确认/提示框静音（统一的一次确认已经问过）。
+
+    ``abort_on_error=True`` 时进一步把错误框变成**中断信号**：某一项被规则拒绝
+    （各字段处理器会把引擎的错误用 ``showerror`` 报出来）就抛
+    :class:`ApplyRefused`，让批量应用整体回滚，而不是"部分成功还报成功"。
+    """
+
+    def __init__(self, *, abort_on_error: bool = False) -> None:
+        self._abort = abort_on_error
 
     def __enter__(self) -> None:
         self._saved = (messagebox.askokcancel, messagebox.showinfo,
-                       messagebox.showwarning)
+                       messagebox.showwarning, messagebox.showerror)
         messagebox.askokcancel = lambda *a, **k: True
         messagebox.showinfo = lambda *a, **k: None
         # 批量应用时某一字段"没有改动"不该再弹一次（统一确认里已经列过）。
         messagebox.showwarning = lambda *a, **k: None
+        if self._abort:
+            def _refuse(*args: object, **kwargs: object) -> None:
+                message = args[1] if len(args) > 1 else ""
+                raise ApplyRefused(str(message))
+            messagebox.showerror = _refuse
 
     def __exit__(self, *exc: object) -> bool:
-        (messagebox.askokcancel, messagebox.showinfo,
-         messagebox.showwarning) = self._saved
+        (messagebox.askokcancel, messagebox.showinfo, messagebox.showwarning,
+         messagebox.showerror) = self._saved
         return False
+
+
+class ApplyRefused(Exception):
+    """批量应用时某一项被合法规则拒绝 —— 用于让整批改动原子回滚。"""
 
 
 def _grace_id_from_text(text: str) -> int | None:
@@ -1307,11 +1325,25 @@ class EquipmentTab(ttk.Frame):
             return
         # 每一步 apply 结束都会 reload（把输入框刷成记录当前值），所以调用前先把
         # 用户填写的快照放回去，否则后一步的输入会被前一步的刷新冲掉。
+        # 原子化：见 App 侧同一处理 —— 任何一项被拒就整体回滚。
+        original = self.app.decrypted
         snapshot = self._snapshot_widgets()
-        with _quiet_dialogs():
-            for call in calls:
-                self._restore_widgets(snapshot)
-                call()
+        try:
+            with _quiet_dialogs(abort_on_error=True):
+                for call in calls:
+                    self._restore_widgets(snapshot)
+                    call()
+        except ApplyRefused as refusal:
+            self.app.decrypted = original
+            self._restore_widgets(snapshot)
+            self.app._status(
+                f"{self.title}记录 #{self.selected}：有改动被拒绝，本次未应用任何修改 —— {refusal}")
+            self.reload()
+            messagebox.showerror(
+                "修改被拒绝（本次未应用）",
+                f"{self.title}记录 #{self.selected} 的这批改动里有一项不符合合法规则，"
+                f"因此本次没有应用任何修改（内存保持原样）：\n\n{refusal}")
+            return
         self.app._status(
             f"{self.title}记录 #{self.selected} 的改动已应用到内存数据（尚未写入存档）")
 
@@ -1661,6 +1693,8 @@ class AccessoryEditorApp(tk.Tk):
         # The array the listing came from: edits must reuse exactly this one.
         self.layout: InventoryLayout | None = None
         self.decrypted: bytes | None = None
+        #: 刚读取进来的原始字节：写入前据此判断哪些违规是这次新引入的。
+        self.baseline: bytes | None = None
         self.selected_save: SaveDescriptor | None = None
         self.selected_accessory: int | None = None
         self.checksum_ok = False
@@ -3350,6 +3384,8 @@ class AccessoryEditorApp(tk.Tk):
         elif tag == "accessories_failed":
             self._report_no_layout(value)
         elif tag == "written" and isinstance(value, dict):
+            # 写入成功：基线推进到刚写出去的内容。
+            self.baseline = self.decrypted
             # The acknowledgement is spent: the next write must confirm again.
             self.title_screen_var.set(False)
             self._status(f"已写入，SHA-256 {value.get('new_sha256', '')}")
@@ -3486,6 +3522,7 @@ class AccessoryEditorApp(tk.Tk):
     def _populate_accessories(self, payload: object, *, keep_selection: bool = False) -> None:
         data, views, checksum_ok, layout = payload
         self.decrypted = data
+        self.baseline = data
         self.checksum_ok = bool(checksum_ok)
         self.layout = layout
         # The catalog evidence and the located array the records were *listed* with:
@@ -4007,11 +4044,34 @@ class AccessoryEditorApp(tk.Tk):
             icon="warning",
         ):
             return
+        # 原子化：bytes 不可变，先记住原始数据；任何一项被拒就整体回滚，
+        # 绝不留下"部分成功 + 假成功提示"的状态。
+        original = self.decrypted
         snapshot = self._selection_snapshot()
-        with _quiet_dialogs():
-            for call in calls:
-                self._selection_restore(snapshot)
-                call()
+        try:
+            with _quiet_dialogs(abort_on_error=True):
+                for call in calls:
+                    self._selection_restore(snapshot)
+                    call()
+        except ApplyRefused as refusal:
+            self.decrypted = original
+            self._selection_restore(snapshot)
+            self._status(f"{title}记录 #{target}：有改动被拒绝，本次未应用任何修改 —— {refusal}")
+            if self.layout is not None:
+                self._populate_equipment_tabs()
+                self._populate_accessories(
+                    (self.decrypted,
+                     list_accessories(self.decrypted, layout=self.layout,
+                                      known_ids=self.known_ids),
+                     self.checksum_ok, self.layout),
+                    keep_selection=True,
+                )
+                self._populate_soul_cores()
+            messagebox.showerror(
+                "修改被拒绝（本次未应用）",
+                f"{title}记录 #{target} 的这批改动里有一项不符合合法规则，"
+                f"因此本次没有应用任何修改（内存保持原样）：\n\n{refusal}")
+            return
         self._status(f"{title}记录 #{target} 的改动已应用到内存数据（尚未写入存档）")
 
     def apply_all_selection(self) -> None:
@@ -4576,6 +4636,24 @@ class AccessoryEditorApp(tk.Tk):
     def write_save(self) -> None:
         if self.decrypted is None or self.selected_save is None:
             messagebox.showwarning("提示", "请先读取数据")
+            return
+        # 写入前的最后一道闸门：只拦**这次新引入**的违规（预先存在的不拦）。
+        violations = new_record_violations(
+            self.decrypted, self.baseline,
+            affix_db=self.affix_db, soul_db=self.soul_db,
+            pools=self.equipment_pools, grace_db=self.grace_db,
+            item_db=self.equipment_item_db, layout=self.layout,
+        )
+        if violations:
+            listed = "\n· ".join(violations[:8])
+            more = f"\n（另有 {len(violations) - 8} 条同类问题）" if len(violations) > 8 else ""
+            messagebox.showerror(
+                "拒绝写入：存在新引入的违规",
+                "内存里的数据有不符合合法规则的地方，因此本次没有写入任何文件：\n\n· "
+                + listed + more
+                + "\n\n请按提示改回合法状态（或重新【读取数据】放弃本次改动）后再写入。",
+            )
+            self._status("拒绝写入：存在新引入的违规，未写入任何文件")
             return
         if self._refuse_running_game("写入存档"):
             return
