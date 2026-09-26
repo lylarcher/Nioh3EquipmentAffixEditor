@@ -154,6 +154,18 @@ class AtomicApplyTests(EquipmentTabTestCase):
         self.assertIn("未应用", status)
         self.assertNotIn("已应用到内存数据", status)
 
+    def test_the_read_summary_counts_what_is_actually_listed(self) -> None:
+        """读取后的总结按**真实列举结果**报告，并指向正确页签（不再说"未列出"）。"""
+        self._load_standard()
+        status = self.app.status_var.get()
+        self.assertIn("已读取", status)
+        self.assertNotIn("未列出", status)
+        self.assertIn("【武器】【防具】页签", status)
+        weapon = next(tab for tab in self.app.equipment_tabs if tab.big == "武器")
+        armor = next(tab for tab in self.app.equipment_tabs if tab.big == "防具")
+        self.assertIn(f"{len(weapon.views)} 条武器", status)
+        self.assertIn(f"{len(armor.views)} 条防具", status)
+
 
 if __name__ == "__main__":  # pragma: no cover - manual runs only
     unittest.main()

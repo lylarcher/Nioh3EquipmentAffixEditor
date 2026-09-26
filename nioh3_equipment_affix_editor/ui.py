@@ -3320,6 +3320,34 @@ class AccessoryEditorApp(tk.Tk):
 
     # ------------------------------------------------------------- helpers
 
+    def _status_read_summary(self, suffix: str = "") -> None:
+        """读取后的总结：数量来自**真实列举结果**，并指向正确的页签。
+
+        以前这里写「另有 N 条武器/防具/绘卷记录未列出，见上方的【魂核】页签」——
+        武器/防具早已有自己的页签，指到魂核页签是错的，所以按实际统计重写。
+        """
+        counts: list[str] = []
+        accessories = len(self.accessory_views)
+        if accessories:
+            counts.append(f"{accessories} 件饰品")
+        for tab in getattr(self, "equipment_tabs", []):
+            listed = len(getattr(tab, "views", ()) or ())
+            if listed:
+                counts.append(f"{listed} 条{tab.big}")
+        souls = len([view for view in self.soul_views if not view.unidentified])
+        if souls:
+            counts.append(f"{souls} 个魂核")
+        scrolls = int(getattr(self.layout, "scroll_count", 0) or 0)
+        if scrolls:
+            counts.append(f"绘卷 {scrolls} 条（暂不支持绘卷页签）")
+        head = "已读取 " + ("、".join(counts) if counts else "没有可列出的记录")
+        hints = ["武器/防具见上方【武器】【防具】页签"]
+        if accessories:
+            hints.append("饰品见【饰品】页签")
+        if souls:
+            hints.append("魂核见【魂核（魂之核）】页签")
+        self._status(f"{head}{suffix} · " + "；".join(hints))
+
     def _status(self, text: str) -> None:
         self.status_var.set(text)
 
@@ -3556,10 +3584,9 @@ class AccessoryEditorApp(tk.Tk):
             self.slot_combos[index].set("")
             self.slot_labels[index].set("")
         suffix = "" if self.checksum_ok else "（校验和不一致，请谨慎）"
-        others = len(self.other_views)
-        other_note = f" · 另有 {others} 条武器/防具/绘卷记录未列出" if others else ""
         if not self.accessory_views:
-            self._status(f"记录表里没有含饰品词条的记录{suffix}")
+            # 没有饰品记录也要把武器/防具的条数报出来（它们有自己的页签）。
+            self._status_read_summary(suffix)
             self.table_var.set(layout.describe())
             messagebox.showinfo(
                 "未找到饰品记录",
@@ -3572,11 +3599,7 @@ class AccessoryEditorApp(tk.Tk):
                   "可在命令行运行 scan 命令查看完整诊断并反馈给作者。",
             )
             return
-        souls = len([view for view in self.soul_views if not view.unidentified])
-        soul_note = (f" · 魂核 {souls} 个已读好，见上方的『魂核（魂之核）』页签"
-                     if souls else "")
-        self._status(f"已读取 {len(self.accessory_views)} 件饰品{suffix}"
-                     f"{other_note}{soul_note}")
+        self._status_read_summary(suffix)
         self.table_var.set(layout.describe())
 
     def _populate_equipment_tabs(self) -> None:
