@@ -1005,7 +1005,9 @@ touches it, and the +値 row never touches the level.
   restoring that copy. The save's last 8 bytes (outside the crypto region) are
   kept from the current file when the backup cannot carry them, never zeroed.
 * The GUI shows the required disclaimer in the window title and footer, and
-  defaults to 仅演练 (dry run).
+  defaults to 仅演练 (dry run). **To actually write, clear the 【仅演练（不写入）】
+checkbox first**: while it is ticked a red notice appears above the buttons, the write
+confirmation repeats it at the top, and the result says 仅演练：未写入任何文件.
 
 ## Credits & attribution
 

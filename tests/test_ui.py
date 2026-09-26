@@ -143,7 +143,8 @@ class LayoutTests(UiTestCase):
     def test_controls_are_in_their_own_row(self) -> None:
         controls = self.app.controls
         texts = [str(child.cget("text")) for child in controls.winfo_children()]
-        self.assertIn("仅演练（不写回）", texts)
+        self.assertIn("仅演练（不写入）", texts)
+        self.assertNotIn("仅演练（不写回）", texts)
         self.assertIn("写入校验", texts)
         self.assertIn("应用修改", texts)
         self.assertIn("写入存档", texts)

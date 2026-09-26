@@ -1584,6 +1584,18 @@ class EquipmentTab(ttk.Frame):
 
 
 
+#: 勾选【仅演练（不写入）】时按钮区上方的醒目提示（写盘流程三处共用一套措辞）。
+DRY_RUN_HINT = "已勾选【仅演练（不写入）】：写入不会生效。要真正生效，请先取消勾选。"
+#: 写入确认框顶部（勾选状态下）必须写清的一句话。
+DRY_RUN_CONFIRM_NOTE = ("当前已勾选【仅演练（不写入）】，本次不会真正写入存档；"
+                        "要真正生效，请先取消勾选。")
+#: 仅演练执行完的提示（状态行与对话框统一这一个说法）。
+DRY_RUN_RESULT = "仅演练：未写入任何文件。"
+DRY_RUN_STATUS = "仅演练：未写入任何文件"
+#: 恢复备份的演练结果。
+RESTORE_DRY_RUN_RESULT = "恢复演练：未写入任何文件。"
+
+
 class AccessoryEditorApp(tk.Tk):
     """Main window: save selection, record list, affix slots, write actions."""
 
@@ -1828,8 +1840,16 @@ class AccessoryEditorApp(tk.Tk):
         controls.pack(side=tk.BOTTOM, fill=tk.X)
         self.controls = controls
         self.dry_run_var = tk.BooleanVar(value=self.config.default_dry_run)
-        ttk.Checkbutton(controls, text="仅演练（不写回）",
+        ttk.Checkbutton(controls, text="仅演练（不写入）",
                         variable=self.dry_run_var).pack(side=tk.LEFT, padx=6)
+        # 勾选状态实时提示：勾上就红字提醒"写入不会生效"，取消即消失。
+        self.dry_run_hint_var = tk.StringVar(value="")
+        self.dry_run_hint_label = ttk.Label(
+            self, textvariable=self.dry_run_hint_var, foreground="#b03030",
+            wraplength=960, justify=tk.LEFT)
+        self.dry_run_hint_label.pack(side=tk.BOTTOM, fill=tk.X, padx=8)
+        self.dry_run_var.trace_add("write", lambda *_args: self._refresh_dry_run_hint())
+        self._refresh_dry_run_hint()
         self.verify_var = tk.BooleanVar(value=self.config.default_verify)
         ttk.Checkbutton(controls, text="写入校验",
                         variable=self.verify_var).pack(side=tk.LEFT, padx=6)
@@ -3335,10 +3355,10 @@ class AccessoryEditorApp(tk.Tk):
             self._status(f"已写入，SHA-256 {value.get('new_sha256', '')}")
             messagebox.showinfo("完成", "修改已写入存档。\n请在游戏中重新加载存档查看效果。")
         elif tag == "dry_run" and isinstance(value, dict):
-            self._status("演练完成（未写入）")
+            self._status(DRY_RUN_STATUS)
             messagebox.showinfo(
-                "演练结果",
-                "未写入任何文件。\n\n"
+                "仅演练（未写入）",
+                DRY_RUN_RESULT + "\n\n"
                 f"校验和 {value.get('checksum_before')} -> {value.get('checksum_after')}",
             )
         elif tag == "backup" and isinstance(value, str):
@@ -3362,10 +3382,10 @@ class AccessoryEditorApp(tk.Tk):
             self._invalidate_loaded_save()
             self.title_screen_var.set(False)
         elif tag == "restore_dry_run" and isinstance(value, dict):
-            self._status("恢复演练完成（未写入）")
+            self._status("恢复演练：未写入任何文件")
             messagebox.showinfo(
-                "恢复演练",
-                "未写入任何文件。\n\n"
+                "恢复演练（未写入）",
+                RESTORE_DRY_RUN_RESULT + "\n\n"
                 f"将恢复自：{value.get('restored_from')}",
             )
         elif tag == "game_status":
@@ -4549,6 +4569,10 @@ class AccessoryEditorApp(tk.Tk):
 
         self._run_worker(worker)
 
+    def _refresh_dry_run_hint(self) -> None:
+        """勾选【仅演练（不写入）】时显示醒目提示，取消勾选就清空。"""
+        self.dry_run_hint_var.set(DRY_RUN_HINT if self.dry_run_var.get() else "")
+
     def write_save(self) -> None:
         if self.decrypted is None or self.selected_save is None:
             messagebox.showwarning("提示", "请先读取数据")
@@ -4563,15 +4587,16 @@ class AccessoryEditorApp(tk.Tk):
                 "如果你其实已经载入过存档（哪怕现在回到标题），请先完全退出游戏，"
                 "否则写进去的修改会被游戏下次保存覆盖。"
             )
+        dry_run = bool(self.dry_run_var.get())
         if not messagebox.askyesno(
             "确认写入",
-            "即将把修改写入存档（会自动备份原存档）。\n\n"
+            (DRY_RUN_CONFIRM_NOTE + "\n\n" if dry_run else "")
+            + "即将把修改写入存档（会自动备份原存档）。\n\n"
             + SAVE_WRITE_REQUIREMENT + "\n\n"
             + DISCLAIMER + warning + "\n\n确认继续吗？",
         ):
             return
 
-        dry_run = bool(self.dry_run_var.get())
         verify = bool(self.verify_var.get())
         save = self.selected_save
         data = self.decrypted

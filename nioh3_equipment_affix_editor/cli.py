@@ -968,7 +968,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser_edit.add_argument("--search", default=None, metavar="关键词",
                              help="只按关键词搜索合法词条并列出全部匹配结果"
                                   "（不修改存档；用于先看有哪些候选再决定）")
-    parser_edit.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
+    parser_edit.add_argument("--dry-run", action="store_true", help="仅演练，不写入")
     parser_edit.add_argument("--no-verify", action="store_true",
                              help="跳过写入前后的解密校验（更快，但风险更高）")
     parser_edit.add_argument("--at-title-screen", action="store_true",
@@ -994,7 +994,7 @@ def build_parser() -> argparse.ArgumentParser:
                                help="指定写入哪个空槽（默认第一个空位）")
     parser_create.add_argument("--soul", action="store_true",
                                help="新建魂核（用魂核词条库与魂核种类表）")
-    parser_create.add_argument("--dry-run", action="store_true", help="仅演练，不写回")
+    parser_create.add_argument("--dry-run", action="store_true", help="仅演练，不写入")
     parser_create.add_argument("--no-verify", action="store_true",
                                help="跳过写入前后的解密校验（更快，但风险更高）")
     parser_create.add_argument("--at-title-screen", action="store_true",
