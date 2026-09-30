@@ -34,6 +34,11 @@ from nioh3_equipment_affix_editor.savefile import SaveCrypto  # noqa: E402
 DEFAULT_OUT = Path(__file__).resolve().parents[1] / "data" / "affix_markers.json"
 SCHEMA = "nioh3-affix-markers/v1"
 ROLL_MASK = 0xFF
+#: 结论（2026-09，见 CHANGELOG）：标记低 16 位**不能**由我们手上的数据推导 ——
+#: 已系统否证 id 位段/线性关系、工作簿类别与种类码、12 字节词条代码的逐字节与任意
+#: 2 字节窗口、工作簿/排序枚举序号、flags、取值区间、名称散列（前 1000 个 id 拟合、
+#: 其余 328 个 id 预测，全部 0 命中）。所以它只能**从存档样本观测**；查不到样本时
+#: 保持原值（见 editor 的写入路径），覆盖率受可用样本限制。
 PREFIX_LOW_MASK = 0xFFFF
 
 

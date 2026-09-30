@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from pathlib import Path
 
 from nioh3_equipment_affix_editor import editor, equipmentdb, records
 from nioh3_equipment_affix_editor.affixdb import AffixDb
@@ -180,6 +181,47 @@ class CreationStampsTheMarkerTests(AffixMarkerTestCase):
         slot = records.read_effect_slots(record)[0]
         self.assertEqual(slot.effect_id, target.effect_id)
         self.assertEqual(slot.prefix, self.markers.prefix_for(target.effect_id))
+
+
+class PlaintextBackupDetectionTests(unittest.TestCase):
+    """``tools/measure_affix_markers.py`` 要能自动认出明文（RNNUSR）备份。
+
+    本工具自己写出的 ``*-plain.bin`` 备份已经是解密后的明文，再解一次会失败，
+    所以按魔数识别。这里用合成的最小文件验证，不依赖任何真实存档。
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        import importlib.util
+        from pathlib import Path
+
+        repo = Path(__file__).resolve().parents[1]
+        path = repo / "tools" / "measure_affix_markers.py"
+        spec = importlib.util.spec_from_file_location("measure_affix_markers", path)
+        module = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(module)
+        cls.module = module
+
+    def test_a_file_with_the_magic_is_treated_as_plaintext(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "SAVEDATA-plain.bin"
+            target.write_bytes(b"RNNUSR" + bytes(64))
+            self.assertTrue(self.module._looks_plain(target.read_bytes()))
+
+    def test_an_encrypted_looking_file_is_not_plaintext(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as folder:
+            target = Path(folder) / "SAVEDATA.BIN"
+            target.write_bytes(bytes(range(64)))
+            self.assertFalse(self.module._looks_plain(target.read_bytes()))
+
+    def test_the_magic_helper_only_looks_at_the_start(self) -> None:
+        self.assertTrue(self.module._looks_plain(b"RNNUSR"))
+        self.assertFalse(self.module._looks_plain(b"xRNNUSR"))
 
 
 if __name__ == "__main__":  # pragma: no cover - manual runs only
