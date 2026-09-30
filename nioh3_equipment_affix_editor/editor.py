@@ -31,6 +31,7 @@ from .affixdb import (  # noqa: PLC0415 - catalog helpers live here
 )
 from . import equipmentdb
 from . import limits
+from .affixmarkers import AffixMarkers
 from .checksum import patch_user_checksum, verify_user_checksum
 from .crypto import USER_SAVE_SIZE
 from .equipmentdb import EquipmentItem, EquipmentItemDb, EquipmentPool
@@ -1778,6 +1779,21 @@ def _category_codes() -> Mapping[str, int]:
     return _CATEGORY_CODES_CACHE
 
 
+_AFFIX_MARKERS_CACHE: AffixMarkers | None = None
+
+
+def _affix_markers() -> AffixMarkers:
+    """条目标记（``+0x00``）表：随包的 data/affix_markers.json，只读一次。
+
+    表缺失或某个词条没有样本时退化为"没有标记"—— 那时保持该槽 ``+0x00`` 原样，
+    绝不凭空编一个标记。
+    """
+    global _AFFIX_MARKERS_CACHE
+    if _AFFIX_MARKERS_CACHE is None:
+        _AFFIX_MARKERS_CACHE = AffixMarkers.best_effort()
+    return _AFFIX_MARKERS_CACHE
+
+
 def affix_metadata(current: int, entry: AffixEntry | None,
                    codes: Mapping[str, int] | None = None) -> int:
     """Return ``current`` metadata with the 词条种类 bits set for ``entry``.
@@ -1806,17 +1822,28 @@ def affix_metadata(current: int, entry: AffixEntry | None,
     return (current & ~CATEGORY_CODE_MASK & ~STAR_BIT) | code | star
 
 
-def _with_category_code(edit: dict[str, int], view, db: AffixDb) -> dict[str, int]:
+def _with_category_code(edit: dict[str, int], view, db: AffixDb,
+                        markers: AffixMarkers | None = None) -> dict[str, int]:
     """``edit`` plus its slot's metadata with the new affix's 种类 code applied.
 
     A value-only edit (no ``effect_id``) leaves the metadata alone: the affix keeps
     being the same one, so its icon must not move.
+
+    Replacing the affix also re-stamps the slot's 条目标记 (``prefix u32@+0x00``) with the
+    marker measured for the *new* affix, because the old marker belongs to the affix that
+    is being replaced.  When the table has no sample for the new affix the marker is left
+    exactly as it was (never invented).
     """
     if "effect_id" not in edit:
         return dict(edit)
     slot = view.effects[edit["slot_index"]]
     entry = db.lookup(edit["effect_id"])
-    return dict(edit, metadata=affix_metadata(slot.metadata, entry))
+    stamped = dict(edit, metadata=affix_metadata(slot.metadata, entry))
+    table = _affix_markers() if markers is None else markers
+    marker = table.prefix_for(edit["effect_id"])
+    if marker is not None and "prefix" not in stamped:
+        stamped["prefix"] = marker
+    return stamped
 
 
 #: 「其他」种类允许重复出现；其余种类每个物品最多一个词条。
@@ -3212,7 +3239,7 @@ def plan_creation(
                 [{"slot_index": slot, "effect_id": effect_id, "value": value,
                   "metadata": metadata}],
             ))
-        except RecordError as error:
+        except records.RecordError as error:
             raise CreationError(f"槽{slot + 1} 无法写入：{error}") from error
 
     parsed = records.read_effect_slots(bytes(record))
@@ -3562,11 +3589,17 @@ def plan_create_equipment(
                 metadata = affix_metadata(base, entry, codes)
             elif not isinstance(metadata, int) or isinstance(metadata, bool):
                 raise EquipmentCreationError(f"槽{slot + 1} 的标识必须是整数")
+        stamp: dict[str, int] = {
+            "slot_index": slot, "effect_id": effect_id,
+            "value": value, "metadata": metadata}
+        marker = edit.get("prefix")
+        if marker is None:
+            marker = _affix_markers().prefix_for(effect_id)
+        if marker is not None:
+            stamp["prefix"] = marker
         try:
-            record = records.patch_effect_slots(record, [{
-                "slot_index": slot, "effect_id": effect_id,
-                "value": value, "metadata": metadata}])
-        except RecordError as error:
+            record = records.patch_effect_slots(record, [stamp])
+        except records.RecordError as error:
             raise EquipmentCreationError(f"槽{slot + 1} 无法写入：{error}") from error
 
     parsed = records.read_effect_slots(record)

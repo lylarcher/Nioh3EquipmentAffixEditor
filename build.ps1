@@ -565,6 +565,7 @@ function Invoke-Build {
                 'data\melee_weapon_affixes.json', 'data\ranged_weapon_affixes.json',
                 'data\armor_affixes.json',
                 'data\equipment_items.json', 'data\equipment_ranges.json',
+                'data\affix_markers.json',
                 'assets\app.ico', 'assets\logo-32.png', 'assets\logo.png',
                 'bin\Nioh_Savefile_decrypt.exe', 'readme.txt', 'README.md',
                 'README.zh-CN.md', 'CHANGELOG.md', 'LICENSE',
