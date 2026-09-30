@@ -44,7 +44,7 @@ __all__ = [
     "__version__",
 ]
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 
 BUILD_SCHEMA = "nioh3-accessory-editor-build/v1"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

@@ -457,7 +457,7 @@ default). It works on Windows PowerShell 5.1 and PowerShell 7+.
 Every version surface reports the same four facts:
 
 ```text
-Nioh 3 Equipment Affix Editor v1.0.0
+Nioh 3 Equipment Affix Editor v1.0.2
 commit    : 34cca8de（提交号后 8 位） （构建时工作区有未提交改动）
 来源      : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor
 加密组件  : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor\bin\Nioh_Savefile_decrypt.exe

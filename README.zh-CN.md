@@ -450,7 +450,7 @@ Release|Debug`、`-OutputDirectory`、`-PyInstallerPython`、`-Test`、`-TestPat
 每个版本展示面都报告同样的四项事实：
 
 ```text
-Nioh 3 Equipment Affix Editor v1.0.0
+Nioh 3 Equipment Affix Editor v1.0.2
 commit    : 34cca8de（提交号后 8 位） （构建时工作区有未提交改动）
 来源      : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor
 加密组件  : D:\wherever-you-put-it\Nioh3EquipmentAffixEditor\bin\Nioh_Savefile_decrypt.exe
