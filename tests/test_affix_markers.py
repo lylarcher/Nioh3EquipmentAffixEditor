@@ -1,8 +1,10 @@
 """条目标记（``prefix u32@+0x00``）回填：换词条时按实测表同步标记。
 
-实测来源：``tools/measure_affix_markers.py`` 在参考存档（本工具从未写入过它）上统计出
-——每个词条 id 的 ``prefix`` 低 16 位是**唯一常量**（1328/1328），高 16 位多数为 0。
-所以换词条时必须把这个标记换成**新词条**的标记；表中查不到时保持原值，绝不编造。
+实测来源：``tools/measure_affix_markers.py`` 在**八份未被本工具写过的存档**（含参考存档
+与历次测试副本、以及工具自己写出的 ``*-plain.bin`` 备份）上统计出
+——每个词条 id 的 ``prefix`` 低 16 位是**唯一常量**（1328/1328，跨全部样本一致），
+高 16 位多数为 0。所以换词条时必须把这个标记换成**新词条**的标记；表中查不到时保持
+原值，绝不编造。
 """
 
 from __future__ import annotations
@@ -65,7 +67,7 @@ class MarkerTableTests(AffixMarkerTestCase):
                 self.assertEqual(low[key], value & 0xFFFF)
 
     def test_the_catalog_covers_some_and_misses_some(self) -> None:
-        """表来自一份存档，因此必然有覆盖到的，也（很可能）有没覆盖到的词条。"""
+        """表来自多份存档，因此必然有覆盖到的，也（很可能）有没覆盖到的词条。"""
         self.assertTrue(self.stamped)
 
 

@@ -41,6 +41,11 @@ def _key(effect_id: int) -> str:
     return f"{effect_id:#06x}"
 
 
+def _looks_plain(raw: bytes) -> bool:
+    """已解密的存档以 ``RNNUSR`` 开头；本工具写出的 *-plain.bin 备份就是这种。"""
+    return raw.startswith(b"RNNUSR")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="统计词条的条目标记（只读）")
     parser.add_argument("save", help="SAVEDATA.BIN 路径（只读统计）")
@@ -50,7 +55,12 @@ def main() -> int:
     path = Path(args.save)
     raw = path.read_bytes()
     digest = hashlib.sha256(raw).hexdigest()
-    data = editor.open_save(SaveDescriptor(path, 0, 0, len(raw)), SaveCrypto())
+    # 本工具自己写的备份是"解密后的明文"（*-plain.bin），再解一次会失败；
+    # 因此按魔数自动识别：明文直接当已解密数据用（仍然只读）。
+    if _looks_plain(raw):
+        data = raw
+    else:
+        data = editor.open_save(SaveDescriptor(path, 0, 0, len(raw)), SaveCrypto())
     affix_db = AffixDb()
     layout = editor.inspect_layout(data, known_ids=editor.accessory_catalog_ids(affix_db))
 
