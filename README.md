@@ -1025,7 +1025,7 @@ This tool is for testing and learning only. Do not use it in online modes in a
 way that affects game balance. Nioh 3's co-op is PvE-only; even so, respect the
 game's terms of service. Always keep a backup of your save.
 
-* Replacing an affix also re-stamps that slot's record marker so it matches the new affix; when the affix has no sample in the shipped table (measured from several saves) the marker is left as it was rather than guessed.
+* Replacing an affix also re-stamps that slot's record marker so it matches the new affix; when the affix has no sample in the shipped table (measured from several saves) the marker is left as it was rather than guessed. (Measured: the marker's constant part **cannot be derived from the affix code or its category** — it is only observable from save samples, so it is left untouched whenever the shipped table has no sample for that affix.)
 
 ## License
 
